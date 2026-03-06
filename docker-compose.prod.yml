@@ -183,7 +183,8 @@ services:
       test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
       interval: 10s
       timeout: 5s
-      retries: 5
+      retries: 10
+      start_period: 60s
 
   elasticsearch:
     image: docker.elastic.co/elasticsearch/elasticsearch:8.17.0
@@ -277,7 +278,7 @@ services:
   keycloak:
     image: quay.io/keycloak/keycloak:26.0
     container_name: 1edu-keycloak
-    command: start --import-realm --optimized
+    command: start --import-realm
     environment:
       KC_DB: postgres
       KC_DB_URL: jdbc:postgresql://postgres:5432/${DB_NAME}
@@ -308,10 +309,10 @@ services:
           memory: 512M
     healthcheck:
       test: ["CMD-SHELL", "exec 3<>/dev/tcp/127.0.0.1/8080"]
-      interval: 10s
+      interval: 15s
       timeout: 5s
-      retries: 15
-      start_period: 60s
+      retries: 20
+      start_period: 120s
 
   zipkin:
     image: openzipkin/zipkin:latest
