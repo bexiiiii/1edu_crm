@@ -96,17 +96,29 @@ deploy_services() {
     docker compose -f $COMPOSE_FILE -p $PROJECT_NAME up -d --build api-gateway
     wait_healthy_timeout api-gateway 120
     
-    log "━━━ LAYER 5: Starting business services ━━━"
+    log "━━━ LAYER 5: Starting business services (batch 1/4) ━━━"
     docker compose -f $COMPOSE_FILE -p $PROJECT_NAME up -d --build \
         tenant-service \
         auth-service \
-        student-service \
+        student-service
+    wait_healthy_timeout tenant-service 180
+    
+    log "━━━ LAYER 5: Starting business services (batch 2/4) ━━━"
+    docker compose -f $COMPOSE_FILE -p $PROJECT_NAME up -d --build \
         lead-service \
         course-service \
-        schedule-service \
+        schedule-service
+    sleep 10
+    
+    log "━━━ LAYER 5: Starting business services (batch 3/4) ━━━"
+    docker compose -f $COMPOSE_FILE -p $PROJECT_NAME up -d --build \
         payment-service \
         finance-service \
-        analytics-service \
+        analytics-service
+    sleep 10
+    
+    log "━━━ LAYER 5: Starting business services (batch 4/4) ━━━"
+    docker compose -f $COMPOSE_FILE -p $PROJECT_NAME up -d --build \
         staff-service \
         task-service \
         lesson-service \
