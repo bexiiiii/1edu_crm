@@ -1,0 +1,143 @@
+syntax = "proto3";
+
+package com.ondeedu.grpc.tenant;
+
+option java_multiple_files = true;
+option java_package = "com.ondeedu.grpc.tenant";
+option java_outer_classname = "TenantProto";
+
+import "common.proto";
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/wrappers.proto";
+
+service TenantService {
+  // Tenant CRUD
+  rpc CreateTenant(CreateTenantRequest) returns (TenantResponse);
+  rpc GetTenant(GetTenantRequest) returns (TenantResponse);
+  rpc GetTenantByCode(GetTenantByCodeRequest) returns (TenantResponse);
+  rpc GetTenantByDomain(GetTenantByDomainRequest) returns (TenantResponse);
+  rpc UpdateTenant(UpdateTenantRequest) returns (TenantResponse);
+  rpc DeleteTenant(DeleteTenantRequest) returns (com.ondeedu.grpc.common.ApiResponse);
+  rpc ListTenants(ListTenantsRequest) returns (ListTenantsResponse);
+
+  // Tenant provisioning
+  rpc ProvisionTenant(ProvisionTenantRequest) returns (TenantResponse);
+  rpc SuspendTenant(SuspendTenantRequest) returns (com.ondeedu.grpc.common.ApiResponse);
+  rpc ActivateTenant(ActivateTenantRequest) returns (com.ondeedu.grpc.common.ApiResponse);
+
+  // Tenant settings
+  rpc GetTenantSettings(GetTenantSettingsRequest) returns (TenantSettingsResponse);
+  rpc UpdateTenantSettings(UpdateTenantSettingsRequest) returns (TenantSettingsResponse);
+}
+
+message Tenant {
+  string id = 1;
+  string code = 2;
+  string name = 3;
+  string schema_name = 4;
+  google.protobuf.StringValue domain = 5;
+  string status = 6;  // PENDING, ACTIVE, SUSPENDED, TERMINATED
+  string plan = 7;    // FREE, BASIC, PRO, ENTERPRISE
+  TenantSettings settings = 8;
+  google.protobuf.Timestamp created_at = 9;
+  google.protobuf.Timestamp updated_at = 10;
+  google.protobuf.Timestamp expires_at = 11;
+}
+
+message TenantSettings {
+  string timezone = 1;
+  string locale = 2;
+  string currency = 3;
+  google.protobuf.StringValue logo_url = 4;
+  google.protobuf.StringValue primary_color = 5;
+  bool sms_enabled = 6;
+  bool whatsapp_enabled = 7;
+  bool telegram_enabled = 8;
+  int32 max_users = 9;
+  int32 max_students = 10;
+  map<string, string> custom_settings = 11;
+}
+
+message CreateTenantRequest {
+  string code = 1;
+  string name = 2;
+  google.protobuf.StringValue domain = 3;
+  string owner_email = 4;
+  string owner_name = 5;
+  string plan = 6;
+}
+
+message GetTenantRequest {
+  string tenant_id = 1;
+}
+
+message GetTenantByCodeRequest {
+  string code = 1;
+}
+
+message GetTenantByDomainRequest {
+  string domain = 1;
+}
+
+message UpdateTenantRequest {
+  string tenant_id = 1;
+  google.protobuf.StringValue name = 2;
+  google.protobuf.StringValue domain = 3;
+  google.protobuf.StringValue plan = 4;
+}
+
+message DeleteTenantRequest {
+  string tenant_id = 1;
+}
+
+message ListTenantsRequest {
+  com.ondeedu.grpc.common.PageRequest page = 1;
+  google.protobuf.StringValue status = 2;
+  google.protobuf.StringValue plan = 3;
+}
+
+message ProvisionTenantRequest {
+  string code = 1;
+  string name = 2;
+  string owner_email = 3;
+  string owner_name = 4;
+  string owner_phone = 5;
+  string plan = 6;
+  google.protobuf.StringValue domain = 7;
+}
+
+message SuspendTenantRequest {
+  string tenant_id = 1;
+  string reason = 2;
+}
+
+message ActivateTenantRequest {
+  string tenant_id = 1;
+}
+
+message GetTenantSettingsRequest {
+  string tenant_id = 1;
+}
+
+message UpdateTenantSettingsRequest {
+  string tenant_id = 1;
+  TenantSettings settings = 2;
+}
+
+message TenantResponse {
+  bool success = 1;
+  google.protobuf.StringValue message = 2;
+  Tenant tenant = 3;
+}
+
+message ListTenantsResponse {
+  bool success = 1;
+  repeated Tenant tenants = 2;
+  com.ondeedu.grpc.common.PageInfo page_info = 3;
+}
+
+message TenantSettingsResponse {
+  bool success = 1;
+  google.protobuf.StringValue message = 2;
+  TenantSettings settings = 3;
+}

@@ -1,0 +1,34 @@
+plugins {
+    id 'org.gradle.toolchains.foojay-resolver-convention' version '1.0.0'
+}
+
+rootProject.name = '1edu-crm'
+
+// Common modules
+include 'services:common'
+include 'services:common-proto'
+
+// Infrastructure services
+include 'services:api-gateway'
+include 'services:service-registry'
+include 'services:config-server'
+
+// Business services
+include 'services:tenant-service'
+include 'services:auth-service'
+include 'services:student-service'
+include 'services:course-service'
+include 'services:lead-service'
+include 'services:payment-service'
+include 'services:schedule-service'
+include 'services:notification-service'
+include 'services:analytics-service'
+include 'services:report-service'
+include 'services:staff-service'
+include 'services:task-service'
+include 'services:file-service'
+include 'services:communication-service'
+include 'services:finance-service'
+include 'services:lesson-service'
+include 'services:settings-service'
+include 'services:audit-service'

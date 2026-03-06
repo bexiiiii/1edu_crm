@@ -1,0 +1,166 @@
+syntax = "proto3";
+
+package com.ondeedu.grpc.course;
+
+option java_multiple_files = true;
+option java_package = "com.ondeedu.grpc.course";
+option java_outer_classname = "CourseProto";
+
+import "common.proto";
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/wrappers.proto";
+
+service CourseService {
+  // Course CRUD
+  rpc CreateCourse(CreateCourseRequest) returns (CourseResponse);
+  rpc GetCourse(GetCourseRequest) returns (CourseResponse);
+  rpc UpdateCourse(UpdateCourseRequest) returns (CourseResponse);
+  rpc DeleteCourse(DeleteCourseRequest) returns (com.ondeedu.grpc.common.ApiResponse);
+  rpc ListCourses(ListCoursesRequest) returns (ListCoursesResponse);
+
+  // Group CRUD
+  rpc CreateGroup(CreateGroupRequest) returns (GroupResponse);
+  rpc GetGroup(GetGroupRequest) returns (GroupResponse);
+  rpc UpdateGroup(UpdateGroupRequest) returns (GroupResponse);
+  rpc DeleteGroup(DeleteGroupRequest) returns (com.ondeedu.grpc.common.ApiResponse);
+  rpc ListGroups(ListGroupsRequest) returns (ListGroupsResponse);
+  rpc GetGroupsByCourse(GetGroupsByCourseRequest) returns (ListGroupsResponse);
+}
+
+message Course {
+  string id = 1;
+  string name = 2;
+  google.protobuf.StringValue description = 3;
+  int32 duration_hours = 4;
+  com.ondeedu.grpc.common.Money price = 5;
+  string status = 6;  // ACTIVE, INACTIVE, ARCHIVED
+  string category = 7;
+  google.protobuf.StringValue syllabus = 8;
+  int32 max_students_per_group = 9;
+  google.protobuf.Timestamp created_at = 10;
+  google.protobuf.Timestamp updated_at = 11;
+  map<string, string> metadata = 12;
+}
+
+message Group {
+  string id = 1;
+  string course_id = 2;
+  string name = 3;
+  google.protobuf.Timestamp start_date = 4;
+  google.protobuf.Timestamp end_date = 5;
+  int32 max_students = 6;
+  int32 current_students = 7;
+  string status = 8;  // FORMING, ACTIVE, COMPLETED, CANCELLED
+  google.protobuf.StringValue teacher_id = 9;
+  google.protobuf.StringValue room = 10;
+  google.protobuf.Timestamp created_at = 11;
+  google.protobuf.Timestamp updated_at = 12;
+}
+
+// Course requests
+message CreateCourseRequest {
+  com.ondeedu.grpc.common.TenantContext context = 1;
+  string name = 2;
+  google.protobuf.StringValue description = 3;
+  int32 duration_hours = 4;
+  com.ondeedu.grpc.common.Money price = 5;
+  string category = 6;
+  int32 max_students_per_group = 7;
+}
+
+message GetCourseRequest {
+  com.ondeedu.grpc.common.TenantContext context = 1;
+  string course_id = 2;
+}
+
+message UpdateCourseRequest {
+  com.ondeedu.grpc.common.TenantContext context = 1;
+  string course_id = 2;
+  google.protobuf.StringValue name = 3;
+  google.protobuf.StringValue description = 4;
+  google.protobuf.Int32Value duration_hours = 5;
+  com.ondeedu.grpc.common.Money price = 6;
+  google.protobuf.StringValue status = 7;
+}
+
+message DeleteCourseRequest {
+  com.ondeedu.grpc.common.TenantContext context = 1;
+  string course_id = 2;
+}
+
+message ListCoursesRequest {
+  com.ondeedu.grpc.common.TenantContext context = 1;
+  com.ondeedu.grpc.common.PageRequest page = 2;
+  google.protobuf.StringValue status = 3;
+  google.protobuf.StringValue category = 4;
+}
+
+message CourseResponse {
+  bool success = 1;
+  google.protobuf.StringValue message = 2;
+  Course course = 3;
+}
+
+message ListCoursesResponse {
+  bool success = 1;
+  repeated Course courses = 2;
+  com.ondeedu.grpc.common.PageInfo page_info = 3;
+}
+
+// Group requests
+message CreateGroupRequest {
+  com.ondeedu.grpc.common.TenantContext context = 1;
+  string course_id = 2;
+  string name = 3;
+  google.protobuf.Timestamp start_date = 4;
+  google.protobuf.Timestamp end_date = 5;
+  int32 max_students = 6;
+  google.protobuf.StringValue teacher_id = 7;
+  google.protobuf.StringValue room = 8;
+}
+
+message GetGroupRequest {
+  com.ondeedu.grpc.common.TenantContext context = 1;
+  string group_id = 2;
+}
+
+message UpdateGroupRequest {
+  com.ondeedu.grpc.common.TenantContext context = 1;
+  string group_id = 2;
+  google.protobuf.StringValue name = 3;
+  google.protobuf.Timestamp start_date = 4;
+  google.protobuf.Timestamp end_date = 5;
+  google.protobuf.Int32Value max_students = 6;
+  google.protobuf.StringValue status = 7;
+  google.protobuf.StringValue teacher_id = 8;
+  google.protobuf.StringValue room = 9;
+}
+
+message DeleteGroupRequest {
+  com.ondeedu.grpc.common.TenantContext context = 1;
+  string group_id = 2;
+}
+
+message ListGroupsRequest {
+  com.ondeedu.grpc.common.TenantContext context = 1;
+  com.ondeedu.grpc.common.PageRequest page = 2;
+  google.protobuf.StringValue status = 3;
+}
+
+message GetGroupsByCourseRequest {
+  com.ondeedu.grpc.common.TenantContext context = 1;
+  string course_id = 2;
+  com.ondeedu.grpc.common.PageRequest page = 3;
+}
+
+message GroupResponse {
+  bool success = 1;
+  google.protobuf.StringValue message = 2;
+  Group group = 3;
+}
+
+message ListGroupsResponse {
+  bool success = 1;
+  repeated Group groups = 2;
+  com.ondeedu.grpc.common.PageInfo page_info = 3;
+}

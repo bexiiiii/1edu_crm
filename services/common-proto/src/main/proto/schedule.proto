@@ -1,0 +1,168 @@
+syntax = "proto3";
+
+package com.ondeedu.grpc.schedule;
+
+option java_multiple_files = true;
+option java_package = "com.ondeedu.grpc.schedule";
+option java_outer_classname = "ScheduleProto";
+
+import "common.proto";
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/wrappers.proto";
+
+service ScheduleService {
+  // Schedule CRUD
+  rpc CreateSchedule(CreateScheduleRequest) returns (ScheduleResponse);
+  rpc GetSchedule(GetScheduleRequest) returns (ScheduleResponse);
+  rpc UpdateSchedule(UpdateScheduleRequest) returns (ScheduleResponse);
+  rpc DeleteSchedule(DeleteScheduleRequest) returns (com.ondeedu.grpc.common.ApiResponse);
+  rpc ListSchedules(ListSchedulesRequest) returns (ListSchedulesResponse);
+  rpc GetSchedulesByRoom(GetSchedulesByRoomRequest) returns (ListSchedulesResponse);
+
+  // Room CRUD
+  rpc CreateRoom(CreateRoomRequest) returns (RoomResponse);
+  rpc GetRoom(GetRoomRequest) returns (RoomResponse);
+  rpc UpdateRoom(UpdateRoomRequest) returns (RoomResponse);
+  rpc DeleteRoom(DeleteRoomRequest) returns (com.ondeedu.grpc.common.ApiResponse);
+  rpc ListRooms(ListRoomsRequest) returns (ListRoomsResponse);
+}
+
+message Schedule {
+  string id = 1;
+  string name = 2;
+  google.protobuf.StringValue course_id = 3;
+  google.protobuf.StringValue teacher_id = 4;
+  google.protobuf.StringValue room_id = 5;
+  repeated string days_of_week = 6;
+  string start_time = 7;
+  string end_time = 8;
+  string start_date = 9;
+  google.protobuf.StringValue end_date = 10;
+  google.protobuf.Int32Value max_students = 11;
+  string status = 12;  // ACTIVE, PAUSED, COMPLETED
+  google.protobuf.Timestamp created_at = 13;
+  google.protobuf.Timestamp updated_at = 14;
+}
+
+message Room {
+  string id = 1;
+  string name = 2;
+  google.protobuf.Int32Value capacity = 3;
+  google.protobuf.StringValue description = 4;
+  google.protobuf.StringValue color = 5;
+  string status = 6;  // ACTIVE, INACTIVE
+  google.protobuf.Timestamp created_at = 7;
+  google.protobuf.Timestamp updated_at = 8;
+}
+
+message CreateScheduleRequest {
+  com.ondeedu.grpc.common.TenantContext context = 1;
+  string name = 2;
+  google.protobuf.StringValue course_id = 3;
+  google.protobuf.StringValue teacher_id = 4;
+  google.protobuf.StringValue room_id = 5;
+  repeated string days_of_week = 6;
+  string start_time = 7;
+  string end_time = 8;
+  string start_date = 9;
+  google.protobuf.StringValue end_date = 10;
+  google.protobuf.Int32Value max_students = 11;
+}
+
+message GetScheduleRequest {
+  com.ondeedu.grpc.common.TenantContext context = 1;
+  string schedule_id = 2;
+}
+
+message UpdateScheduleRequest {
+  com.ondeedu.grpc.common.TenantContext context = 1;
+  string schedule_id = 2;
+  google.protobuf.StringValue name = 3;
+  google.protobuf.StringValue course_id = 4;
+  google.protobuf.StringValue teacher_id = 5;
+  google.protobuf.StringValue room_id = 6;
+  repeated string days_of_week = 7;
+  google.protobuf.StringValue start_time = 8;
+  google.protobuf.StringValue end_time = 9;
+  google.protobuf.StringValue start_date = 10;
+  google.protobuf.StringValue end_date = 11;
+  google.protobuf.Int32Value max_students = 12;
+  google.protobuf.StringValue status = 13;
+}
+
+message DeleteScheduleRequest {
+  com.ondeedu.grpc.common.TenantContext context = 1;
+  string schedule_id = 2;
+}
+
+message ListSchedulesRequest {
+  com.ondeedu.grpc.common.TenantContext context = 1;
+  com.ondeedu.grpc.common.PageRequest page = 2;
+  google.protobuf.StringValue status = 3;
+  google.protobuf.StringValue course_id = 4;
+  google.protobuf.StringValue teacher_id = 5;
+}
+
+message GetSchedulesByRoomRequest {
+  com.ondeedu.grpc.common.TenantContext context = 1;
+  string room_id = 2;
+  com.ondeedu.grpc.common.PageRequest page = 3;
+}
+
+message CreateRoomRequest {
+  com.ondeedu.grpc.common.TenantContext context = 1;
+  string name = 2;
+  google.protobuf.Int32Value capacity = 3;
+  google.protobuf.StringValue description = 4;
+  google.protobuf.StringValue color = 5;
+}
+
+message GetRoomRequest {
+  com.ondeedu.grpc.common.TenantContext context = 1;
+  string room_id = 2;
+}
+
+message UpdateRoomRequest {
+  com.ondeedu.grpc.common.TenantContext context = 1;
+  string room_id = 2;
+  google.protobuf.StringValue name = 3;
+  google.protobuf.Int32Value capacity = 4;
+  google.protobuf.StringValue description = 5;
+  google.protobuf.StringValue color = 6;
+  google.protobuf.StringValue status = 7;
+}
+
+message DeleteRoomRequest {
+  com.ondeedu.grpc.common.TenantContext context = 1;
+  string room_id = 2;
+}
+
+message ListRoomsRequest {
+  com.ondeedu.grpc.common.TenantContext context = 1;
+  com.ondeedu.grpc.common.PageRequest page = 2;
+  google.protobuf.StringValue status = 3;
+}
+
+message ScheduleResponse {
+  bool success = 1;
+  google.protobuf.StringValue message = 2;
+  Schedule schedule = 3;
+}
+
+message ListSchedulesResponse {
+  bool success = 1;
+  repeated Schedule schedules = 2;
+  com.ondeedu.grpc.common.PageInfo page_info = 3;
+}
+
+message RoomResponse {
+  bool success = 1;
+  google.protobuf.StringValue message = 2;
+  Room room = 3;
+}
+
+message ListRoomsResponse {
+  bool success = 1;
+  repeated Room rooms = 2;
+  com.ondeedu.grpc.common.PageInfo page_info = 3;
+}

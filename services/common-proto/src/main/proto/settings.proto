@@ -1,0 +1,82 @@
+syntax = "proto3";
+
+package com.ondeedu.grpc.settings;
+
+option java_multiple_files = true;
+option java_package = "com.ondeedu.grpc.settings";
+option java_outer_classname = "SettingsProto";
+
+import "common.proto";
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/wrappers.proto";
+
+service SettingsService {
+  rpc GetSettings(GetSettingsRequest) returns (SettingsResponse);
+  rpc UpdateSettings(UpdateSettingsRequest) returns (SettingsResponse);
+}
+
+message Settings {
+  google.protobuf.StringValue id = 1;
+  google.protobuf.StringValue center_name = 2;
+  google.protobuf.StringValue main_direction = 3;
+  google.protobuf.StringValue director_name = 4;
+  google.protobuf.StringValue corporate_email = 5;
+  google.protobuf.StringValue city = 6;
+  google.protobuf.StringValue work_phone = 7;
+  google.protobuf.StringValue address = 8;
+  google.protobuf.StringValue timezone = 9;
+  google.protobuf.StringValue currency = 10;
+  google.protobuf.StringValue language = 11;
+  google.protobuf.StringValue working_hours_start = 12;
+  google.protobuf.StringValue working_hours_end = 13;
+  google.protobuf.Int32Value default_lesson_duration_min = 14;
+  google.protobuf.Int32Value trial_lesson_duration_min = 15;
+  google.protobuf.Int32Value max_group_size = 16;
+  bool auto_mark_attendance = 17;
+  google.protobuf.Int32Value attendance_window_days = 18;
+  bool sms_enabled = 19;
+  bool email_enabled = 20;
+  google.protobuf.StringValue sms_sender_name = 21;
+  google.protobuf.Int32Value late_payment_reminder_days = 22;
+  google.protobuf.Int32Value subscription_expiry_reminder_days = 23;
+  google.protobuf.StringValue brand_color = 24;
+  google.protobuf.Timestamp created_at = 25;
+  google.protobuf.Timestamp updated_at = 26;
+}
+
+message GetSettingsRequest {
+  com.ondeedu.grpc.common.TenantContext context = 1;
+}
+
+message UpdateSettingsRequest {
+  com.ondeedu.grpc.common.TenantContext context = 1;
+  google.protobuf.StringValue center_name = 2;
+  google.protobuf.StringValue main_direction = 3;
+  google.protobuf.StringValue director_name = 4;
+  google.protobuf.StringValue corporate_email = 5;
+  google.protobuf.StringValue city = 6;
+  google.protobuf.StringValue work_phone = 7;
+  google.protobuf.StringValue address = 8;
+  google.protobuf.StringValue timezone = 9;
+  google.protobuf.StringValue currency = 10;
+  google.protobuf.StringValue language = 11;
+  google.protobuf.StringValue working_hours_start = 12;
+  google.protobuf.StringValue working_hours_end = 13;
+  google.protobuf.Int32Value default_lesson_duration_min = 14;
+  google.protobuf.Int32Value trial_lesson_duration_min = 15;
+  google.protobuf.Int32Value max_group_size = 16;
+  google.protobuf.BoolValue auto_mark_attendance = 17;
+  google.protobuf.Int32Value attendance_window_days = 18;
+  google.protobuf.BoolValue sms_enabled = 19;
+  google.protobuf.BoolValue email_enabled = 20;
+  google.protobuf.StringValue sms_sender_name = 21;
+  google.protobuf.Int32Value late_payment_reminder_days = 22;
+  google.protobuf.Int32Value subscription_expiry_reminder_days = 23;
+  google.protobuf.StringValue brand_color = 24;
+}
+
+message SettingsResponse {
+  bool success = 1;
+  google.protobuf.StringValue message = 2;
+  Settings settings = 3;
+}

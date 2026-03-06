@@ -1,0 +1,71 @@
+HELP.md
+.gradle
+build/
+!gradle/wrapper/gradle-wrapper.jar
+!**/src/main/**/build/
+!**/src/test/**/build/
+
+### STS ###
+.apt_generated
+.classpath
+.factorypath
+.project
+.settings
+.springBeans
+.sts4-cache
+bin/
+!**/src/main/**/bin/
+!**/src/test/**/bin/
+
+### IntelliJ IDEA ###
+.idea
+*.iws
+*.iml
+*.ipr
+out/
+!**/src/main/**/out/
+!**/src/test/**/out/
+
+### NetBeans ###
+/nbproject/private/
+/nbbuild/
+/dist/
+/nbdist/
+/.nb-gradle/
+
+### VS Code ###
+.vscode/
+
+### Docker ###
+infrastructure/**/data/
+infrastructure/**/*.log
+
+### Environment files ###
+.env
+.env.local
+.env.*.local
+*.env
+
+### Secrets ###
+**/secrets/
+**/credentials/
+*.pem
+*.key
+*.p12
+*.jks
+
+### Logs ###
+logs/
+*.log
+
+### OS ###
+.DS_Store
+Thumbs.db
+
+### Generated files ###
+**/generated/
+**/src/main/java/com/ondeedu/grpc/**
+
+### Test reports ###
+**/test-results/
+**/test-output/

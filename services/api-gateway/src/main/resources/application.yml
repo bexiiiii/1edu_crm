@@ -1,0 +1,232 @@
+server:
+  port: 8090
+
+spring:
+  application:
+    name: api-gateway
+
+  cloud:
+    gateway:
+      discovery:
+        locator:
+          enabled: true
+          lower-case-service-id: true
+
+      default-filters:
+        - DedupeResponseHeader=Access-Control-Allow-Credentials Access-Control-Allow-Origin
+        - AddRequestHeader=X-Request-ID, ${random.uuid}
+
+      globalcors:
+        cors-configurations:
+          '[/**]':
+            allowedOriginPatterns: "*"
+            allowedMethods: "*"
+            allowedHeaders: "*"
+            exposedHeaders:
+              - X-Tenant-ID
+              - X-Request-ID
+            allowCredentials: true
+
+      routes:
+        # Student Service
+        - id: student-service
+          uri: lb://student-service
+          predicates:
+            - Path=/api/v1/students/**
+          filters:
+            - name: CircuitBreaker
+              args:
+                name: studentService
+                fallbackUri: forward:/fallback/student
+
+        # Course Service
+        - id: course-service
+          uri: lb://course-service
+          predicates:
+            - Path=/api/v1/courses/**,/api/v1/groups/**
+          filters:
+            - name: CircuitBreaker
+              args:
+                name: courseService
+                fallbackUri: forward:/fallback/course
+
+        # Lead Service
+        - id: lead-service
+          uri: lb://lead-service
+          predicates:
+            - Path=/api/v1/leads/**
+          filters:
+            - name: CircuitBreaker
+              args:
+                name: leadService
+                fallbackUri: forward:/fallback/lead
+
+        # Payment Service
+        - id: payment-service
+          uri: lb://payment-service
+          predicates:
+            - Path=/api/v1/payments/**,/api/v1/invoices/**
+          filters:
+            - name: CircuitBreaker
+              args:
+                name: paymentService
+                fallbackUri: forward:/fallback/payment
+
+        # Schedule Service
+        - id: schedule-service
+          uri: lb://schedule-service
+          predicates:
+            - Path=/api/v1/schedules/**,/api/v1/attendance/**
+          filters:
+            - name: CircuitBreaker
+              args:
+                name: scheduleService
+                fallbackUri: forward:/fallback/schedule
+
+        # Staff Service
+        - id: staff-service
+          uri: lb://staff-service
+          predicates:
+            - Path=/api/v1/staff/**
+          filters:
+            - name: CircuitBreaker
+              args:
+                name: staffService
+                fallbackUri: forward:/fallback/staff
+
+        # Notification Service
+        - id: notification-service
+          uri: lb://notification-service
+          predicates:
+            - Path=/api/v1/notifications/**
+          filters:
+            - name: CircuitBreaker
+              args:
+                name: notificationService
+                fallbackUri: forward:/fallback/notification
+
+        # File Service
+        - id: file-service
+          uri: lb://file-service
+          predicates:
+            - Path=/api/v1/files/**
+          filters:
+            - name: CircuitBreaker
+              args:
+                name: fileService
+                fallbackUri: forward:/fallback/file
+
+        # Tenant Service (admin only)
+        - id: tenant-service
+          uri: lb://tenant-service
+          predicates:
+            - Path=/api/v1/tenants/**
+          filters:
+            - name: CircuitBreaker
+              args:
+                name: tenantService
+                fallbackUri: forward:/fallback/tenant
+
+        # Finance Service
+        - id: finance-service
+          uri: lb://finance-service
+          predicates:
+            - Path=/api/v1/finance/**
+          filters:
+            - name: CircuitBreaker
+              args:
+                name: financeService
+                fallbackUri: forward:/fallback/finance
+
+        # Task Service
+        - id: task-service
+          uri: lb://task-service
+          predicates:
+            - Path=/api/v1/tasks/**
+          filters:
+            - name: CircuitBreaker
+              args:
+                name: taskService
+                fallbackUri: forward:/fallback/task
+
+        # Analytics Service
+        - id: analytics-service
+          uri: lb://analytics-service
+          predicates:
+            - Path=/api/v1/analytics/**,/api/v1/reports/**
+          filters:
+            - name: CircuitBreaker
+              args:
+                name: analyticsService
+                fallbackUri: forward:/fallback/analytics
+
+  data:
+    redis:
+      host: localhost
+      port: 6379
+      password: ondeedu_redis
+
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: http://localhost:8080/realms/ondeedu
+
+eureka:
+  client:
+    service-url:
+      defaultZone: http://localhost:8761/eureka/
+  instance:
+    prefer-ip-address: true
+
+resilience4j:
+  circuitbreaker:
+    configs:
+      default:
+        slidingWindowSize: 10
+        failureRateThreshold: 50
+        waitDurationInOpenState: 10000
+        permittedNumberOfCallsInHalfOpenState: 3
+    instances:
+      studentService:
+        baseConfig: default
+      courseService:
+        baseConfig: default
+      leadService:
+        baseConfig: default
+      paymentService:
+        baseConfig: default
+      scheduleService:
+        baseConfig: default
+      staffService:
+        baseConfig: default
+      financeService:
+        baseConfig: default
+      taskService:
+        baseConfig: default
+      analyticsService:
+        baseConfig: default
+
+  timelimiter:
+    configs:
+      default:
+        timeoutDuration: 5s
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus,metrics,gateway
+  endpoint:
+    health:
+      show-details: always
+    gateway:
+      enabled: true
+  tracing:
+    sampling:
+      probability: 1.0
+
+logging:
+  level:
+    org.springframework.cloud.gateway: DEBUG
+    org.springframework.security: DEBUG

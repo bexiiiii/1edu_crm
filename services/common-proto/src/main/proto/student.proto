@@ -1,0 +1,138 @@
+
+syntax = "proto3";
+
+package com.ondeedu.grpc.student;
+
+option java_multiple_files = true;
+option java_package = "com.ondeedu.grpc.student";
+option java_outer_classname = "StudentProto";
+
+import "common.proto";
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/wrappers.proto";
+
+service StudentService {
+  // CRUD operations
+  rpc CreateStudent(CreateStudentRequest) returns (StudentResponse);
+  rpc GetStudent(GetStudentRequest) returns (StudentResponse);
+  rpc UpdateStudent(UpdateStudentRequest) returns (StudentResponse);
+  rpc DeleteStudent(DeleteStudentRequest) returns (com.ondeedu.grpc.common.ApiResponse);
+
+  // List and search
+  rpc ListStudents(ListStudentsRequest) returns (ListStudentsResponse);
+  rpc SearchStudents(SearchStudentsRequest) returns (ListStudentsResponse);
+
+  // Group operations
+  rpc GetStudentsByGroup(GetStudentsByGroupRequest) returns (ListStudentsResponse);
+  rpc AddStudentToGroup(AddStudentToGroupRequest) returns (com.ondeedu.grpc.common.ApiResponse);
+  rpc RemoveStudentFromGroup(RemoveStudentFromGroupRequest) returns (com.ondeedu.grpc.common.ApiResponse);
+
+  // Stats
+  rpc GetStudentStats(GetStudentStatsRequest) returns (StudentStatsResponse);
+}
+
+message Student {
+  string id = 1;
+  string first_name = 2;
+  string last_name = 3;
+  google.protobuf.StringValue middle_name = 4;
+  google.protobuf.StringValue email = 5;
+  string phone = 6;
+  google.protobuf.Timestamp birth_date = 7;
+  string status = 8;  // ACTIVE, INACTIVE, GRADUATED, DROPPED
+  com.ondeedu.grpc.common.ContactInfo contact_info = 9;
+  com.ondeedu.grpc.common.Address address = 10;
+  google.protobuf.StringValue parent_name = 11;
+  google.protobuf.StringValue parent_phone = 12;
+  google.protobuf.Timestamp created_at = 13;
+  google.protobuf.Timestamp updated_at = 14;
+  map<string, string> metadata = 15;
+}
+
+message CreateStudentRequest {
+  com.ondeedu.grpc.common.TenantContext context = 1;
+  string first_name = 2;
+  string last_name = 3;
+  google.protobuf.StringValue middle_name = 4;
+  google.protobuf.StringValue email = 5;
+  string phone = 6;
+  google.protobuf.Timestamp birth_date = 7;
+  google.protobuf.StringValue parent_name = 8;
+  google.protobuf.StringValue parent_phone = 9;
+  com.ondeedu.grpc.common.Address address = 10;
+}
+
+message GetStudentRequest {
+  com.ondeedu.grpc.common.TenantContext context = 1;
+  string student_id = 2;
+}
+
+message UpdateStudentRequest {
+  com.ondeedu.grpc.common.TenantContext context = 1;
+  string student_id = 2;
+  google.protobuf.StringValue first_name = 3;
+  google.protobuf.StringValue last_name = 4;
+  google.protobuf.StringValue middle_name = 5;
+  google.protobuf.StringValue email = 6;
+  google.protobuf.StringValue phone = 7;
+  google.protobuf.StringValue status = 8;
+}
+
+message DeleteStudentRequest {
+  com.ondeedu.grpc.common.TenantContext context = 1;
+  string student_id = 2;
+}
+
+message ListStudentsRequest {
+  com.ondeedu.grpc.common.TenantContext context = 1;
+  com.ondeedu.grpc.common.PageRequest page = 2;
+  google.protobuf.StringValue status = 3;
+}
+
+message SearchStudentsRequest {
+  com.ondeedu.grpc.common.TenantContext context = 1;
+  string query = 2;
+  com.ondeedu.grpc.common.PageRequest page = 3;
+}
+
+message GetStudentsByGroupRequest {
+  com.ondeedu.grpc.common.TenantContext context = 1;
+  string group_id = 2;
+  com.ondeedu.grpc.common.PageRequest page = 3;
+}
+
+message AddStudentToGroupRequest {
+  com.ondeedu.grpc.common.TenantContext context = 1;
+  string student_id = 2;
+  string group_id = 3;
+}
+
+message RemoveStudentFromGroupRequest {
+  com.ondeedu.grpc.common.TenantContext context = 1;
+  string student_id = 2;
+  string group_id = 3;
+}
+
+message GetStudentStatsRequest {
+  com.ondeedu.grpc.common.TenantContext context = 1;
+}
+
+message StudentResponse {
+  bool success = 1;
+  google.protobuf.StringValue message = 2;
+  Student student = 3;
+}
+
+message ListStudentsResponse {
+  bool success = 1;
+  repeated Student students = 2;
+  com.ondeedu.grpc.common.PageInfo page_info = 3;
+}
+
+message StudentStatsResponse {
+  int64 total_students = 1;
+  int64 active_students = 2;
+  int64 new_this_month = 3;
+  int64 graduated = 4;
+  int64 dropped = 5;
+}

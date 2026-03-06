@@ -1,0 +1,1030 @@
+# ============================================================
+# 1edu CRM — Production Docker Compose
+# ============================================================
+# Порядок запуска:
+#   1. docker compose -f docker-compose.prod.yml up -d postgres redis rabbitmq elasticsearch mongodb minio
+#   2. Ждём healthcheck, потом Keycloak + Zipkin
+#   3. service-registry → api-gateway → все бизнес-сервисы
+#
+# Быстрый старт:
+#   cp .env.production .env
+#   docker compose -f docker-compose.prod.yml up -d --build
+# ============================================================
+
+# ─── Reusable anchors ────────────────────────────────────────
+x-service-defaults: &service-defaults
+  build:
+    context: .
+    dockerfile: Dockerfile
+  env_file: .env
+  networks: [1edu-network]
+  restart: unless-stopped
+  logging:
+    driver: json-file
+    options:
+      max-size: "10m"
+      max-file: "5"
+
+x-spring-env: &spring-env
+  SPRING_DATASOURCE_URL: jdbc:postgresql://${DB_HOST}:${DB_PORT}/${DB_NAME}
+  SPRING_DATASOURCE_USERNAME: ${DB_USERNAME}
+  SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD}
+  SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE: "5"
+  SPRING_DATASOURCE_HIKARI_MINIMUM_IDLE: "2"
+  SPRING_DATA_REDIS_HOST: ${REDIS_HOST}
+  SPRING_DATA_REDIS_PORT: ${REDIS_PORT}
+  SPRING_DATA_REDIS_PASSWORD: ${REDIS_PASSWORD}
+  SPRING_RABBITMQ_HOST: ${RABBITMQ_HOST}
+  SPRING_RABBITMQ_PORT: ${RABBITMQ_PORT}
+  SPRING_RABBITMQ_USERNAME: ${RABBITMQ_USERNAME}
+  SPRING_RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD}
+  SPRING_RABBITMQ_VIRTUAL_HOST: ${RABBITMQ_VHOST}
+  SPRING_ELASTICSEARCH_URIS: http://${ELASTICSEARCH_HOST}:${ELASTICSEARCH_PORT}
+  SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI: ${KEYCLOAK_URL}/realms/${KEYCLOAK_REALM}
+  EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: ${EUREKA_URL}
+  EUREKA_INSTANCE_PREFER_IP_ADDRESS: "true"
+  MANAGEMENT_ZIPKIN_TRACING_ENDPOINT: ${ZIPKIN_ENDPOINT}
+  MANAGEMENT_TRACING_SAMPLING_PROBABILITY: "0.1"
+  GRPC_CLIENT_GLOBAL_NEGOTIATION_TYPE: plaintext
+
+x-depends-infra: &depends-infra
+  depends_on:
+    postgres:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+    rabbitmq:
+      condition: service_healthy
+    keycloak:
+      condition: service_healthy
+    service-registry:
+      condition: service_healthy
+
+x-healthcheck-spring: &healthcheck-spring
+  interval: 30s
+  timeout: 10s
+  retries: 5
+  start_period: 120s
+
+# ─── Services ────────────────────────────────────────────────
+services:
+
+  # ══════════════════════════════════════════════════════════
+  # LAYER 1: DATA STORES (start first, no dependencies)
+  # ══════════════════════════════════════════════════════════
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: 1edu-postgres
+    environment:
+      POSTGRES_USER: ${DB_USERNAME}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${DB_NAME}
+      # Production tuning
+      POSTGRES_INITDB_ARGS: "--data-checksums"
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./infrastructure/init-scripts/postgres:/docker-entrypoint-initdb.d
+    command:
+      - "postgres"
+      - "-c" 
+      - "max_connections=200"
+      - "-c"
+      - "shared_buffers=512MB"
+      - "-c"
+      - "effective_cache_size=1536MB"
+      - "-c"
+      - "maintenance_work_mem=128MB"
+      - "-c"
+      - "checkpoint_completion_target=0.9"
+      - "-c"
+      - "wal_buffers=16MB"
+      - "-c"
+      - "default_statistics_target=100"
+      - "-c"
+      - "random_page_cost=1.1"
+      - "-c"
+      - "effective_io_concurrency=200"
+      - "-c"
+      - "work_mem=4MB"
+      - "-c"
+      - "log_min_duration_statement=1000"
+    networks: [1edu-network]
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+          cpus: "2.0"
+        reservations:
+          memory: 1G
+          cpus: "0.5"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USERNAME} -d ${DB_NAME}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: 1edu-redis
+    command: >
+      redis-server
+      --appendonly yes
+      --requirepass ${REDIS_PASSWORD}
+      --maxmemory 512mb
+      --maxmemory-policy allkeys-lru
+      --save 900 1
+      --save 300 10
+    ports:
+      - "127.0.0.1:6379:6379"
+    volumes:
+      - redis_data:/data
+    networks: [1edu-network]
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 768M
+          cpus: "1.0"
+        reservations:
+          memory: 256M
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  rabbitmq:
+    image: rabbitmq:3.13-management-alpine
+    container_name: 1edu-rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USERNAME}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD}
+      RABBITMQ_DEFAULT_VHOST: ${RABBITMQ_VHOST}
+      RABBITMQ_VM_MEMORY_HIGH_WATERMARK: "0.6"
+    ports:
+      - "127.0.0.1:5672:5672"
+      - "127.0.0.1:15672:15672"
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    networks: [1edu-network]
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 768M
+          cpus: "1.0"
+        reservations:
+          memory: 256M
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.17.0
+    container_name: 1edu-elasticsearch
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+      - cluster.name=1edu-cluster
+      - bootstrap.memory_lock=true
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    ports:
+      - "127.0.0.1:9200:9200"
+    volumes:
+      - elasticsearch_data:/usr/share/elasticsearch/data
+    networks: [1edu-network]
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 1536M
+          cpus: "1.5"
+        reservations:
+          memory: 1G
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:9200/_cluster/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  mongodb:
+    image: mongo:7-jammy
+    container_name: 1edu-mongodb
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_USERNAME}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD}
+      MONGO_INITDB_DATABASE: audit_db
+    ports:
+      - "127.0.0.1:27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+    networks: [1edu-network]
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 768M
+          cpus: "1.0"
+        reservations:
+          memory: 256M
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  minio:
+    image: minio/minio:latest
+    container_name: 1edu-minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY}
+      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY}
+    ports:
+      - "127.0.0.1:9000:9000"
+      - "127.0.0.1:9001:9001"
+    volumes:
+      - minio_data:/data
+    networks: [1edu-network]
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: "0.5"
+        reservations:
+          memory: 128M
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ══════════════════════════════════════════════════════════
+  # LAYER 2: PLATFORM SERVICES (depend on data stores)
+  # ══════════════════════════════════════════════════════════
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.0
+    container_name: 1edu-keycloak
+    command: start --import-realm --optimized
+    environment:
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://postgres:5432/${DB_NAME}
+      KC_DB_USERNAME: ${DB_USERNAME}
+      KC_DB_PASSWORD: ${DB_PASSWORD}
+      KC_DB_SCHEMA: keycloak
+      KEYCLOAK_ADMIN: ${KEYCLOAK_ADMIN_USER}
+      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD}
+      KC_HEALTH_ENABLED: "true"
+      KC_HOSTNAME_STRICT: "false"
+      KC_PROXY_HEADERS: xforwarded
+      KC_HTTP_ENABLED: "true"
+    ports:
+      - "127.0.0.1:8080:8080"
+    volumes:
+      - ./infrastructure/keycloak/realms:/opt/keycloak/data/import
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks: [1edu-network]
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: "1.0"
+        reservations:
+          memory: 512M
+    healthcheck:
+      test: ["CMD-SHELL", "exec 3<>/dev/tcp/127.0.0.1/8080"]
+      interval: 10s
+      timeout: 5s
+      retries: 15
+      start_period: 60s
+
+  zipkin:
+    image: openzipkin/zipkin:latest
+    container_name: 1edu-zipkin
+    ports:
+      - "127.0.0.1:9411:9411"
+    networks: [1edu-network]
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: "0.5"
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: 1edu-prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=30d'
+    ports:
+      - "127.0.0.1:9090:9090"
+    volumes:
+      - ./infrastructure/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+    networks: [1edu-network]
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: "0.5"
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: 1edu-grafana
+    environment:
+      - GF_SECURITY_ADMIN_USER=${GF_SECURITY_ADMIN_USER}
+      - GF_SECURITY_ADMIN_PASSWORD=${GF_SECURITY_ADMIN_PASSWORD}
+    ports:
+      - "127.0.0.1:3000:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./infrastructure/grafana/provisioning:/etc/grafana/provisioning
+    depends_on: [prometheus]
+    networks: [1edu-network]
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: "0.5"
+
+  # ══════════════════════════════════════════════════════════
+  # LAYER 3: SERVICE REGISTRY (Eureka — starts before all app services)
+  # ══════════════════════════════════════════════════════════
+
+  service-registry:
+    <<: *service-defaults
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        SERVICE_NAME: service-registry
+    container_name: 1edu-service-registry
+    ports:
+      - "127.0.0.1:8761:8761"
+    environment:
+      SERVER_PORT: "8761"
+      JAVA_OPTS: "-Xms128m -Xmx256m"
+    deploy:
+      resources:
+        limits:
+          memory: 384M
+          cpus: "0.5"
+        reservations:
+          memory: 192M
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8761/actuator/health | grep -q UP"]
+      <<: *healthcheck-spring
+
+  # ══════════════════════════════════════════════════════════
+  # LAYER 4: API GATEWAY (routes all traffic)
+  # ══════════════════════════════════════════════════════════
+
+  api-gateway:
+    <<: *service-defaults
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        SERVICE_NAME: api-gateway
+    container_name: 1edu-api-gateway
+    ports:
+      - "8090:8090"
+    environment:
+      <<: *spring-env
+      SERVER_PORT: "8090"
+      JAVA_OPTS: "-Xms${JVM_XMS_LARGE:-256m} -Xmx${JVM_XMX_LARGE:-512m}"
+    depends_on:
+      service-registry:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 768M
+          cpus: "1.0"
+        reservations:
+          memory: 384M
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8090/actuator/health | grep -q UP"]
+      <<: *healthcheck-spring
+
+  # ══════════════════════════════════════════════════════════
+  # LAYER 5: BUSINESS SERVICES (depend on infra + registry)
+  # ══════════════════════════════════════════════════════════
+
+  tenant-service:
+    <<: *service-defaults
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        SERVICE_NAME: tenant-service
+    container_name: 1edu-tenant
+    ports:
+      - "127.0.0.1:8100:8100"
+      - "127.0.0.1:9100:9100"
+    environment:
+      <<: *spring-env
+      SERVER_PORT: "8100"
+      GRPC_SERVER_PORT: "9100"
+      JAVA_OPTS: "-Xms${JVM_XMS_LARGE:-256m} -Xmx${JVM_XMX_LARGE:-512m}"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      service-registry:
+        condition: service_healthy
+      keycloak:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 768M
+          cpus: "1.0"
+        reservations:
+          memory: 384M
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8100/actuator/health | grep -q UP"]
+      <<: *healthcheck-spring
+
+  auth-service:
+    <<: *service-defaults
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        SERVICE_NAME: auth-service
+    container_name: 1edu-auth
+    ports:
+      - "127.0.0.1:8101:8101"
+    environment:
+      SERVER_PORT: "8101"
+      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: ${EUREKA_URL}
+      EUREKA_INSTANCE_PREFER_IP_ADDRESS: "true"
+      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI: ${KEYCLOAK_URL}/realms/${KEYCLOAK_REALM}
+      KEYCLOAK_SERVER_URL: ${KEYCLOAK_URL}
+      KEYCLOAK_REALM: ${KEYCLOAK_REALM}
+      KEYCLOAK_CLIENT_ID: ${KEYCLOAK_CLIENT_ID}
+      KEYCLOAK_CLIENT_SECRET: ${KEYCLOAK_CLIENT_SECRET}
+      MANAGEMENT_ZIPKIN_TRACING_ENDPOINT: ${ZIPKIN_ENDPOINT}
+      JAVA_OPTS: "-Xms${JVM_XMS_SMALL:-128m} -Xmx${JVM_XMX_SMALL:-256m}"
+    depends_on:
+      keycloak:
+        condition: service_healthy
+      service-registry:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 384M
+          cpus: "0.5"
+        reservations:
+          memory: 192M
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8101/actuator/health | grep -q UP"]
+      <<: *healthcheck-spring
+
+  student-service:
+    <<: *service-defaults
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        SERVICE_NAME: student-service
+    container_name: 1edu-student
+    ports:
+      - "127.0.0.1:8102:8102"
+      - "127.0.0.1:9102:9102"
+    environment:
+      <<: *spring-env
+      SERVER_PORT: "8102"
+      GRPC_SERVER_PORT: "9102"
+      GRPC_CLIENT_COURSE_SERVICE_ADDRESS: discovery:///course-service
+      GRPC_CLIENT_PAYMENT_SERVICE_ADDRESS: discovery:///payment-service
+      JAVA_OPTS: "-Xms${JVM_XMS_MEDIUM:-192m} -Xmx${JVM_XMX_MEDIUM:-384m}"
+    <<: *depends-infra
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: "0.75"
+        reservations:
+          memory: 256M
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8102/actuator/health | grep -q UP"]
+      <<: *healthcheck-spring
+
+  lead-service:
+    <<: *service-defaults
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        SERVICE_NAME: lead-service
+    container_name: 1edu-lead
+    ports:
+      - "127.0.0.1:8104:8104"
+      - "127.0.0.1:9104:9104"
+    environment:
+      <<: *spring-env
+      SERVER_PORT: "8104"
+      GRPC_SERVER_PORT: "9104"
+      JAVA_OPTS: "-Xms${JVM_XMS_MEDIUM:-192m} -Xmx${JVM_XMX_MEDIUM:-384m}"
+    <<: *depends-infra
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: "0.75"
+        reservations:
+          memory: 256M
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8104/actuator/health | grep -q UP"]
+      <<: *healthcheck-spring
+
+  course-service:
+    <<: *service-defaults
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        SERVICE_NAME: course-service
+    container_name: 1edu-course
+    ports:
+      - "127.0.0.1:8106:8106"
+      - "127.0.0.1:9106:9106"
+    environment:
+      <<: *spring-env
+      SERVER_PORT: "8106"
+      GRPC_SERVER_PORT: "9106"
+      JAVA_OPTS: "-Xms${JVM_XMS_MEDIUM:-192m} -Xmx${JVM_XMX_MEDIUM:-384m}"
+    <<: *depends-infra
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: "0.75"
+        reservations:
+          memory: 256M
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8106/actuator/health | grep -q UP"]
+      <<: *healthcheck-spring
+
+  schedule-service:
+    <<: *service-defaults
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        SERVICE_NAME: schedule-service
+    container_name: 1edu-schedule
+    ports:
+      - "127.0.0.1:8108:8108"
+      - "127.0.0.1:9108:9108"
+    environment:
+      <<: *spring-env
+      SERVER_PORT: "8108"
+      GRPC_SERVER_PORT: "9108"
+      JAVA_OPTS: "-Xms${JVM_XMS_MEDIUM:-192m} -Xmx${JVM_XMX_MEDIUM:-384m}"
+    <<: *depends-infra
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: "0.75"
+        reservations:
+          memory: 256M
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8108/actuator/health | grep -q UP"]
+      <<: *healthcheck-spring
+
+  payment-service:
+    <<: *service-defaults
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        SERVICE_NAME: payment-service
+    container_name: 1edu-payment
+    ports:
+      - "127.0.0.1:8110:8110"
+      - "127.0.0.1:9110:9110"
+    environment:
+      <<: *spring-env
+      SERVER_PORT: "8110"
+      GRPC_SERVER_PORT: "9110"
+      JAVA_OPTS: "-Xms${JVM_XMS_MEDIUM:-192m} -Xmx${JVM_XMX_MEDIUM:-384m}"
+    <<: *depends-infra
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: "0.75"
+        reservations:
+          memory: 256M
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8110/actuator/health | grep -q UP"]
+      <<: *healthcheck-spring
+
+  finance-service:
+    <<: *service-defaults
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        SERVICE_NAME: finance-service
+    container_name: 1edu-finance
+    ports:
+      - "127.0.0.1:8112:8112"
+      - "127.0.0.1:9112:9112"
+    environment:
+      <<: *spring-env
+      SERVER_PORT: "8112"
+      GRPC_SERVER_PORT: "9112"
+      JAVA_OPTS: "-Xms${JVM_XMS_MEDIUM:-192m} -Xmx${JVM_XMX_MEDIUM:-384m}"
+    <<: *depends-infra
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: "0.75"
+        reservations:
+          memory: 256M
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8112/actuator/health | grep -q UP"]
+      <<: *healthcheck-spring
+
+  analytics-service:
+    <<: *service-defaults
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        SERVICE_NAME: analytics-service
+    container_name: 1edu-analytics
+    ports:
+      - "127.0.0.1:8114:8114"
+      - "127.0.0.1:9114:9114"
+    environment:
+      <<: *spring-env
+      SERVER_PORT: "8114"
+      GRPC_SERVER_PORT: "9114"
+      JAVA_OPTS: "-Xms${JVM_XMS_LARGE:-256m} -Xmx${JVM_XMX_LARGE:-512m}"
+    <<: *depends-infra
+    deploy:
+      resources:
+        limits:
+          memory: 768M
+          cpus: "1.0"
+        reservations:
+          memory: 384M
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8114/actuator/health | grep -q UP"]
+      <<: *healthcheck-spring
+
+  notification-service:
+    <<: *service-defaults
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        SERVICE_NAME: notification-service
+    container_name: 1edu-notification
+    ports:
+      - "127.0.0.1:8116:8116"
+    environment:
+      <<: *spring-env
+      SERVER_PORT: "8116"
+      GRPC_SERVER_PORT: "-1"
+      JAVA_OPTS: "-Xms${JVM_XMS_SMALL:-128m} -Xmx${JVM_XMX_SMALL:-256m}"
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      service-registry:
+        condition: service_healthy
+      keycloak:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 384M
+          cpus: "0.5"
+        reservations:
+          memory: 192M
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8116/actuator/health | grep -q UP"]
+      <<: *healthcheck-spring
+
+  file-service:
+    <<: *service-defaults
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        SERVICE_NAME: file-service
+    container_name: 1edu-file
+    ports:
+      - "127.0.0.1:8118:8118"
+    environment:
+      SERVER_PORT: "8118"
+      GRPC_SERVER_PORT: "-1"
+      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: ${EUREKA_URL}
+      EUREKA_INSTANCE_PREFER_IP_ADDRESS: "true"
+      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI: ${KEYCLOAK_URL}/realms/${KEYCLOAK_REALM}
+      MINIO_URL: ${MINIO_URL}
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY}
+      MINIO_BUCKET: ${MINIO_BUCKET}
+      MANAGEMENT_ZIPKIN_TRACING_ENDPOINT: ${ZIPKIN_ENDPOINT}
+      JAVA_OPTS: "-Xms${JVM_XMS_SMALL:-128m} -Xmx${JVM_XMX_SMALL:-256m}"
+    depends_on:
+      minio:
+        condition: service_healthy
+      service-registry:
+        condition: service_healthy
+      keycloak:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 384M
+          cpus: "0.5"
+        reservations:
+          memory: 192M
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8118/actuator/health | grep -q UP"]
+      <<: *healthcheck-spring
+
+  staff-service:
+    <<: *service-defaults
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        SERVICE_NAME: staff-service
+    container_name: 1edu-staff
+    ports:
+      - "127.0.0.1:8122:8122"
+      - "127.0.0.1:9122:9122"
+    environment:
+      <<: *spring-env
+      SERVER_PORT: "8122"
+      GRPC_SERVER_PORT: "9122"
+      JAVA_OPTS: "-Xms${JVM_XMS_MEDIUM:-192m} -Xmx${JVM_XMX_MEDIUM:-384m}"
+    <<: *depends-infra
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: "0.75"
+        reservations:
+          memory: 256M
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8122/actuator/health | grep -q UP"]
+      <<: *healthcheck-spring
+
+  task-service:
+    <<: *service-defaults
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        SERVICE_NAME: task-service
+    container_name: 1edu-task
+    ports:
+      - "127.0.0.1:8124:8124"
+      - "127.0.0.1:9124:9124"
+    environment:
+      <<: *spring-env
+      SERVER_PORT: "8124"
+      GRPC_SERVER_PORT: "9124"
+      JAVA_OPTS: "-Xms${JVM_XMS_MEDIUM:-192m} -Xmx${JVM_XMX_MEDIUM:-384m}"
+    <<: *depends-infra
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: "0.75"
+        reservations:
+          memory: 256M
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8124/actuator/health | grep -q UP"]
+      <<: *healthcheck-spring
+
+  lesson-service:
+    <<: *service-defaults
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        SERVICE_NAME: lesson-service
+    container_name: 1edu-lesson
+    ports:
+      - "127.0.0.1:8126:8126"
+      - "127.0.0.1:9126:9126"
+    environment:
+      <<: *spring-env
+      SERVER_PORT: "8126"
+      GRPC_SERVER_PORT: "9126"
+      JAVA_OPTS: "-Xms${JVM_XMS_MEDIUM:-192m} -Xmx${JVM_XMX_MEDIUM:-384m}"
+    <<: *depends-infra
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: "0.75"
+        reservations:
+          memory: 256M
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8126/actuator/health | grep -q UP"]
+      <<: *healthcheck-spring
+
+  settings-service:
+    <<: *service-defaults
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        SERVICE_NAME: settings-service
+    container_name: 1edu-settings
+    ports:
+      - "127.0.0.1:8128:8128"
+      - "127.0.0.1:9128:9128"
+    environment:
+      <<: *spring-env
+      SERVER_PORT: "8128"
+      GRPC_SERVER_PORT: "9128"
+      JAVA_OPTS: "-Xms${JVM_XMS_SMALL:-128m} -Xmx${JVM_XMX_SMALL:-256m}"
+    <<: *depends-infra
+    deploy:
+      resources:
+        limits:
+          memory: 384M
+          cpus: "0.5"
+        reservations:
+          memory: 192M
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8128/actuator/health | grep -q UP"]
+      <<: *healthcheck-spring
+
+  report-service:
+    <<: *service-defaults
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        SERVICE_NAME: report-service
+    container_name: 1edu-report
+    ports:
+      - "127.0.0.1:8120:8120"
+    environment:
+      SERVER_PORT: "8120"
+      GRPC_SERVER_PORT: "-1"
+      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: ${EUREKA_URL}
+      EUREKA_INSTANCE_PREFER_IP_ADDRESS: "true"
+      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI: ${KEYCLOAK_URL}/realms/${KEYCLOAK_REALM}
+      GRPC_CLIENT_GLOBAL_NEGOTIATION_TYPE: plaintext
+      GRPC_CLIENT_ANALYTICS_SERVICE_ADDRESS: discovery:///analytics-service
+      MANAGEMENT_ZIPKIN_TRACING_ENDPOINT: ${ZIPKIN_ENDPOINT}
+      JAVA_OPTS: "-Xms${JVM_XMS_SMALL:-128m} -Xmx${JVM_XMX_SMALL:-256m}"
+    depends_on:
+      analytics-service:
+        condition: service_healthy
+      service-registry:
+        condition: service_healthy
+      keycloak:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 384M
+          cpus: "0.5"
+        reservations:
+          memory: 192M
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8120/actuator/health | grep -q UP"]
+      <<: *healthcheck-spring
+
+  audit-service:
+    <<: *service-defaults
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        SERVICE_NAME: audit-service
+    container_name: 1edu-audit
+    ports:
+      - "127.0.0.1:8130:8130"
+    environment:
+      SERVER_PORT: "8130"
+      GRPC_SERVER_PORT: "-1"
+      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: ${EUREKA_URL}
+      EUREKA_INSTANCE_PREFER_IP_ADDRESS: "true"
+      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI: ${KEYCLOAK_URL}/realms/${KEYCLOAK_REALM}
+      MONGODB_URI: ${MONGODB_URI}
+      RABBITMQ_HOST: ${RABBITMQ_HOST}
+      RABBITMQ_PORT: ${RABBITMQ_PORT}
+      RABBITMQ_USER: ${RABBITMQ_USERNAME}
+      RABBITMQ_PASS: ${RABBITMQ_PASSWORD}
+      RABBITMQ_VHOST: ${RABBITMQ_VHOST}
+      KEYCLOAK_ISSUER_URI: ${KEYCLOAK_URL}/realms/${KEYCLOAK_REALM}
+      MANAGEMENT_ZIPKIN_TRACING_ENDPOINT: ${ZIPKIN_ENDPOINT}
+      JAVA_OPTS: "-Xms${JVM_XMS_SMALL:-128m} -Xmx${JVM_XMX_SMALL:-256m}"
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      service-registry:
+        condition: service_healthy
+      keycloak:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 384M
+          cpus: "0.5"
+        reservations:
+          memory: 192M
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8130/actuator/health | grep -q UP"]
+      <<: *healthcheck-spring
+
+  # ══════════════════════════════════════════════════════════
+  # NGINX REVERSE PROXY (routes external traffic → api-gateway)
+  # ══════════════════════════════════════════════════════════
+
+  nginx:
+    image: nginx:alpine
+    container_name: 1edu-nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./infrastructure/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./infrastructure/nginx/conf.d:/etc/nginx/conf.d:ro
+      - ./infrastructure/certbot/conf:/etc/letsencrypt:ro
+      - ./infrastructure/certbot/www:/var/www/certbot:ro
+    depends_on:
+      api-gateway:
+        condition: service_healthy
+    networks: [1edu-network]
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+          cpus: "0.25"
+
+  certbot:
+    image: certbot/certbot
+    container_name: 1edu-certbot
+    volumes:
+      - ./infrastructure/certbot/conf:/etc/letsencrypt
+      - ./infrastructure/certbot/www:/var/www/certbot
+    entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew; sleep 12h & wait $${!}; done;'"
+    networks: [1edu-network]
+
+# ─── Volumes ─────────────────────────────────────────────────
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+  rabbitmq_data:
+    driver: local
+  elasticsearch_data:
+    driver: local
+  mongodb_data:
+    driver: local
+  minio_data:
+    driver: local
+  prometheus_data:
+    driver: local
+  grafana_data:
+    driver: local
+
+# ─── Network ─────────────────────────────────────────────────
+networks:
+  1edu-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.28.0.0/16

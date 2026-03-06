@@ -1,0 +1,101 @@
+syntax = "proto3";
+
+package com.ondeedu.grpc.staff;
+
+option java_multiple_files = true;
+option java_package = "com.ondeedu.grpc.staff";
+option java_outer_classname = "StaffProto";
+
+import "common.proto";
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/wrappers.proto";
+
+service StaffService {
+  rpc CreateStaff(CreateStaffRequest) returns (StaffResponse);
+  rpc GetStaff(GetStaffRequest) returns (StaffResponse);
+  rpc UpdateStaff(UpdateStaffRequest) returns (StaffResponse);
+  rpc DeleteStaff(DeleteStaffRequest) returns (com.ondeedu.grpc.common.ApiResponse);
+  rpc ListStaff(ListStaffRequest) returns (ListStaffResponse);
+  rpc SearchStaff(SearchStaffRequest) returns (ListStaffResponse);
+}
+
+message Staff {
+  string id = 1;
+  string first_name = 2;
+  string last_name = 3;
+  google.protobuf.StringValue middle_name = 4;
+  google.protobuf.StringValue email = 5;
+  google.protobuf.StringValue phone = 6;
+  string role = 7;    // TEACHER, MANAGER, RECEPTIONIST, ACCOUNTANT, ADMIN
+  string status = 8;  // ACTIVE, ON_LEAVE, DISMISSED
+  google.protobuf.StringValue position = 9;
+  com.ondeedu.grpc.common.Money salary = 10;
+  google.protobuf.Timestamp hire_date = 11;
+  google.protobuf.StringValue notes = 12;
+  google.protobuf.Timestamp created_at = 13;
+  google.protobuf.Timestamp updated_at = 14;
+}
+
+message CreateStaffRequest {
+  com.ondeedu.grpc.common.TenantContext context = 1;
+  string first_name = 2;
+  string last_name = 3;
+  google.protobuf.StringValue middle_name = 4;
+  google.protobuf.StringValue email = 5;
+  google.protobuf.StringValue phone = 6;
+  string role = 7;
+  google.protobuf.StringValue position = 8;
+  com.ondeedu.grpc.common.Money salary = 9;
+  google.protobuf.Timestamp hire_date = 10;
+  google.protobuf.StringValue notes = 11;
+}
+
+message GetStaffRequest {
+  com.ondeedu.grpc.common.TenantContext context = 1;
+  string staff_id = 2;
+}
+
+message UpdateStaffRequest {
+  com.ondeedu.grpc.common.TenantContext context = 1;
+  string staff_id = 2;
+  google.protobuf.StringValue first_name = 3;
+  google.protobuf.StringValue last_name = 4;
+  google.protobuf.StringValue middle_name = 5;
+  google.protobuf.StringValue email = 6;
+  google.protobuf.StringValue phone = 7;
+  google.protobuf.StringValue role = 8;
+  google.protobuf.StringValue status = 9;
+  google.protobuf.StringValue position = 10;
+  com.ondeedu.grpc.common.Money salary = 11;
+  google.protobuf.StringValue notes = 12;
+}
+
+message DeleteStaffRequest {
+  com.ondeedu.grpc.common.TenantContext context = 1;
+  string staff_id = 2;
+}
+
+message ListStaffRequest {
+  com.ondeedu.grpc.common.TenantContext context = 1;
+  com.ondeedu.grpc.common.PageRequest page = 2;
+  google.protobuf.StringValue role = 3;
+  google.protobuf.StringValue status = 4;
+}
+
+message SearchStaffRequest {
+  com.ondeedu.grpc.common.TenantContext context = 1;
+  string query = 2;
+  com.ondeedu.grpc.common.PageRequest page = 3;
+}
+
+message StaffResponse {
+  bool success = 1;
+  google.protobuf.StringValue message = 2;
+  Staff staff = 3;
+}
+
+message ListStaffResponse {
+  bool success = 1;
+  repeated Staff staff_list = 2;
+  com.ondeedu.grpc.common.PageInfo page_info = 3;
+}

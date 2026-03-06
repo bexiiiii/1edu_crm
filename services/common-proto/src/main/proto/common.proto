@@ -1,0 +1,79 @@
+syntax = "proto3";
+
+package com.ondeedu.grpc.common;
+
+option java_multiple_files = true;
+option java_package = "com.ondeedu.grpc.common";
+option java_outer_classname = "CommonProto";
+
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/wrappers.proto";
+
+// Common empty request
+message Empty {}
+
+// UUID wrapper
+message UUID {
+  string value = 1;
+}
+
+// Pagination request
+message PageRequest {
+  int32 page = 1;
+  int32 size = 2;
+  string sort_by = 3;
+  string sort_direction = 4; // ASC or DESC
+}
+
+// Pagination response metadata
+message PageInfo {
+  int32 page = 1;
+  int32 size = 2;
+  int64 total_elements = 3;
+  int32 total_pages = 4;
+  bool has_next = 5;
+  bool has_previous = 6;
+}
+
+// Generic API response wrapper
+message ApiResponse {
+  bool success = 1;
+  string message = 2;
+  google.protobuf.StringValue error_code = 3;
+}
+
+// Tenant context - passed in all inter-service calls
+message TenantContext {
+  string tenant_id = 1;
+  string user_id = 2;
+  repeated string roles = 3;
+}
+
+// Money type for financial operations
+message Money {
+  int64 amount = 1;  // Amount in smallest currency unit (tiyn for KZT)
+  string currency = 2; // ISO 4217 currency code
+}
+
+// Address
+message Address {
+  string street = 1;
+  string city = 2;
+  string region = 3;
+  string postal_code = 4;
+  string country = 5;
+}
+
+// Contact info
+message ContactInfo {
+  string phone = 1;
+  string email = 2;
+  google.protobuf.StringValue whatsapp = 3;
+  google.protobuf.StringValue telegram = 4;
+}
+
+// Date range for queries
+message DateRange {
+  google.protobuf.Timestamp start = 1;
+  google.protobuf.Timestamp end = 2;
+}

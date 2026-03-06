@@ -1,0 +1,167 @@
+syntax = "proto3";
+
+package com.ondeedu.grpc.lead;
+
+option java_multiple_files = true;
+option java_package = "com.ondeedu.grpc.lead";
+option java_outer_classname = "LeadProto";
+
+import "common.proto";
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/wrappers.proto";
+
+service LeadService {
+  rpc CreateLead(CreateLeadRequest) returns (LeadResponse);
+  rpc GetLead(GetLeadRequest) returns (LeadResponse);
+  rpc UpdateLead(UpdateLeadRequest) returns (LeadResponse);
+  rpc DeleteLead(DeleteLeadRequest) returns (com.ondeedu.grpc.common.ApiResponse);
+  rpc ListLeads(ListLeadsRequest) returns (ListLeadsResponse);
+  rpc SearchLeads(SearchLeadsRequest) returns (ListLeadsResponse);
+
+  // Lead workflow
+  rpc AssignLead(AssignLeadRequest) returns (LeadResponse);
+  rpc UpdateLeadStatus(UpdateLeadStatusRequest) returns (LeadResponse);
+  rpc ConvertToStudent(ConvertToStudentRequest) returns (ConvertToStudentResponse);
+
+  // Lead stats
+  rpc GetLeadStats(GetLeadStatsRequest) returns (LeadStatsResponse);
+  rpc GetLeadsBySource(GetLeadsBySourceRequest) returns (LeadsBySourceResponse);
+}
+
+message Lead {
+  string id = 1;
+  string first_name = 2;
+  google.protobuf.StringValue last_name = 3;
+  string phone = 4;
+  google.protobuf.StringValue email = 5;
+  string source = 6;  // WEBSITE, INSTAGRAM, FACEBOOK, REFERRAL, WALK_IN, CALL, OTHER
+  string status = 7;  // NEW, CONTACTED, QUALIFIED, PROPOSAL, NEGOTIATION, WON, LOST
+  google.protobuf.StringValue assigned_to = 8;
+  google.protobuf.StringValue interested_course = 9;
+  google.protobuf.StringValue notes = 10;
+  google.protobuf.Timestamp next_follow_up = 11;
+  google.protobuf.Timestamp created_at = 12;
+  google.protobuf.Timestamp updated_at = 13;
+  repeated LeadNote history = 14;
+  map<string, string> metadata = 15;
+}
+
+message LeadNote {
+  string id = 1;
+  string note = 2;
+  string created_by = 3;
+  google.protobuf.Timestamp created_at = 4;
+}
+
+message CreateLeadRequest {
+  com.ondeedu.grpc.common.TenantContext context = 1;
+  string first_name = 2;
+  google.protobuf.StringValue last_name = 3;
+  string phone = 4;
+  google.protobuf.StringValue email = 5;
+  string source = 6;
+  google.protobuf.StringValue interested_course = 7;
+  google.protobuf.StringValue notes = 8;
+}
+
+message GetLeadRequest {
+  com.ondeedu.grpc.common.TenantContext context = 1;
+  string lead_id = 2;
+}
+
+message UpdateLeadRequest {
+  com.ondeedu.grpc.common.TenantContext context = 1;
+  string lead_id = 2;
+  google.protobuf.StringValue first_name = 3;
+  google.protobuf.StringValue last_name = 4;
+  google.protobuf.StringValue phone = 5;
+  google.protobuf.StringValue email = 6;
+  google.protobuf.StringValue notes = 7;
+  google.protobuf.Timestamp next_follow_up = 8;
+}
+
+message DeleteLeadRequest {
+  com.ondeedu.grpc.common.TenantContext context = 1;
+  string lead_id = 2;
+}
+
+message ListLeadsRequest {
+  com.ondeedu.grpc.common.TenantContext context = 1;
+  com.ondeedu.grpc.common.PageRequest page = 2;
+  google.protobuf.StringValue status = 3;
+  google.protobuf.StringValue source = 4;
+  google.protobuf.StringValue assigned_to = 5;
+}
+
+message SearchLeadsRequest {
+  com.ondeedu.grpc.common.TenantContext context = 1;
+  string query = 2;
+  com.ondeedu.grpc.common.PageRequest page = 3;
+}
+
+message AssignLeadRequest {
+  com.ondeedu.grpc.common.TenantContext context = 1;
+  string lead_id = 2;
+  string assigned_to = 3;
+}
+
+message UpdateLeadStatusRequest {
+  com.ondeedu.grpc.common.TenantContext context = 1;
+  string lead_id = 2;
+  string status = 3;
+  google.protobuf.StringValue note = 4;
+}
+
+message ConvertToStudentRequest {
+  com.ondeedu.grpc.common.TenantContext context = 1;
+  string lead_id = 2;
+  string group_id = 3;
+}
+
+message GetLeadStatsRequest {
+  com.ondeedu.grpc.common.TenantContext context = 1;
+  com.ondeedu.grpc.common.DateRange date_range = 2;
+}
+
+message GetLeadsBySourceRequest {
+  com.ondeedu.grpc.common.TenantContext context = 1;
+  com.ondeedu.grpc.common.DateRange date_range = 2;
+}
+
+message LeadResponse {
+  bool success = 1;
+  google.protobuf.StringValue message = 2;
+  Lead lead = 3;
+}
+
+message ListLeadsResponse {
+  bool success = 1;
+  repeated Lead leads = 2;
+  com.ondeedu.grpc.common.PageInfo page_info = 3;
+}
+
+message ConvertToStudentResponse {
+  bool success = 1;
+  google.protobuf.StringValue message = 2;
+  string student_id = 3;
+}
+
+message LeadStatsResponse {
+  int64 total_leads = 1;
+  int64 new_leads = 2;
+  int64 contacted = 3;
+  int64 qualified = 4;
+  int64 won = 5;
+  int64 lost = 6;
+  double conversion_rate = 7;
+}
+
+message LeadsBySourceResponse {
+  repeated SourceStats stats = 1;
+}
+
+message SourceStats {
+  string source = 1;
+  int64 count = 2;
+  double percentage = 3;
+}

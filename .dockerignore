@@ -1,0 +1,42 @@
+# Git
+.git
+.gitignore
+
+# IDE
+.idea
+.vscode
+*.iml
+
+# Build outputs (we rebuild inside Docker)
+**/build/
+**/bin/
+**/out/
+
+# Logs
+logs/
+*.log
+
+# Docker
+docker-compose*.yml
+Dockerfile
+.dockerignore
+
+# CI/CD
+.github/
+.gitlab-ci.yml
+
+# Docs
+*.md
+LICENSE
+
+# Local env
+.env
+.env.*
+backups/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Gradle cache (we download fresh in Docker)
+.gradle/

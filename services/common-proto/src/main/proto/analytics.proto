@@ -1,0 +1,129 @@
+syntax = "proto3";
+
+package com.ondeedu.grpc.analytics;
+
+option java_multiple_files = true;
+option java_package = "com.ondeedu.grpc.analytics";
+option java_outer_classname = "AnalyticsProto";
+
+import "common.proto";
+import "google/protobuf/wrappers.proto";
+
+service AnalyticsService {
+  rpc GetDashboard(GetDashboardRequest) returns (DashboardResponse);
+  rpc GetFinanceReport(GetFinanceReportRequest) returns (FinanceReportResponse);
+  rpc GetTodayStats(GetTodayStatsRequest) returns (TodayStatsResponse);
+  rpc GetFunnel(GetFunnelRequest) returns (FunnelResponse);
+  rpc GetSubscriptions(GetSubscriptionsRequest) returns (SubscriptionsResponse);
+  rpc GetRetention(GetRetentionRequest) returns (RetentionResponse);
+  rpc GetLeadConversions(GetLeadConversionsRequest) returns (LeadConversionsResponse);
+  rpc GetManagers(GetManagersRequest) returns (ManagersResponse);
+  rpc GetTeachers(GetTeachersRequest) returns (TeachersResponse);
+}
+
+message DateRange {
+  google.protobuf.StringValue from = 1;  // ISO date: YYYY-MM-DD
+  google.protobuf.StringValue to = 2;
+}
+
+message GetDashboardRequest {
+  com.ondeedu.grpc.common.TenantContext context = 1;
+  DateRange date_range = 2;
+  google.protobuf.StringValue lesson_type = 3;
+}
+
+message GetFinanceReportRequest {
+  com.ondeedu.grpc.common.TenantContext context = 1;
+  DateRange date_range = 2;
+}
+
+message GetTodayStatsRequest {
+  com.ondeedu.grpc.common.TenantContext context = 1;
+  google.protobuf.StringValue date = 2;
+}
+
+message GetFunnelRequest {
+  com.ondeedu.grpc.common.TenantContext context = 1;
+  DateRange date_range = 2;
+}
+
+message GetSubscriptionsRequest {
+  com.ondeedu.grpc.common.TenantContext context = 1;
+  bool only_suspicious = 2;
+}
+
+message GetRetentionRequest {
+  com.ondeedu.grpc.common.TenantContext context = 1;
+}
+
+message GetLeadConversionsRequest {
+  com.ondeedu.grpc.common.TenantContext context = 1;
+  DateRange date_range = 2;
+}
+
+message GetManagersRequest {
+  com.ondeedu.grpc.common.TenantContext context = 1;
+  DateRange date_range = 2;
+}
+
+message GetTeachersRequest {
+  com.ondeedu.grpc.common.TenantContext context = 1;
+  DateRange date_range = 2;
+}
+
+// Simplified responses — analytics data is complex, we serialize as JSON string
+// for easy consumption by report-service
+
+message DashboardResponse {
+  bool success = 1;
+  google.protobuf.StringValue message = 2;
+  string data_json = 3;  // JSON-serialized DashboardResponse
+}
+
+message FinanceReportResponse {
+  bool success = 1;
+  google.protobuf.StringValue message = 2;
+  string data_json = 3;  // JSON-serialized FinanceReportResponse
+}
+
+message TodayStatsResponse {
+  bool success = 1;
+  google.protobuf.StringValue message = 2;
+  string data_json = 3;
+}
+
+message FunnelResponse {
+  bool success = 1;
+  google.protobuf.StringValue message = 2;
+  string data_json = 3;
+}
+
+message SubscriptionsResponse {
+  bool success = 1;
+  google.protobuf.StringValue message = 2;
+  string data_json = 3;
+}
+
+message RetentionResponse {
+  bool success = 1;
+  google.protobuf.StringValue message = 2;
+  string data_json = 3;
+}
+
+message LeadConversionsResponse {
+  bool success = 1;
+  google.protobuf.StringValue message = 2;
+  string data_json = 3;
+}
+
+message ManagersResponse {
+  bool success = 1;
+  google.protobuf.StringValue message = 2;
+  string data_json = 3;
+}
+
+message TeachersResponse {
+  bool success = 1;
+  google.protobuf.StringValue message = 2;
+  string data_json = 3;
+}

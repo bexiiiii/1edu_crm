@@ -1,0 +1,202 @@
+syntax = "proto3";
+
+package com.ondeedu.grpc.lesson;
+
+option java_multiple_files = true;
+option java_package = "com.ondeedu.grpc.lesson";
+option java_outer_classname = "LessonProto";
+
+import "common.proto";
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/wrappers.proto";
+
+service LessonService {
+  // Lesson CRUD
+  rpc CreateLesson(CreateLessonRequest) returns (LessonResponse);
+  rpc GetLesson(GetLessonRequest) returns (LessonResponse);
+  rpc UpdateLesson(UpdateLessonRequest) returns (LessonResponse);
+  rpc DeleteLesson(DeleteLessonRequest) returns (com.ondeedu.grpc.common.ApiResponse);
+  rpc ListLessons(ListLessonsRequest) returns (ListLessonsResponse);
+  rpc ListLessonsByGroup(ListLessonsByGroupRequest) returns (ListLessonsResponse);
+  rpc ListLessonsByTeacher(ListLessonsByTeacherRequest) returns (ListLessonsResponse);
+
+  // Lesson actions
+  rpc CompleteLesson(CompleteLessonRequest) returns (LessonResponse);
+  rpc CancelLesson(CancelLessonRequest) returns (LessonResponse);
+  rpc RescheduleLesson(RescheduleLessonGrpcRequest) returns (LessonResponse);
+
+  // Attendance
+  rpc MarkAttendance(MarkAttendanceGrpcRequest) returns (AttendanceResponse);
+  rpc BulkMarkAttendance(BulkMarkAttendanceGrpcRequest) returns (ListAttendanceResponse);
+  rpc GetLessonAttendance(GetLessonAttendanceRequest) returns (ListAttendanceResponse);
+  rpc GetStudentAttendance(GetStudentAttendanceRequest) returns (ListAttendanceResponse);
+}
+
+message Lesson {
+  string id = 1;
+  google.protobuf.StringValue group_id = 2;
+  google.protobuf.StringValue service_id = 3;
+  google.protobuf.StringValue teacher_id = 4;
+  google.protobuf.StringValue substitute_teacher_id = 5;
+  google.protobuf.StringValue room_id = 6;
+  string lesson_date = 7;
+  string start_time = 8;
+  string end_time = 9;
+  string lesson_type = 10;
+  google.protobuf.Int32Value capacity = 11;
+  string status = 12;
+  google.protobuf.StringValue topic = 13;
+  google.protobuf.StringValue homework = 14;
+  google.protobuf.StringValue notes = 15;
+  google.protobuf.Timestamp created_at = 16;
+  google.protobuf.Timestamp updated_at = 17;
+}
+
+message Attendance {
+  string id = 1;
+  string lesson_id = 2;
+  string student_id = 3;
+  string status = 4;
+  google.protobuf.StringValue notes = 5;
+  google.protobuf.Timestamp created_at = 6;
+  google.protobuf.Timestamp updated_at = 7;
+}
+
+message CreateLessonRequest {
+  com.ondeedu.grpc.common.TenantContext context = 1;
+  string lesson_date = 2;
+  string start_time = 3;
+  string end_time = 4;
+  google.protobuf.StringValue group_id = 5;
+  google.protobuf.StringValue service_id = 6;
+  google.protobuf.StringValue teacher_id = 7;
+  google.protobuf.StringValue substitute_teacher_id = 8;
+  google.protobuf.StringValue room_id = 9;
+  string lesson_type = 10;
+  google.protobuf.Int32Value capacity = 11;
+  google.protobuf.StringValue topic = 12;
+  google.protobuf.StringValue homework = 13;
+  google.protobuf.StringValue notes = 14;
+}
+
+message GetLessonRequest {
+  com.ondeedu.grpc.common.TenantContext context = 1;
+  string lesson_id = 2;
+}
+
+message UpdateLessonRequest {
+  com.ondeedu.grpc.common.TenantContext context = 1;
+  string lesson_id = 2;
+  google.protobuf.StringValue lesson_date = 3;
+  google.protobuf.StringValue start_time = 4;
+  google.protobuf.StringValue end_time = 5;
+  google.protobuf.StringValue group_id = 6;
+  google.protobuf.StringValue teacher_id = 7;
+  google.protobuf.StringValue room_id = 8;
+  google.protobuf.StringValue status = 9;
+  google.protobuf.StringValue topic = 10;
+  google.protobuf.StringValue homework = 11;
+  google.protobuf.StringValue notes = 12;
+}
+
+message DeleteLessonRequest {
+  com.ondeedu.grpc.common.TenantContext context = 1;
+  string lesson_id = 2;
+}
+
+message ListLessonsRequest {
+  com.ondeedu.grpc.common.TenantContext context = 1;
+  com.ondeedu.grpc.common.PageRequest page = 2;
+  google.protobuf.StringValue lesson_type = 3;
+  google.protobuf.StringValue status = 4;
+  google.protobuf.StringValue date = 5;
+}
+
+message ListLessonsByGroupRequest {
+  com.ondeedu.grpc.common.TenantContext context = 1;
+  string group_id = 2;
+  google.protobuf.StringValue from_date = 3;
+  google.protobuf.StringValue to_date = 4;
+  com.ondeedu.grpc.common.PageRequest page = 5;
+}
+
+message ListLessonsByTeacherRequest {
+  com.ondeedu.grpc.common.TenantContext context = 1;
+  string teacher_id = 2;
+  com.ondeedu.grpc.common.PageRequest page = 3;
+}
+
+message CompleteLessonRequest {
+  com.ondeedu.grpc.common.TenantContext context = 1;
+  string lesson_id = 2;
+  google.protobuf.StringValue topic = 3;
+  google.protobuf.StringValue homework = 4;
+}
+
+message CancelLessonRequest {
+  com.ondeedu.grpc.common.TenantContext context = 1;
+  string lesson_id = 2;
+}
+
+message RescheduleLessonGrpcRequest {
+  com.ondeedu.grpc.common.TenantContext context = 1;
+  string lesson_id = 2;
+  string new_date = 3;
+  string new_start_time = 4;
+  string new_end_time = 5;
+}
+
+message MarkAttendanceGrpcRequest {
+  com.ondeedu.grpc.common.TenantContext context = 1;
+  string lesson_id = 2;
+  string student_id = 3;
+  string status = 4;
+  google.protobuf.StringValue notes = 5;
+}
+
+message BulkAttendanceEntry {
+  string student_id = 1;
+  string status = 2;
+  google.protobuf.StringValue notes = 3;
+}
+
+message BulkMarkAttendanceGrpcRequest {
+  com.ondeedu.grpc.common.TenantContext context = 1;
+  string lesson_id = 2;
+  repeated BulkAttendanceEntry attendances = 3;
+}
+
+message GetLessonAttendanceRequest {
+  com.ondeedu.grpc.common.TenantContext context = 1;
+  string lesson_id = 2;
+}
+
+message GetStudentAttendanceRequest {
+  com.ondeedu.grpc.common.TenantContext context = 1;
+  string student_id = 2;
+  com.ondeedu.grpc.common.PageRequest page = 3;
+}
+
+message LessonResponse {
+  bool success = 1;
+  google.protobuf.StringValue message = 2;
+  Lesson lesson = 3;
+}
+
+message ListLessonsResponse {
+  bool success = 1;
+  repeated Lesson lessons = 2;
+  com.ondeedu.grpc.common.PageInfo page_info = 3;
+}
+
+message AttendanceResponse {
+  bool success = 1;
+  google.protobuf.StringValue message = 2;
+  Attendance attendance = 3;
+}
+
+message ListAttendanceResponse {
+  bool success = 1;
+  repeated Attendance attendances = 2;
+  com.ondeedu.grpc.common.PageInfo page_info = 3;
+}

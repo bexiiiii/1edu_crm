@@ -1,0 +1,79 @@
+server:
+  port: 8126
+
+spring:
+  application:
+    name: lesson-service
+  datasource:
+    url: jdbc:postgresql://localhost:5432/ondeedu_crm
+    username: ondeedu
+    password: ondeedu_secret
+    hikari:
+      maximum-pool-size: 10
+      minimum-idle: 5
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        multiTenancy: SCHEMA
+        format_sql: true
+    open-in-view: false
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    default-schema: system
+  data:
+    redis:
+      host: localhost
+      port: 6379
+      password: ondeedu_redis
+  rabbitmq:
+    host: localhost
+    port: 5672
+    username: ondeedu
+    password: ondeedu_rabbit
+    virtual-host: ondeedu
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: http://localhost:8080/realms/ondeedu
+
+eureka:
+  client:
+    service-url:
+      defaultZone: http://localhost:8761/eureka/
+  instance:
+    prefer-ip-address: true
+
+grpc:
+  server:
+    port: 9126
+  client:
+    GLOBAL:
+      negotiation-type: plaintext
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus,metrics
+  endpoint:
+    health:
+      show-details: always
+  tracing:
+    sampling:
+      probability: 1.0
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+
+logging:
+  level:
+    com.ondeedu: DEBUG
+    org.hibernate.SQL: DEBUG
