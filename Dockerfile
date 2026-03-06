@@ -1,7 +1,7 @@
 # ================================================
-# Stage 1: Build
+# Stage 1: Build (Debian-based for glibc — needed by protoc-gen-grpc-java)
 # ================================================
-FROM eclipse-temurin:21-jdk-alpine AS builder
+FROM eclipse-temurin:21-jdk AS builder
 WORKDIR /build
 
 # Copy Gradle wrapper and root build files
