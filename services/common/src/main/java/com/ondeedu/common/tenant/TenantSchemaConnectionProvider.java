@@ -2,6 +2,7 @@ package com.ondeedu.common.tenant;
 
 import org.hibernate.cfg.AvailableSettings;
 import org.hibernate.engine.jdbc.connections.spi.MultiTenantConnectionProvider;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.orm.jpa.HibernatePropertiesCustomizer;
 import org.springframework.stereotype.Component;
 
@@ -11,6 +12,7 @@ import java.sql.SQLException;
 import java.util.Map;
 
 @Component
+@ConditionalOnBean(DataSource.class)
 public class TenantSchemaConnectionProvider implements MultiTenantConnectionProvider<String>, HibernatePropertiesCustomizer {
 
     private final DataSource dataSource;
