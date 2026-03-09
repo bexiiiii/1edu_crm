@@ -1,0 +1,27 @@
+# ================================================
+# Lightweight Dockerfile — expects pre-built JARs
+# Usage:
+#   1. ./gradlew build -x test          (locally or in CI)
+#   2. docker compose build             (just packages JARs, ~10 sec per service)
+# ================================================
+FROM eclipse-temurin:21-jre
+
+WORKDIR /app
+
+RUN groupadd -r app && useradd -r -g app app
+
+ARG SERVICE_NAME
+
+COPY services/${SERVICE_NAME}/build/libs/ /tmp/jars/
+RUN find /tmp/jars -name "*.jar" ! -name "*plain*" | head -1 \
+    | xargs -I{} cp {} /app/app.jar \
+    && rm -rf /tmp/jars \
+    && chown app:app /app/app.jar
+
+USER app
+
+ENTRYPOINT ["java", \
+  "-XX:+UseContainerSupport", \
+  "-XX:MaxRAMPercentage=75.0", \
+  "-Djava.security.egd=file:/dev/./urandom", \
+  "-jar", "app.jar"]
