@@ -136,6 +136,47 @@ Lombok `@Builder` на Entity создаёт билдер только для с
 
 **Решение**: добавить `@BeanMapping(builder = @Builder(disableBuilder = true))` на метод маппера `toEntity(...)`, чтобы MapStruct использовал сеттеры вместо builder.
 
+#### @ConditionalOnBean в common модуле (для сервисов без DataSource/Redis/RabbitMQ)
+Сервисы, исключающие автоконфигурацию (`auth-service`, `file-service`), падают если `common` безусловно регистрирует бины, требующие инфраструктурных зависимостей.
+
+**Применённые гарды:**
+- `RabbitMQConfig` — `@ConditionalOnBean(ConnectionFactory.class)`
+- `RedisConfig` — `@ConditionalOnBean(RedisConnectionFactory.class)`
+- `TenantIdentifierResolver` — `@ConditionalOnBean(DataSource.class)`
+- `TenantSchemaConnectionProvider` — `@ConditionalOnBean(DataSource.class)`
+- `AuditLogPublisher` — `@ConditionalOnBean(RabbitTemplate.class)`
+- `JpaConfig` — `@ConditionalOnBean(DataSource.class)`
+
+**Правило**: любой `@Component` или `@Configuration` в `common`, принимающий бин инфраструктуры как зависимость, должен иметь соответствующий `@ConditionalOnBean`.
+
+#### Flyway — несколько сервисов в одной схеме (system)
+Сервисы `tenant`, `payment`, `lesson`, `settings`, `notification` все используют схему `system` для Flyway, что вызывает конфликты версий в общей таблице `flyway_schema_history`.
+
+**Решение в `docker-compose.prod.yml`:**
+```yaml
+SPRING_FLYWAY_BASELINE_ON_MIGRATE: "true"   # для пустой схемы без истории
+SPRING_FLYWAY_VALIDATE_ON_MIGRATE: "false"  # игнорировать checksum-конфликты между сервисами
+```
+
+#### Config Server — сервисы без Spring Cloud Config
+Сервисы (`audit-service`, `file-service`) с `spring-cloud-starter-config` на classpath падают при старте если Config Server недоступен.
+
+**Решение** — добавить в `environment` контейнера:
+```yaml
+SPRING_CLOUD_CONFIG_ENABLED: "false"
+SPRING_CLOUD_CONFIG_IMPORT_CHECK_ENABLED: "false"
+```
+
+#### Analytics Flyway V2 — кросс-сервисные таблицы
+Миграция V2 для analytics-service создаёт индексы на таблицах других сервисов (`transactions`, `subscriptions`, `lessons`), которых может не быть в текущей схеме.
+
+**Решение**: оборачивать каждый DDL в `DO $$ BEGIN IF EXISTS (SELECT 1 FROM information_schema.tables WHERE ...) THEN ... END IF; END $$;`
+
+При ошибке миграции — удалить failed-запись вручную:
+```sql
+DELETE FROM <schema>.flyway_schema_history WHERE version = '2' AND success = false;
+```
+
 ### Security
 
 OAuth2 Resource Server with Keycloak (realm: `ondeedu`). JWT roles are extracted from both `realm_access.roles` and `resource_access.*.roles` via `KeycloakRealmRoleConverter` and prefixed with `ROLE_`.
