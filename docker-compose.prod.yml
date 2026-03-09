@@ -241,7 +241,7 @@ services:
         reservations:
           memory: 256M
     healthcheck:
-      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping')"]
+      test: ["CMD", "mongosh", "--quiet", "mongodb://ondeedu:ondeedu_mongo@localhost:27017/admin?authSource=admin", "--eval", "db.adminCommand('ping')"]
       interval: 10s
       timeout: 5s
       retries: 5
