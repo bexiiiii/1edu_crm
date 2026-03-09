@@ -2,12 +2,15 @@ package com.ondeedu.common.tenant;
 
 import org.hibernate.cfg.AvailableSettings;
 import org.hibernate.context.spi.CurrentTenantIdentifierResolver;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.orm.jpa.HibernatePropertiesCustomizer;
 import org.springframework.stereotype.Component;
 
+import javax.sql.DataSource;
 import java.util.Map;
 
 @Component
+@ConditionalOnBean(DataSource.class)
 public class TenantIdentifierResolver implements CurrentTenantIdentifierResolver<String>, HibernatePropertiesCustomizer {
 
     private static final String DEFAULT_SCHEMA = "tenant_default";
