@@ -15,7 +15,7 @@
 x-service-defaults: &service-defaults
   build:
     context: .
-    dockerfile: Dockerfile
+    dockerfile: Dockerfile.prebuilt
   env_file: .env
   networks: [1edu-network]
   restart: unless-stopped
@@ -380,7 +380,7 @@ services:
     <<: *service-defaults
     build:
       context: .
-      dockerfile: Dockerfile
+      dockerfile: Dockerfile.prebuilt
       args:
         SERVICE_NAME: service-registry
     container_name: 1edu-service-registry
@@ -408,7 +408,7 @@ services:
     <<: *service-defaults
     build:
       context: .
-      dockerfile: Dockerfile
+      dockerfile: Dockerfile.prebuilt
       args:
         SERVICE_NAME: api-gateway
     container_name: 1edu-api-gateway
@@ -440,7 +440,7 @@ services:
     <<: *service-defaults
     build:
       context: .
-      dockerfile: Dockerfile
+      dockerfile: Dockerfile.prebuilt
       args:
         SERVICE_NAME: tenant-service
     container_name: 1edu-tenant
@@ -474,7 +474,7 @@ services:
     <<: *service-defaults
     build:
       context: .
-      dockerfile: Dockerfile
+      dockerfile: Dockerfile.prebuilt
       args:
         SERVICE_NAME: auth-service
     container_name: 1edu-auth
@@ -513,7 +513,7 @@ services:
     <<: *service-defaults
     build:
       context: .
-      dockerfile: Dockerfile
+      dockerfile: Dockerfile.prebuilt
       args:
         SERVICE_NAME: student-service
     container_name: 1edu-student
@@ -553,7 +553,7 @@ services:
     <<: *service-defaults
     build:
       context: .
-      dockerfile: Dockerfile
+      dockerfile: Dockerfile.prebuilt
       args:
         SERVICE_NAME: lead-service
     container_name: 1edu-lead
@@ -591,7 +591,7 @@ services:
     <<: *service-defaults
     build:
       context: .
-      dockerfile: Dockerfile
+      dockerfile: Dockerfile.prebuilt
       args:
         SERVICE_NAME: course-service
     container_name: 1edu-course
@@ -629,7 +629,7 @@ services:
     <<: *service-defaults
     build:
       context: .
-      dockerfile: Dockerfile
+      dockerfile: Dockerfile.prebuilt
       args:
         SERVICE_NAME: schedule-service
     container_name: 1edu-schedule
@@ -667,7 +667,7 @@ services:
     <<: *service-defaults
     build:
       context: .
-      dockerfile: Dockerfile
+      dockerfile: Dockerfile.prebuilt
       args:
         SERVICE_NAME: payment-service
     container_name: 1edu-payment
@@ -705,7 +705,7 @@ services:
     <<: *service-defaults
     build:
       context: .
-      dockerfile: Dockerfile
+      dockerfile: Dockerfile.prebuilt
       args:
         SERVICE_NAME: finance-service
     container_name: 1edu-finance
@@ -743,7 +743,7 @@ services:
     <<: *service-defaults
     build:
       context: .
-      dockerfile: Dockerfile
+      dockerfile: Dockerfile.prebuilt
       args:
         SERVICE_NAME: analytics-service
     container_name: 1edu-analytics
@@ -781,7 +781,7 @@ services:
     <<: *service-defaults
     build:
       context: .
-      dockerfile: Dockerfile
+      dockerfile: Dockerfile.prebuilt
       args:
         SERVICE_NAME: notification-service
     container_name: 1edu-notification
@@ -814,7 +814,7 @@ services:
     <<: *service-defaults
     build:
       context: .
-      dockerfile: Dockerfile
+      dockerfile: Dockerfile.prebuilt
       args:
         SERVICE_NAME: file-service
     container_name: 1edu-file
@@ -854,7 +854,7 @@ services:
     <<: *service-defaults
     build:
       context: .
-      dockerfile: Dockerfile
+      dockerfile: Dockerfile.prebuilt
       args:
         SERVICE_NAME: staff-service
     container_name: 1edu-staff
@@ -892,7 +892,7 @@ services:
     <<: *service-defaults
     build:
       context: .
-      dockerfile: Dockerfile
+      dockerfile: Dockerfile.prebuilt
       args:
         SERVICE_NAME: task-service
     container_name: 1edu-task
@@ -930,7 +930,7 @@ services:
     <<: *service-defaults
     build:
       context: .
-      dockerfile: Dockerfile
+      dockerfile: Dockerfile.prebuilt
       args:
         SERVICE_NAME: lesson-service
     container_name: 1edu-lesson
@@ -968,7 +968,7 @@ services:
     <<: *service-defaults
     build:
       context: .
-      dockerfile: Dockerfile
+      dockerfile: Dockerfile.prebuilt
       args:
         SERVICE_NAME: settings-service
     container_name: 1edu-settings
@@ -1006,7 +1006,7 @@ services:
     <<: *service-defaults
     build:
       context: .
-      dockerfile: Dockerfile
+      dockerfile: Dockerfile.prebuilt
       args:
         SERVICE_NAME: report-service
     container_name: 1edu-report
@@ -1044,7 +1044,7 @@ services:
     <<: *service-defaults
     build:
       context: .
-      dockerfile: Dockerfile
+      dockerfile: Dockerfile.prebuilt
       args:
         SERVICE_NAME: audit-service
     container_name: 1edu-audit
