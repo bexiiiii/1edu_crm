@@ -7,8 +7,10 @@
 .vscode
 *.iml
 
-# Build outputs (we rebuild inside Docker)
+# Build outputs (excluded by default; Dockerfile.prebuilt needs libs/)
 **/build/
+!services/*/build/libs/
+!services/*/build/libs/**
 **/bin/
 **/out/
 
