@@ -46,6 +46,8 @@ x-spring-env: &spring-env
   MANAGEMENT_ZIPKIN_TRACING_ENDPOINT: ${ZIPKIN_ENDPOINT}
   MANAGEMENT_TRACING_SAMPLING_PROBABILITY: "0.1"
   GRPC_CLIENT_GLOBAL_NEGOTIATION_TYPE: plaintext
+  SPRING_CLOUD_CONFIG_ENABLED: "false"
+  SPRING_CLOUD_CONFIG_IMPORT_CHECK_ENABLED: "false"
 
 x-depends-infra: &depends-infra
   depends_on:
@@ -181,8 +183,8 @@ services:
           memory: 256M
     healthcheck:
       test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
-      interval: 10s
-      timeout: 5s
+      interval: 15s
+      timeout: 15s
       retries: 10
       start_period: 60s
 
@@ -486,6 +488,8 @@ services:
       KEYCLOAK_CLIENT_SECRET: ${KEYCLOAK_CLIENT_SECRET}
       MANAGEMENT_ZIPKIN_TRACING_ENDPOINT: ${ZIPKIN_ENDPOINT}
       JAVA_OPTS: "-Xms${JVM_XMS_SMALL:-128m} -Xmx${JVM_XMX_SMALL:-256m}"
+      SPRING_CLOUD_CONFIG_ENABLED: "false"
+      SPRING_CLOUD_CONFIG_IMPORT_CHECK_ENABLED: "false"
     depends_on:
       keycloak:
         condition: service_healthy
