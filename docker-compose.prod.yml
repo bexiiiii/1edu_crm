@@ -50,6 +50,8 @@ x-spring-env: &spring-env
   SPRING_CLOUD_CONFIG_IMPORT_CHECK_ENABLED: "false"
   # Don't validate schema at startup — Flyway handles it
   SPRING_JPA_HIBERNATE_DDL_AUTO: none
+  # Baseline non-empty schemas that have no flyway_schema_history yet
+  SPRING_FLYWAY_BASELINE_ON_MIGRATE: "true"
 
 x-depends-infra: &depends-infra
   depends_on:
