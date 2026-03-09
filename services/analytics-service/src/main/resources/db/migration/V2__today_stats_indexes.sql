@@ -5,8 +5,9 @@
 -- ── students: birth_date для дней рождения ───────────────────
 ALTER TABLE students ADD COLUMN IF NOT EXISTS birth_date DATE;
 
+-- EXTRACT(MONTH/DAY FROM date) is IMMUTABLE — safe for index expressions
 CREATE INDEX IF NOT EXISTS idx_students_birth_mmdd
-    ON students (TO_CHAR(birth_date, 'MM-DD'))
+    ON students ((EXTRACT(MONTH FROM birth_date)::int), (EXTRACT(DAY FROM birth_date)::int))
     WHERE birth_date IS NOT NULL AND status = 'ACTIVE';
 
 -- ── students: полное имя (часто нужно в аналитике) ───────────
@@ -38,5 +39,8 @@ CREATE INDEX IF NOT EXISTS idx_attendances_status_student
     ON attendances (status, student_id);
 
 -- ── student_groups: дата записи ──────────────────────────────
-CREATE INDEX IF NOT EXISTS idx_student_groups_enrolled_date
-    ON student_groups ((DATE(enrolled_at AT TIME ZONE 'UTC')));
+-- V1 already indexes enrolled_at (TIMESTAMPTZ) directly.
+-- A DATE(enrolled_at) expression index is not possible because
+-- timestamptz→date cast is STABLE (depends on session timezone).
+-- Range queries like WHERE enrolled_at >= '2024-01-01' AND enrolled_at < '2024-01-02'
+-- will use the existing idx_student_groups_enrolled index.
