@@ -1,4 +1,4 @@
-.PHONY: help build clean test infra-up infra-down proto all services-up services-down services-logs
+.PHONY: help build clean test infra-up infra-down proto all services-up services-down services-logs docker-deploy docker-deploy-fast
 
 help:
 	@echo "1edu CRM - Available commands:"

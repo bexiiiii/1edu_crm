@@ -141,13 +141,24 @@ deploy_services() {
     log "All services started!"
 }
 
+# ─── Resolve container name from compose service name ────────
+get_container_name() {
+    docker compose -f $COMPOSE_FILE -p $PROJECT_NAME ps -q "$1" 2>/dev/null | head -1
+}
+
 # ─── Wait for container to be healthy ────────────────────────
 wait_healthy() {
     for service in "$@"; do
         local max_wait=90
         local waited=0
         while [ $waited -lt $max_wait ]; do
-            status=$(docker inspect --format='{{.State.Health.Status}}' "${PROJECT_NAME}-${service}" 2>/dev/null || echo "not_found")
+            local cid
+            cid=$(get_container_name "$service")
+            if [ -n "$cid" ]; then
+                status=$(docker inspect --format='{{.State.Health.Status}}' "$cid" 2>/dev/null || echo "not_found")
+            else
+                status="not_found"
+            fi
             if [ "$status" = "healthy" ]; then
                 log "  ✓ ${service} is healthy"
                 break
@@ -166,7 +177,13 @@ wait_healthy_timeout() {
     local max_wait=${2:-90}
     local waited=0
     while [ $waited -lt $max_wait ]; do
-        status=$(docker inspect --format='{{.State.Health.Status}}' "${PROJECT_NAME}-${service}" 2>/dev/null || echo "not_found")
+        local cid
+        cid=$(get_container_name "$service")
+        if [ -n "$cid" ]; then
+            status=$(docker inspect --format='{{.State.Health.Status}}' "$cid" 2>/dev/null || echo "not_found")
+        else
+            status="not_found"
+        fi
         if [ "$status" = "healthy" ]; then
             log "  ✓ ${service} is healthy"
             return
