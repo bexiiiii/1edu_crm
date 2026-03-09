@@ -48,6 +48,8 @@ x-spring-env: &spring-env
   GRPC_CLIENT_GLOBAL_NEGOTIATION_TYPE: plaintext
   SPRING_CLOUD_CONFIG_ENABLED: "false"
   SPRING_CLOUD_CONFIG_IMPORT_CHECK_ENABLED: "false"
+  # Don't validate schema at startup — Flyway handles it
+  SPRING_JPA_HIBERNATE_DDL_AUTO: none
 
 x-depends-infra: &depends-infra
   depends_on:
@@ -65,8 +67,8 @@ x-depends-infra: &depends-infra
 x-healthcheck-spring: &healthcheck-spring
   interval: 30s
   timeout: 10s
-  retries: 5
-  start_period: 120s
+  retries: 8
+  start_period: 180s
 
 # ─── Services ────────────────────────────────────────────────
 services:
@@ -241,10 +243,11 @@ services:
         reservations:
           memory: 256M
     healthcheck:
-      test: ["CMD", "mongosh", "--quiet", "mongodb://ondeedu:ondeedu_mongo@localhost:27017/admin?authSource=admin", "--eval", "db.adminCommand('ping')"]
+      test: ["CMD-SHELL", "mongosh --quiet --host localhost --port 27017 -u \"$${MONGO_INITDB_ROOT_USERNAME}\" -p \"$${MONGO_INITDB_ROOT_PASSWORD}\" --authenticationDatabase admin --eval \"db.adminCommand('ping')\""]
       interval: 10s
       timeout: 5s
-      retries: 5
+      retries: 10
+      start_period: 30s
 
   minio:
     image: minio/minio:latest
