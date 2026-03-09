@@ -52,6 +52,8 @@ x-spring-env: &spring-env
   SPRING_JPA_HIBERNATE_DDL_AUTO: none
   # Baseline non-empty schemas that have no flyway_schema_history yet
   SPRING_FLYWAY_BASELINE_ON_MIGRATE: "true"
+  # Multiple services share system schema flyway_schema_history — skip checksum validation
+  SPRING_FLYWAY_VALIDATE_ON_MIGRATE: "false"
 
 x-depends-infra: &depends-infra
   depends_on:
