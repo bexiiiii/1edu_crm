@@ -490,7 +490,7 @@ services:
       EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: ${EUREKA_URL}
       EUREKA_INSTANCE_PREFER_IP_ADDRESS: "true"
       SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI: ${KEYCLOAK_URL}/auth/realms/${KEYCLOAK_REALM}
-      KEYCLOAK_SERVER_URL: ${KEYCLOAK_URL}/auth
+      KEYCLOAK_SERVER_URL: http://keycloak:8080/auth
       KEYCLOAK_REALM: ${KEYCLOAK_REALM}
       KEYCLOAK_CLIENT_ID: ${KEYCLOAK_CLIENT_ID}
       KEYCLOAK_CLIENT_SECRET: ${KEYCLOAK_CLIENT_SECRET}
@@ -1156,6 +1156,7 @@ volumes:
 # ─── Network ─────────────────────────────────────────────────
 networks:
   1edu-network:
+    name: 1edu-network
     driver: bridge
     ipam:
       config:
