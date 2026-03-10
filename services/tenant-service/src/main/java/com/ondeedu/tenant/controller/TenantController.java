@@ -30,7 +30,7 @@ public class TenantController {
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
-    @PreAuthorize("hasRole('TENANT_ADMIN')")
+    @PreAuthorize("hasRole('SUPER_ADMIN')")
     @Operation(summary = "Create a new tenant")
     public ApiResponse<TenantDto> createTenant(@Valid @RequestBody CreateTenantRequest request) {
         TenantDto tenant = tenantService.createTenant(request);
