@@ -42,7 +42,7 @@ public class PriceListService {
     }
 
     @Transactional(readOnly = true)
-    @Cacheable(value = "price-lists", key = "#id", keyGenerator = "tenantCacheKeyGenerator")
+    @Cacheable(value = "price-lists", keyGenerator = "tenantCacheKeyGenerator")
     public PriceListDto getPriceList(UUID id) {
         PriceList priceList = priceListRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("PriceList", "id", id));

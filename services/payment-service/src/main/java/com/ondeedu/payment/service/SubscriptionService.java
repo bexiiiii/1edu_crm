@@ -54,7 +54,7 @@ public class SubscriptionService {
     }
 
     @Transactional(readOnly = true)
-    @Cacheable(value = "subscriptions", key = "#id", keyGenerator = "tenantCacheKeyGenerator")
+    @Cacheable(value = "subscriptions", keyGenerator = "tenantCacheKeyGenerator")
     public SubscriptionDto getSubscription(UUID id) {
         Subscription subscription = subscriptionRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Subscription", "id", id));
