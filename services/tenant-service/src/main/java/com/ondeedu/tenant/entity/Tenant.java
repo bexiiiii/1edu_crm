@@ -13,7 +13,7 @@ import java.time.LocalDate;
     name = "tenants",
     schema = "system",
     uniqueConstraints = {
-        @UniqueConstraint(name = "uk_tenant_subdomain", columnNames = "subdomain"),
+        @UniqueConstraint(name = "uk_tenant_subdomain", columnNames = "domain"),
         @UniqueConstraint(name = "uk_tenant_schema_name", columnNames = "schema_name")
     }
 )
@@ -28,7 +28,7 @@ public class Tenant extends BaseEntity {
     @Column(nullable = false, length = 255)
     private String name;
 
-    @Column(nullable = false, unique = true, length = 100)
+    @Column(name = "domain", nullable = false, unique = true, length = 100)
     private String subdomain;
 
     @Column(length = 255)
