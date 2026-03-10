@@ -3,6 +3,7 @@ package com.ondeedu.tenant.service;
 import com.ondeedu.common.dto.PageResponse;
 import com.ondeedu.common.exception.BusinessException;
 import com.ondeedu.common.exception.ResourceNotFoundException;
+import com.ondeedu.tenant.client.CertIssuerClient;
 import com.ondeedu.tenant.dto.CreateTenantRequest;
 import com.ondeedu.tenant.dto.TenantDto;
 import com.ondeedu.tenant.dto.UpdateTenantRequest;
@@ -28,6 +29,7 @@ public class TenantService {
 
     private final TenantRepository tenantRepository;
     private final TenantMapper tenantMapper;
+    private final CertIssuerClient certIssuerClient;
 
     @PersistenceContext
     private EntityManager entityManager;
@@ -63,6 +65,7 @@ public class TenantService {
                 "Failed to create tenant schema: " + e.getMessage());
         }
 
+        certIssuerClient.issueCert(tenant.getSubdomain());
         return tenantMapper.toDto(tenant);
     }
 
@@ -70,6 +73,13 @@ public class TenantService {
     public TenantDto getTenant(UUID id) {
         Tenant tenant = tenantRepository.findById(id)
             .orElseThrow(() -> new ResourceNotFoundException("Tenant", "id", id));
+        return tenantMapper.toDto(tenant);
+    }
+
+    @Transactional(readOnly = true)
+    public TenantDto getBySubdomain(String subdomain) {
+        Tenant tenant = tenantRepository.findBySubdomain(subdomain)
+            .orElseThrow(() -> new ResourceNotFoundException("Tenant", "subdomain", subdomain));
         return tenantMapper.toDto(tenant);
     }
 

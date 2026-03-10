@@ -422,6 +422,7 @@ services:
     environment:
       <<: *spring-env
       SERVER_PORT: "8090"
+      APP_DOMAIN: ${DOMAIN:-1edu.kz}
       JAVA_OPTS: "-Xms${JVM_XMS_LARGE:-256m} -Xmx${JVM_XMX_LARGE:-512m}"
     depends_on:
       service-registry:
@@ -456,6 +457,7 @@ services:
       <<: *spring-env
       SERVER_PORT: "8100"
       GRPC_SERVER_PORT: "9100"
+      CERT_ISSUER_URL: http://cert-issuer:8200
       JAVA_OPTS: "-Xms${JVM_XMS_LARGE:-256m} -Xmx${JVM_XMX_LARGE:-512m}"
     depends_on:
       postgres:
@@ -1112,6 +1114,7 @@ services:
     volumes:
       - ./infrastructure/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
       - ./infrastructure/nginx/conf.d:/etc/nginx/conf.d:ro
+      - ./infrastructure/nginx/tenants:/etc/nginx/tenants:ro
       - ./infrastructure/certbot/conf:/etc/letsencrypt:ro
       - ./infrastructure/certbot/www:/var/www/certbot:ro
     depends_on:
@@ -1133,6 +1136,36 @@ services:
       - ./infrastructure/certbot/www:/var/www/certbot
     entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew; sleep 12h & wait $${!}; done;'"
     networks: [1edu-network]
+
+  # ── Cert Issuer — per-tenant SSL automation ───────────────────
+  cert-issuer:
+    build:
+      context: ./infrastructure/cert-issuer
+      dockerfile: Dockerfile
+    container_name: 1edu-cert-issuer
+    ports:
+      - "127.0.0.1:8200:8200"
+    environment:
+      BASE_DOMAIN: ${DOMAIN:-1edu.kz}
+      CERT_EMAIL: ${CERT_EMAIL:-admin@1edu.kz}
+      NGINX_CONTAINER: 1edu-nginx
+      WEBROOT: /var/www/certbot
+      NGINX_TENANTS_DIR: /etc/nginx/tenants
+      LETSENCRYPT_DIR: /etc/letsencrypt
+    volumes:
+      - ./infrastructure/certbot/conf:/etc/letsencrypt
+      - ./infrastructure/certbot/www:/var/www/certbot
+      - ./infrastructure/nginx/tenants:/etc/nginx/tenants
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    depends_on:
+      - nginx
+    networks: [1edu-network]
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: "0.25"
 
 # ─── Volumes ─────────────────────────────────────────────────
 volumes:
