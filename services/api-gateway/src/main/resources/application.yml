@@ -116,6 +116,28 @@ spring:
                 name: fileService
                 fallbackUri: forward:/fallback/file
 
+        # Auth Service
+        - id: auth-service
+          uri: lb://auth-service
+          predicates:
+            - Path=/api/v1/auth/**
+          filters:
+            - name: CircuitBreaker
+              args:
+                name: authService
+                fallbackUri: forward:/fallback/auth
+
+        # Admin routes (tenant-service)
+        - id: admin-service
+          uri: lb://tenant-service
+          predicates:
+            - Path=/api/v1/admin/**
+          filters:
+            - name: CircuitBreaker
+              args:
+                name: tenantService
+                fallbackUri: forward:/fallback/tenant
+
         # Tenant Service (admin only)
         - id: tenant-service
           uri: lb://tenant-service

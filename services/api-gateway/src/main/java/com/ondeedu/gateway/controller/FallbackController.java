@@ -63,6 +63,11 @@ public class FallbackController {
         return fallbackResponse("Analytics service is temporarily unavailable");
     }
 
+    @GetMapping("/auth")
+    public Mono<ResponseEntity<Map<String, Object>>> authFallback() {
+        return fallbackResponse("Auth service is temporarily unavailable");
+    }
+
     private Mono<ResponseEntity<Map<String, Object>>> fallbackResponse(String message) {
         return Mono.just(ResponseEntity
             .status(HttpStatus.SERVICE_UNAVAILABLE)
