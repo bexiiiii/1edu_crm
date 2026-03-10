@@ -1,15 +1,15 @@
 package com.ondeedu.common.audit;
 
 import com.ondeedu.common.config.RabbitMQConfig;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 /**
  * Fire-and-forget audit log publisher.
  * Inject this bean in any service to publish audit events asynchronously.
+ * RabbitTemplate is optional — services without RabbitMQ get a no-op publisher.
  *
  * Usage:
  *   auditLogPublisher.publishSystem(SystemAuditEvent.builder()...build());
@@ -17,13 +17,13 @@ import org.springframework.stereotype.Component;
  */
 @Slf4j
 @Component
-@RequiredArgsConstructor
-@ConditionalOnBean(RabbitTemplate.class)
 public class AuditLogPublisher {
 
-    private final RabbitTemplate rabbitTemplate;
+    @Autowired(required = false)
+    private RabbitTemplate rabbitTemplate;
 
     public void publishSystem(SystemAuditEvent event) {
+        if (rabbitTemplate == null) return;
         try {
             rabbitTemplate.convertAndSend(
                     RabbitMQConfig.AUDIT_EXCHANGE,
@@ -35,6 +35,7 @@ public class AuditLogPublisher {
     }
 
     public void publishTenant(TenantAuditEvent event) {
+        if (rabbitTemplate == null) return;
         try {
             rabbitTemplate.convertAndSend(
                     RabbitMQConfig.AUDIT_EXCHANGE,
