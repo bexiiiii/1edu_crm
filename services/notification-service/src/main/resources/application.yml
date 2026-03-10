@@ -60,6 +60,9 @@ management:
     web:
       exposure:
         include: health,info,prometheus,metrics
+  health:
+    mail:
+      enabled: false
   tracing:
     sampling:
       probability: 1.0
