@@ -44,13 +44,32 @@ BEGIN
             id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
             first_name VARCHAR(100) NOT NULL,
             last_name VARCHAR(100) NOT NULL,
+            middle_name VARCHAR(100),
+            customer VARCHAR(255),
+            student_photo VARCHAR(500),
             email VARCHAR(255),
             phone VARCHAR(20),
             birth_date DATE,
             status VARCHAR(20) DEFAULT ''ACTIVE'',
+            parent_name VARCHAR(200),
+            parent_phone VARCHAR(20),
+            student_phone VARCHAR(20),
+            gender VARCHAR(20) DEFAULT ''MALE'',
+            address VARCHAR(500),
+            city VARCHAR(100),
+            notes TEXT,
+            school VARCHAR(255),
+            grade VARCHAR(255),
+            additional_info TEXT,
+            contract VARCHAR(500),
+            discount VARCHAR(255),
+            comment TEXT,
             metadata JSONB DEFAULT ''{}'',
             created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-            updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+            updated_at TIMESTAMP WITH TIME ZONE,
+            created_by VARCHAR(255),
+            updated_by VARCHAR(255),
+            version BIGINT DEFAULT 0
         )', tenant_schema);
 
     -- Courses table
