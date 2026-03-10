@@ -68,10 +68,10 @@ public class Student extends BaseEntity {
     @Column(name = "notes", columnDefinition = "TEXT")
     private String notes;
 
-    @Column(name="school", nullable = true)
+    @Column(name = "school")
     private String school;
 
-    @Column(name = "grade", nullable = false)
+    @Column(name = "grade")
     private String grade;
 
     @Column(name= "additional_info")
