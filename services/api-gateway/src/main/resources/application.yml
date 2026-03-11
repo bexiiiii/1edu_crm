@@ -28,6 +28,17 @@ spring:
             allowCredentials: true
 
       routes:
+        # Public Registration (no auth required)
+        - id: registration
+          uri: lb://tenant-service
+          predicates:
+            - Path=/api/v1/register
+          filters:
+            - name: CircuitBreaker
+              args:
+                name: tenantService
+                fallbackUri: forward:/fallback/tenant
+
         # Student Service
         - id: student-service
           uri: lb://student-service

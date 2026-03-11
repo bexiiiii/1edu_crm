@@ -56,6 +56,10 @@ springdoc:
   swagger-ui:
     path: /swagger-ui.html
 
+services:
+  auth-service:
+    url: ${AUTH_SERVICE_URL:http://localhost:8101}
+
 logging:
   level:
     com.ondeedu: DEBUG

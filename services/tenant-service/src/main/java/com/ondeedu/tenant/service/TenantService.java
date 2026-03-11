@@ -96,6 +96,12 @@ public class TenantService {
     }
 
     @Transactional
+    public void forceDeleteTenant(UUID id) {
+        tenantRepository.findById(id).ifPresent(tenantRepository::delete);
+        log.warn("Force-deleted tenant: {} (registration rollback)", id);
+    }
+
+    @Transactional
     public void deleteTenant(UUID id) {
         Tenant tenant = tenantRepository.findById(id)
             .orElseThrow(() -> new ResourceNotFoundException("Tenant", "id", id));
