@@ -65,7 +65,7 @@ spring:
         - id: payment-service
           uri: lb://payment-service
           predicates:
-            - Path=/api/v1/payments/**,/api/v1/invoices/**
+            - Path=/api/v1/payments/**,/api/v1/invoices/**,/api/v1/subscriptions/**,/api/v1/price-lists/**
           filters:
             - name: CircuitBreaker
               args:
@@ -76,18 +76,18 @@ spring:
         - id: schedule-service
           uri: lb://schedule-service
           predicates:
-            - Path=/api/v1/schedules/**,/api/v1/rooms/**,/api/v1/attendance/**
+            - Path=/api/v1/schedules/**,/api/v1/rooms/**
           filters:
             - name: CircuitBreaker
               args:
                 name: scheduleService
                 fallbackUri: forward:/fallback/schedule
 
-        # Lesson Service
+        # Lesson Service (lessons + attendance)
         - id: lesson-service
           uri: lb://lesson-service
           predicates:
-            - Path=/api/v1/lessons/**
+            - Path=/api/v1/lessons/**,/api/v1/attendance/**
           filters:
             - name: CircuitBreaker
               args:
@@ -208,12 +208,23 @@ spring:
         - id: analytics-service
           uri: lb://analytics-service
           predicates:
-            - Path=/api/v1/analytics/**,/api/v1/reports/**
+            - Path=/api/v1/analytics/**
           filters:
             - name: CircuitBreaker
               args:
                 name: analyticsService
                 fallbackUri: forward:/fallback/analytics
+
+        # Report Service
+        - id: report-service
+          uri: lb://report-service
+          predicates:
+            - Path=/api/v1/reports/**
+          filters:
+            - name: CircuitBreaker
+              args:
+                name: reportService
+                fallbackUri: forward:/fallback/report
 
   data:
     redis:
@@ -260,6 +271,22 @@ resilience4j:
       taskService:
         baseConfig: default
       analyticsService:
+        baseConfig: default
+      lessonService:
+        baseConfig: default
+      settingsService:
+        baseConfig: default
+      auditService:
+        baseConfig: default
+      notificationService:
+        baseConfig: default
+      fileService:
+        baseConfig: default
+      authService:
+        baseConfig: default
+      tenantService:
+        baseConfig: default
+      reportService:
         baseConfig: default
 
   timelimiter:
