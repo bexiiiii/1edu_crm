@@ -340,6 +340,8 @@ services:
       KEYCLOAK_CLIENT_ID: ${KEYCLOAK_CLIENT_ID}
       KEYCLOAK_CLIENT_SECRET: ${KEYCLOAK_CLIENT_SECRET}
       MANAGEMENT_ZIPKIN_TRACING_ENDPOINT: ${ZIPKIN_ENDPOINT}
+      SPRING_CLOUD_CONFIG_ENABLED: "false"
+      SPRING_CLOUD_CONFIG_IMPORT_CHECK_ENABLED: "false"
     depends_on:
       keycloak:
         condition: service_healthy
@@ -530,6 +532,8 @@ services:
       MINIO_SECRET_KEY: ${MINIO_SECRET_KEY}
       MINIO_BUCKET: ${MINIO_BUCKET}
       MANAGEMENT_ZIPKIN_TRACING_ENDPOINT: ${ZIPKIN_ENDPOINT}
+      SPRING_CLOUD_CONFIG_ENABLED: "false"
+      SPRING_CLOUD_CONFIG_IMPORT_CHECK_ENABLED: "false"
     depends_on:
       minio:
         condition: service_healthy
@@ -671,6 +675,8 @@ services:
       RABBITMQ_VHOST: ${RABBITMQ_VHOST}
       KEYCLOAK_ISSUER_URI: ${KEYCLOAK_URL}/realms/${KEYCLOAK_REALM}
       MANAGEMENT_ZIPKIN_TRACING_ENDPOINT: ${ZIPKIN_ENDPOINT}
+      SPRING_CLOUD_CONFIG_ENABLED: "false"
+      SPRING_CLOUD_CONFIG_IMPORT_CHECK_ENABLED: "false"
     depends_on:
       mongodb:
         condition: service_healthy
