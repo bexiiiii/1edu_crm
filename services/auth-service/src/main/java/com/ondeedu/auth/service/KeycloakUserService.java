@@ -56,6 +56,13 @@ public class KeycloakUserService {
         credential.setTemporary(false);
         user.setCredentials(Collections.singletonList(credential));
 
+        // Set tenant_id attribute so Keycloak includes it in JWT via protocol mapper
+        if (request.getTenantId() != null && !request.getTenantId().isBlank()) {
+            Map<String, List<String>> attrs = new HashMap<>();
+            attrs.put("tenant_id", List.of(request.getTenantId()));
+            user.setAttributes(attrs);
+        }
+
         try (Response response = keycloak.realm(realm).users().create(user)) {
             if (response.getStatus() == 409) {
                 throw new BusinessException("DUPLICATE_USER",
