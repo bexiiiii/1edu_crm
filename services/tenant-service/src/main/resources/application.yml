@@ -58,7 +58,7 @@ springdoc:
 
 services:
   auth-service:
-    url: ${AUTH_SERVICE_URL:http://localhost:8101}
+    url: ${AUTH_SERVICE_URL:http://auth-service:8101}
 
 logging:
   level:
