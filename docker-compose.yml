@@ -350,7 +350,7 @@ services:
       <<: *healthcheck-spring
 
   student-service:
-    <<: *service-defaults
+    <<: [*service-defaults, *depends-infra]
     build:
       context: .
       dockerfile: Dockerfile
@@ -366,13 +366,12 @@ services:
       GRPC_SERVER_PORT: "9102"
       GRPC_CLIENT_COURSE_SERVICE_ADDRESS: discovery:///course-service
       GRPC_CLIENT_PAYMENT_SERVICE_ADDRESS: discovery:///payment-service
-    <<: *depends-infra
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://localhost:8102/actuator/health | grep -q UP"]
       <<: *healthcheck-spring
 
   lead-service:
-    <<: *service-defaults
+    <<: [*service-defaults, *depends-infra]
     build:
       context: .
       dockerfile: Dockerfile
@@ -386,13 +385,12 @@ services:
       <<: *spring-env
       SERVER_PORT: "8104"
       GRPC_SERVER_PORT: "9104"
-    <<: *depends-infra
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://localhost:8104/actuator/health | grep -q UP"]
       <<: *healthcheck-spring
 
   course-service:
-    <<: *service-defaults
+    <<: [*service-defaults, *depends-infra]
     build:
       context: .
       dockerfile: Dockerfile
@@ -406,13 +404,12 @@ services:
       <<: *spring-env
       SERVER_PORT: "8106"
       GRPC_SERVER_PORT: "9106"
-    <<: *depends-infra
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://localhost:8106/actuator/health | grep -q UP"]
       <<: *healthcheck-spring
 
   schedule-service:
-    <<: *service-defaults
+    <<: [*service-defaults, *depends-infra]
     build:
       context: .
       dockerfile: Dockerfile
@@ -426,13 +423,12 @@ services:
       <<: *spring-env
       SERVER_PORT: "8108"
       GRPC_SERVER_PORT: "9108"
-    <<: *depends-infra
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://localhost:8108/actuator/health | grep -q UP"]
       <<: *healthcheck-spring
 
   payment-service:
-    <<: *service-defaults
+    <<: [*service-defaults, *depends-infra]
     build:
       context: .
       dockerfile: Dockerfile
@@ -446,13 +442,12 @@ services:
       <<: *spring-env
       SERVER_PORT: "8110"
       GRPC_SERVER_PORT: "9110"
-    <<: *depends-infra
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://localhost:8110/actuator/health | grep -q UP"]
       <<: *healthcheck-spring
 
   finance-service:
-    <<: *service-defaults
+    <<: [*service-defaults, *depends-infra]
     build:
       context: .
       dockerfile: Dockerfile
@@ -466,13 +461,12 @@ services:
       <<: *spring-env
       SERVER_PORT: "8112"
       GRPC_SERVER_PORT: "9112"
-    <<: *depends-infra
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://localhost:8112/actuator/health | grep -q UP"]
       <<: *healthcheck-spring
 
   analytics-service:
-    <<: *service-defaults
+    <<: [*service-defaults, *depends-infra]
     build:
       context: .
       dockerfile: Dockerfile
@@ -486,7 +480,6 @@ services:
       <<: *spring-env
       SERVER_PORT: "8114"
       GRPC_SERVER_PORT: "9114"
-    <<: *depends-infra
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://localhost:8114/actuator/health | grep -q UP"]
       <<: *healthcheck-spring
@@ -549,7 +542,7 @@ services:
       <<: *healthcheck-spring
 
   staff-service:
-    <<: *service-defaults
+    <<: [*service-defaults, *depends-infra]
     build:
       context: .
       dockerfile: Dockerfile
@@ -563,13 +556,12 @@ services:
       <<: *spring-env
       SERVER_PORT: "8122"
       GRPC_SERVER_PORT: "9122"
-    <<: *depends-infra
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://localhost:8122/actuator/health | grep -q UP"]
       <<: *healthcheck-spring
 
   task-service:
-    <<: *service-defaults
+    <<: [*service-defaults, *depends-infra]
     build:
       context: .
       dockerfile: Dockerfile
@@ -583,13 +575,12 @@ services:
       <<: *spring-env
       SERVER_PORT: "8124"
       GRPC_SERVER_PORT: "9124"
-    <<: *depends-infra
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://localhost:8124/actuator/health | grep -q UP"]
       <<: *healthcheck-spring
 
   lesson-service:
-    <<: *service-defaults
+    <<: [*service-defaults, *depends-infra]
     build:
       context: .
       dockerfile: Dockerfile
@@ -603,13 +594,12 @@ services:
       <<: *spring-env
       SERVER_PORT: "8126"
       GRPC_SERVER_PORT: "9126"
-    <<: *depends-infra
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://localhost:8126/actuator/health | grep -q UP"]
       <<: *healthcheck-spring
 
   settings-service:
-    <<: *service-defaults
+    <<: [*service-defaults, *depends-infra]
     build:
       context: .
       dockerfile: Dockerfile
@@ -623,7 +613,6 @@ services:
       <<: *spring-env
       SERVER_PORT: "8128"
       GRPC_SERVER_PORT: "9128"
-    <<: *depends-infra
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://localhost:8128/actuator/health | grep -q UP"]
       <<: *healthcheck-spring
