@@ -72,16 +72,49 @@ spring:
                 name: paymentService
                 fallbackUri: forward:/fallback/payment
 
-        # Schedule Service
+        # Schedule Service (schedules + rooms)
         - id: schedule-service
           uri: lb://schedule-service
           predicates:
-            - Path=/api/v1/schedules/**,/api/v1/attendance/**
+            - Path=/api/v1/schedules/**,/api/v1/rooms/**,/api/v1/attendance/**
           filters:
             - name: CircuitBreaker
               args:
                 name: scheduleService
                 fallbackUri: forward:/fallback/schedule
+
+        # Lesson Service
+        - id: lesson-service
+          uri: lb://lesson-service
+          predicates:
+            - Path=/api/v1/lessons/**
+          filters:
+            - name: CircuitBreaker
+              args:
+                name: lessonService
+                fallbackUri: forward:/fallback/lesson
+
+        # Settings Service
+        - id: settings-service
+          uri: lb://settings-service
+          predicates:
+            - Path=/api/v1/settings/**
+          filters:
+            - name: CircuitBreaker
+              args:
+                name: settingsService
+                fallbackUri: forward:/fallback/settings
+
+        # Audit Service
+        - id: audit-service
+          uri: lb://audit-service
+          predicates:
+            - Path=/api/v1/audit/**
+          filters:
+            - name: CircuitBreaker
+              args:
+                name: auditService
+                fallbackUri: forward:/fallback/audit
 
         # Staff Service
         - id: staff-service
