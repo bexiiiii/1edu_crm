@@ -62,6 +62,30 @@
 | settings-service | 8128 | 9128 |
 | audit-service | 8130 | — |
 
+### Маршрутная таблица API Gateway (`localhost:8090`)
+
+Все запросы с фронтенда идут через единый gateway. CORS открыт (`allowedOriginPatterns: *`).
+
+| Путь | Сервис |
+|------|--------|
+| `/api/v1/students/**` | student-service |
+| `/api/v1/courses/**`, `/api/v1/groups/**` | course-service |
+| `/api/v1/leads/**` | lead-service |
+| `/api/v1/payments/**`, `/api/v1/subscriptions/**`, `/api/v1/price-lists/**` | payment-service |
+| `/api/v1/schedules/**`, `/api/v1/rooms/**` | schedule-service |
+| `/api/v1/lessons/**`, `/api/v1/attendance/**` | lesson-service |
+| `/api/v1/settings/**` | settings-service |
+| `/api/v1/audit/**` | audit-service |
+| `/api/v1/staff/**` | staff-service |
+| `/api/v1/finance/**` | finance-service |
+| `/api/v1/tasks/**` | task-service |
+| `/api/v1/analytics/**` | analytics-service |
+| `/api/v1/reports/**` | report-service |
+| `/api/v1/auth/**` | auth-service |
+| `/api/v1/tenants/**`, `/api/v1/admin/**` | tenant-service |
+| `/api/v1/notifications/**` | notification-service |
+| `/api/v1/files/**` | file-service |
+
 ---
 
 ## 2. Аутентификация
