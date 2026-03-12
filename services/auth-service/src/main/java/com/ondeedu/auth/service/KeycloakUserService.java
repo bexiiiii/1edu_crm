@@ -79,6 +79,18 @@ public class KeycloakUserService {
 
             log.info("Created Keycloak user: {} with id: {}", request.getUsername(), userId);
 
+            // Set tenant_id attribute via separate update (more reliable than setting in create payload)
+            if (request.getTenantId() != null && !request.getTenantId().isBlank()) {
+                UserResource userResource = keycloak.realm(realm).users().get(userId);
+                UserRepresentation createdUser = userResource.toRepresentation();
+                Map<String, List<String>> attrs = createdUser.getAttributes() != null
+                        ? new HashMap<>(createdUser.getAttributes()) : new HashMap<>();
+                attrs.put("tenant_id", List.of(request.getTenantId()));
+                createdUser.setAttributes(attrs);
+                userResource.update(createdUser);
+                log.info("Set tenant_id={} for user: {}", request.getTenantId(), userId);
+            }
+
             // Assign realm role
             assignRole(userId, request.getRole());
 

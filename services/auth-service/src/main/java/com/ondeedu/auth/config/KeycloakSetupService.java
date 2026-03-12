@@ -13,16 +13,13 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Ensures Keycloak has a User Attribute protocol mapper that includes
- * the "permissions" user attribute as a claim in the JWT token.
- * This allows custom role permissions to flow through to resource servers.
+ * Ensures Keycloak has the required protocol mappers for JWT claims.
+ * - permissions mapper for ondeedu-app client
+ * - tenant_id mapper for 1edu-web-app client (frontend)
  */
 @Slf4j
 @Service
 public class KeycloakSetupService {
-
-    private static final String MAPPER_NAME = "permissions-mapper";
-    private static final String CLIENT_ID = "ondeedu-app";
 
     private final Keycloak keycloak;
     private final String realm;
@@ -34,39 +31,45 @@ public class KeycloakSetupService {
     }
 
     @EventListener(ApplicationReadyEvent.class)
-    public void ensurePermissionsMapper() {
+    public void ensureMappers() {
+        ensureMapper("ondeedu-app", "permissions-mapper", "permissions", "permissions", true);
+        ensureMapper("1edu-web-app", "tenant_id-mapper", "tenant_id", "tenant_id", false);
+        ensureMapper("ondeedu-app", "tenant_id-mapper", "tenant_id", "tenant_id", false);
+    }
+
+    private void ensureMapper(String clientId, String mapperName, String userAttribute,
+                               String claimName, boolean multivalued) {
         try {
-            var clients = keycloak.realm(realm).clients().findByClientId(CLIENT_ID);
+            var clients = keycloak.realm(realm).clients().findByClientId(clientId);
             if (clients == null || clients.isEmpty()) {
-                log.warn("Keycloak client '{}' not found in realm '{}' — skipping mapper setup", CLIENT_ID, realm);
+                log.warn("Keycloak client '{}' not found — skipping mapper '{}'", clientId, mapperName);
                 return;
             }
 
-            var client = clients.get(0);
-            String clientUuid = client.getId();
+            String clientUuid = clients.get(0).getId();
 
             List<ProtocolMapperRepresentation> existing = keycloak.realm(realm)
                     .clients().get(clientUuid)
                     .getProtocolMappers().getMappersPerProtocol("openid-connect");
 
             boolean alreadyExists = existing != null && existing.stream()
-                    .anyMatch(m -> MAPPER_NAME.equals(m.getName()));
+                    .anyMatch(m -> mapperName.equals(m.getName()));
 
             if (alreadyExists) {
-                log.info("Keycloak permissions mapper already exists");
+                log.info("Keycloak mapper '{}' already exists for client '{}'", mapperName, clientId);
                 return;
             }
 
             ProtocolMapperRepresentation mapper = new ProtocolMapperRepresentation();
-            mapper.setName(MAPPER_NAME);
+            mapper.setName(mapperName);
             mapper.setProtocol("openid-connect");
             mapper.setProtocolMapper("oidc-usermodel-attribute-mapper");
 
             Map<String, String> config = new HashMap<>();
-            config.put("user.attribute", "permissions");
-            config.put("claim.name", "permissions");
+            config.put("user.attribute", userAttribute);
+            config.put("claim.name", claimName);
             config.put("jsonType.label", "String");
-            config.put("multivalued", "true");
+            config.put("multivalued", String.valueOf(multivalued));
             config.put("aggregate.attrs", "false");
             config.put("id.token.claim", "true");
             config.put("access.token.claim", "true");
@@ -76,13 +79,14 @@ public class KeycloakSetupService {
             try (var response = keycloak.realm(realm).clients().get(clientUuid)
                     .getProtocolMappers().createMapper(mapper)) {
                 if (response.getStatus() == 201) {
-                    log.info("Created Keycloak permissions protocol mapper for client '{}'", CLIENT_ID);
+                    log.info("Created Keycloak mapper '{}' for client '{}'", mapperName, clientId);
                 } else {
-                    log.warn("Failed to create permissions mapper, status: {}", response.getStatus());
+                    log.warn("Failed to create mapper '{}' for client '{}', status: {}",
+                            mapperName, clientId, response.getStatus());
                 }
             }
         } catch (Exception e) {
-            log.warn("Could not set up permissions mapper (Keycloak may be unavailable): {}", e.getMessage());
+            log.warn("Could not set up mapper '{}' for client '{}': {}", mapperName, clientId, e.getMessage());
         }
     }
 }
