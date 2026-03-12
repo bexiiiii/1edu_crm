@@ -27,9 +27,11 @@ public class RetentionController {
     @PreAuthorize("hasAnyRole('TENANT_ADMIN', 'MANAGER')")
     @Operation(summary = "Когортный анализ удержания студентов")
     public ApiResponse<RetentionResponse> getCohorts(
-            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
-            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
             @RequestParam(required = false, defaultValue = "FIRST_PAYMENT") String cohortType) {
+        if (from == null) from = LocalDate.now().minusMonths(6).withDayOfMonth(1);
+        if (to == null) to = LocalDate.now();
         return ApiResponse.success(retentionService.getCohorts(from, to, cohortType));
     }
 }

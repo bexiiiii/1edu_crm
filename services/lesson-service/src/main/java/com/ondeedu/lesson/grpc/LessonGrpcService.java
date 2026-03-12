@@ -115,7 +115,7 @@ public class LessonGrpcService extends LessonServiceGrpc.LessonServiceImplBase {
             LessonStatus status = request.hasStatus() ? LessonStatus.valueOf(request.getStatus().getValue()) : null;
             LocalDate date = request.hasDate() ? LocalDate.parse(request.getDate().getValue()) : null;
 
-            var page = lessonService.listLessons(type, status, date, pageable);
+            var page = lessonService.listLessons(type, status, date, null, null, pageable);
 
             ListLessonsResponse.Builder builder = ListLessonsResponse.newBuilder().setSuccess(true);
             page.getContent().forEach(dto -> builder.addLessons(toGrpcLesson(dto)));

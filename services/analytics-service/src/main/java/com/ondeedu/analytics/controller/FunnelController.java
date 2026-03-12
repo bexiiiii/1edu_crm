@@ -28,8 +28,10 @@ public class FunnelController {
     @PreAuthorize("hasAnyRole('TENANT_ADMIN', 'MANAGER')")
     @Operation(summary = "Воронка продаж")
     public ApiResponse<SalesFunnelResponse> getFunnel(
-            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
-            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to) {
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to) {
+        if (from == null) from = LocalDate.now().withDayOfMonth(1);
+        if (to == null) to = LocalDate.now();
         return ApiResponse.success(funnelService.getFunnel(from, to));
     }
 
@@ -37,8 +39,10 @@ public class FunnelController {
     @PreAuthorize("hasAnyRole('TENANT_ADMIN', 'MANAGER')")
     @Operation(summary = "Конверсии лидов — детализация")
     public ApiResponse<LeadConversionResponse> getConversions(
-            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
-            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to) {
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to) {
+        if (from == null) from = LocalDate.now().withDayOfMonth(1);
+        if (to == null) to = LocalDate.now();
         return ApiResponse.success(funnelService.getConversions(from, to));
     }
 }

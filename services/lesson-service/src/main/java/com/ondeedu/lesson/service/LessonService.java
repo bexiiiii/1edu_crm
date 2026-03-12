@@ -106,10 +106,19 @@ public class LessonService {
     }
 
     @Transactional(readOnly = true)
-    public PageResponse<LessonDto> listLessons(LessonType type, LessonStatus status, LocalDate date, Pageable pageable) {
+    public PageResponse<LessonDto> listLessons(LessonType type, LessonStatus status, LocalDate date,
+                                                LocalDate from, LocalDate to, Pageable pageable) {
         Page<Lesson> page;
 
-        if (type != null) {
+        boolean hasDateRange = from != null && to != null;
+
+        if (type != null && hasDateRange) {
+            page = lessonRepository.findByLessonTypeAndLessonDateBetween(type, from, to, pageable);
+        } else if (status != null && hasDateRange) {
+            page = lessonRepository.findByStatusAndLessonDateBetween(status, from, to, pageable);
+        } else if (hasDateRange) {
+            page = lessonRepository.findByLessonDateBetween(from, to, pageable);
+        } else if (type != null) {
             page = lessonRepository.findByLessonType(type, pageable);
         } else if (status != null) {
             page = lessonRepository.findByStatus(status, pageable);

@@ -128,8 +128,10 @@ public class LessonController {
             @RequestParam(required = false) LessonType type,
             @RequestParam(required = false) LessonStatus status,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
             @PageableDefault(size = 20, sort = "lessonDate", direction = Sort.Direction.DESC) Pageable pageable) {
-        return ApiResponse.success(lessonService.listLessons(type, status, date, pageable));
+        return ApiResponse.success(lessonService.listLessons(type, status, date, from, to, pageable));
     }
 
     @GetMapping("/group/{groupId}")

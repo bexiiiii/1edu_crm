@@ -27,9 +27,11 @@ public class DashboardController {
     @PreAuthorize("hasAnyRole('TENANT_ADMIN', 'MANAGER')")
     @Operation(summary = "Получить все метрики дашборда руководителя")
     public ApiResponse<DashboardResponse> getDashboard(
-            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
-            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
             @RequestParam(required = false, defaultValue = "ALL") String lessonType) {
+        if (from == null) from = LocalDate.now().withDayOfMonth(1);
+        if (to == null) to = LocalDate.now();
         return ApiResponse.success(dashboardService.getDashboard(from, to, lessonType));
     }
 }

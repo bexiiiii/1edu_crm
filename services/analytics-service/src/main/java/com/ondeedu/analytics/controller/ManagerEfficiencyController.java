@@ -27,8 +27,10 @@ public class ManagerEfficiencyController {
     @PreAuthorize("hasAnyRole('TENANT_ADMIN', 'MANAGER')")
     @Operation(summary = "Эффективность менеджеров — лиды, конверсия, FRT")
     public ApiResponse<ManagerEfficiencyResponse> getEfficiency(
-            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
-            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to) {
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to) {
+        if (from == null) from = LocalDate.now().withDayOfMonth(1);
+        if (to == null) to = LocalDate.now();
         return ApiResponse.success(managerEfficiencyService.getEfficiency(from, to));
     }
 }

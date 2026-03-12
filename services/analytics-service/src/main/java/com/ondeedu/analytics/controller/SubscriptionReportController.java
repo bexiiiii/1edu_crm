@@ -27,9 +27,11 @@ public class SubscriptionReportController {
     @PreAuthorize("hasAnyRole('TENANT_ADMIN', 'MANAGER')")
     @Operation(summary = "Отчёт по абонементам за период")
     public ApiResponse<SubscriptionReportResponse> getReport(
-            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
-            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
             @RequestParam(required = false, defaultValue = "false") boolean onlySuspicious) {
+        if (from == null) from = LocalDate.now().withDayOfMonth(1);
+        if (to == null) to = LocalDate.now();
         return ApiResponse.success(subscriptionReportService.getReport(from, to, onlySuspicious));
     }
 }
