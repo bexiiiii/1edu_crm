@@ -122,6 +122,38 @@ Manages Keycloak users (staff members) via Keycloak Admin Client. No database, n
 
 ### Known Issues & Solutions
 
+#### Keycloak 26 User Profile — кастомные атрибуты (tenant_id, permissions)
+Keycloak 26 использует **DeclarativeUserProfile** по умолчанию. Кастомные атрибуты, не объявленные в схеме User Profile, **молча игнорируются** при создании/обновлении пользователя через Admin API.
+
+**Симптом**: `tenant_id` записывается без ошибок, но в JWT claim отсутствует (`null` / `None`).
+
+**Решение**: в Keycloak Admin Console → `Realm settings → User profile → Create attribute` — добавить `tenant_id` (и любые другие кастомные атрибуты) перед использованием.
+
+**Важно для новых инсталляций**: при поднятии нового Keycloak-реалма нужно вручную добавить атрибуты в User Profile Schema. `KeycloakSetupService` НЕ делает это автоматически — при необходимости добавить программное создание атрибутов через `keycloak.realm(realm).users().userProfile()`.
+
+#### Keycloak — Protocol Mappers для JWT claims
+Чтобы `tenant_id` и `permissions` попадали в JWT, нужны protocol mappers типа `User Attribute`:
+- **`1edu-web-app`**: mapper `tenant_id-mapper` в scope `1edu-web-app-dedicated` (attribute `tenant_id` → claim `tenant_id`)
+- **`1edu-web-app`**: mapper `realm-roles` в scope `1edu-web-app-dedicated` (Realm Roles → claim `roles`)
+- **`ondeedu-app`**: mapper `tenant_id-mapper` (attribute `tenant_id` → claim `tenant_id`)
+- **`ondeedu-app`**: mapper `permissions-mapper` (attribute `permissions` → claim `permissions`, multivalued)
+
+`KeycloakSetupService` автоматически создаёт эти mappers при старте auth-service (кроме `realm-roles` — его нужно добавить вручную в dedicated scope `1edu-web-app-dedicated`).
+
+#### Keycloak URL — обязательный суффикс /auth
+`KEYCLOAK_URL` в `.env` должен содержать суффикс `/auth` если Keycloak развёрнут с context path:
+```
+KEYCLOAK_URL=http://keycloak:8080/auth       # локально
+KEYCLOAK_URL=https://beta.1edu.kz/auth       # на сервере
+```
+Без `/auth` — Admin Client получает HTTP 404 при `grantToken`, и все операции с Keycloak падают.
+
+#### Docker — сеть при пересборке контейнера
+При пересборке отдельного контейнера (`docker compose up -d --build auth-service`) новый контейнер подключается к **текущей** сети проекта (`1edu_crm_1edu-network`). Если старые сервисы работают на другой сети (например, `1edu_1edu-network` от предыдущего запуска), нужно явно подключить контейнер:
+```bash
+docker network connect --alias auth-service <old-network-name> <container-name>
+```
+
 #### Lombok в бизнес-сервисах
 `compileOnly` зависимости не транзитивны — Lombok из `common` **не передаётся** в зависимые сервисы. Каждый бизнес-сервис должен явно объявлять в `build.gradle`:
 ```groovy

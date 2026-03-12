@@ -98,8 +98,10 @@
 ```http
 Authorization: Bearer <access_token>
 Content-Type: application/json
-X-Tenant-ID: <tenant_uuid>   // обязателен для SUPER_ADMIN при запросах к данным тенанта
+X-Tenant-ID: <tenant_uuid>
 ```
+
+> `X-Tenant-ID` — UUID тенанта. Для обычных пользователей берётся из JWT claim `tenant_id` автоматически бэкендом. Передавай явно только если у тебя несколько тенантов (SUPER_ADMIN) или для явного указания контекста.
 
 ### Как получить токен
 
@@ -115,11 +117,13 @@ grant_type=password&client_id=1edu-web-app&username=<login>&password=<pass>
 
 **Local:**
 ```http
-POST http://localhost:8080/realms/ondeedu/protocol/openid-connect/token
+POST http://localhost:8080/auth/realms/ondeedu/protocol/openid-connect/token
 Content-Type: application/x-www-form-urlencoded
 
 grant_type=password&client_id=1edu-web-app&username=<login>&password=<pass>
 ```
+
+> **Важно**: Keycloak развёрнут с context path `/auth`. URL токена всегда включает `/auth/realms/...`.
 
 ### Структура JWT (полезные claims)
 
@@ -127,11 +131,18 @@ grant_type=password&client_id=1edu-web-app&username=<login>&password=<pass>
 {
   "sub": "user-uuid",
   "tenant_id": "tenant-uuid",
+  "roles": ["TENANT_ADMIN"],
+  "permissions": ["STUDENTS_VIEW", "LESSONS_CREATE"],
   "realm_access": {
-    "roles": ["TENANT_ADMIN", "STUDENTS_VIEW", "LESSONS_CREATE"]
+    "roles": ["TENANT_ADMIN", "offline_access", "uma_authorization"]
   }
 }
 ```
+
+> `tenant_id` — UUID тенанта, передаётся в заголовке `X-Tenant-ID` при запросах.
+> `roles` — роль пользователя (через `realm-roles` mapper в `1edu-web-app-dedicated` scope).
+> `permissions` — гранулярные права (через `permissions-mapper`).
+> `realm_access.roles` — также содержит роли, доступен для обратной совместимости.
 
 ---
 
@@ -287,8 +298,9 @@ grant_type=password&client_id=1edu-web-app&username=<login>&password=<pass>
 **Что происходит при регистрации:**
 1. Создаётся тенант в системе (статус `ACTIVE`, план `BASIC`)
 2. Создаётся PostgreSQL схема для тенанта
-3. Создаётся пользователь `TENANT_ADMIN` в Keycloak
-4. Если шаг 3 падает — тенант удаляется (rollback)
+3. Создаётся пользователь `TENANT_ADMIN` в Keycloak с атрибутом `tenant_id` = UUID тенанта
+4. `tenant_id` попадает в JWT через protocol mapper — используй его как `X-Tenant-ID` для последующих запросов
+5. Если шаг 3 падает — тенант удаляется (rollback)
 
 **Ошибки:**
 
@@ -638,7 +650,7 @@ interface ChurnAnalyticsResponse {
 
 ---
 
-## 6. Auth Service (8101)
+## 7. Auth Service (8101)
 
 ### UserDto
 
