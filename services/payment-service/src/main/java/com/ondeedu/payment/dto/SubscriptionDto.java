@@ -19,6 +19,10 @@ public class SubscriptionDto {
 
     private UUID courseId;
 
+    private UUID groupId;
+
+    private UUID serviceId;
+
     private UUID priceListId;
 
     private Integer totalLessons;

@@ -30,6 +30,8 @@ public interface SubscriptionMapper {
     @Mapping(target = "version", ignore = true)
     @Mapping(target = "studentId", ignore = true)
     @Mapping(target = "courseId", ignore = true)
+    @Mapping(target = "groupId", ignore = true)
+    @Mapping(target = "serviceId", ignore = true)
     @Mapping(target = "priceListId", ignore = true)
     @Mapping(target = "totalLessons", ignore = true)
     @Mapping(target = "startDate", ignore = true)

@@ -23,6 +23,12 @@ public class Subscription extends BaseEntity {
     @Column(name = "course_id")
     private UUID courseId;
 
+    @Column(name = "group_id")
+    private UUID groupId;
+
+    @Column(name = "service_id")
+    private UUID serviceId;
+
     @Column(name = "price_list_id")
     private UUID priceListId;
 

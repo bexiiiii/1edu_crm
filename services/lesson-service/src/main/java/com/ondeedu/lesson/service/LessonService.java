@@ -21,7 +21,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
+import java.util.List;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Service
@@ -173,5 +175,13 @@ public class LessonService {
     public PageResponse<LessonDto> listByTeacher(UUID teacherId, Pageable pageable) {
         Page<Lesson> page = lessonRepository.findByTeacherId(teacherId, pageable);
         return PageResponse.from(page, lessonMapper::toDto);
+    }
+
+    @Transactional(readOnly = true)
+    public List<LessonDto> listCalendar(LocalDate from, LocalDate to) {
+        return lessonRepository.findByLessonDateBetweenOrderByLessonDateAscStartTimeAsc(from, to)
+                .stream()
+                .map(lessonMapper::toDto)
+                .collect(Collectors.toList());
     }
 }

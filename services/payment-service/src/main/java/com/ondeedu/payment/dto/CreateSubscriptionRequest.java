@@ -18,6 +18,10 @@ public class CreateSubscriptionRequest {
 
     private UUID courseId;
 
+    private UUID groupId;
+
+    private UUID serviceId;
+
     private UUID priceListId;
 
     @NotNull(message = "Total lessons is required")

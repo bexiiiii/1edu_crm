@@ -23,6 +23,7 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDate;
+import java.util.List;
 import java.util.UUID;
 
 @RestController
@@ -40,6 +41,15 @@ public class LessonController {
     public ApiResponse<LessonDto> createLesson(@Valid @RequestBody CreateLessonRequest request) {
         LessonDto lesson = lessonService.createLesson(request);
         return ApiResponse.success(lesson, "Lesson created successfully");
+    }
+
+    @GetMapping("/calendar")
+    @PreAuthorize("hasRole('TENANT_ADMIN') or hasAuthority('LESSONS_VIEW')")
+    @Operation(summary = "Get all lessons in date range for calendar view")
+    public ApiResponse<List<LessonDto>> listCalendar(
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to) {
+        return ApiResponse.success(lessonService.listCalendar(from, to));
     }
 
     @GetMapping("/{id}")
