@@ -782,7 +782,10 @@ services:
           memory: 384M
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://localhost:8114/actuator/health | grep -q UP"]
-      <<: *healthcheck-spring
+      interval: 30s
+      timeout: 20s
+      retries: 10
+      start_period: 480s
 
   notification-service:
     <<: *service-defaults

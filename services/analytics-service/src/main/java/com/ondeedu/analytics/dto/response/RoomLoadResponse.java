@@ -1,6 +1,8 @@
 package com.ondeedu.analytics.dto.response;
 
+import lombok.AllArgsConstructor;
 import lombok.Builder;
+import lombok.NoArgsConstructor;
 import lombok.Data;
 
 import java.time.LocalDate;
@@ -9,6 +11,8 @@ import java.util.UUID;
 
 @Data
 @Builder
+@NoArgsConstructor
+@AllArgsConstructor
 public class RoomLoadResponse {
 
     private List<RoomLoadRowDto> rows;
@@ -19,6 +23,8 @@ public class RoomLoadResponse {
 
     @Data
     @Builder
+@NoArgsConstructor
+@AllArgsConstructor
     public static class RoomLoadRowDto {
         private UUID roomId;
         private String roomName;
@@ -30,6 +36,8 @@ public class RoomLoadResponse {
 
     @Data
     @Builder
+@NoArgsConstructor
+@AllArgsConstructor
     public static class RoomTimelineDto {
         private UUID roomId;
         private String roomName;

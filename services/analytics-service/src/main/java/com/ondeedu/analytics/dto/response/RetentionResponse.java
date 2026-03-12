@@ -1,12 +1,16 @@
 package com.ondeedu.analytics.dto.response;
 
+import lombok.AllArgsConstructor;
 import lombok.Builder;
+import lombok.NoArgsConstructor;
 import lombok.Data;
 
 import java.util.List;
 
 @Data
 @Builder
+@NoArgsConstructor
+@AllArgsConstructor
 public class RetentionResponse {
 
     /** Когортный анализ */
@@ -14,6 +18,8 @@ public class RetentionResponse {
 
     @Data
     @Builder
+@NoArgsConstructor
+@AllArgsConstructor
     public static class CohortRowDto {
         private String cohort;    // "2026 янв."
         private String cohortKey; // "2026-01"

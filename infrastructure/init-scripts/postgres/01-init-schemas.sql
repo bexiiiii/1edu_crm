@@ -253,12 +253,30 @@ BEGIN
             version BIGINT DEFAULT 0
         )', tenant_schema);
 
+    -- Services table (individual/group services)
+    EXECUTE format('
+        CREATE TABLE IF NOT EXISTS %I.services (
+            id          UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+            name        VARCHAR(255) NOT NULL,
+            description TEXT,
+            price       DECIMAL(15, 2),
+            type        VARCHAR(30) DEFAULT ''INDIVIDUAL'',
+            status      VARCHAR(20) DEFAULT ''ACTIVE'',
+            created_at  TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+            updated_at  TIMESTAMP WITH TIME ZONE,
+            created_by  VARCHAR(255),
+            updated_by  VARCHAR(255),
+            version     BIGINT DEFAULT 0
+        )', tenant_schema);
+
     -- Subscriptions table (payment)
     EXECUTE format('
         CREATE TABLE IF NOT EXISTS %I.subscriptions (
             id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
             student_id UUID NOT NULL,
             course_id UUID,
+            group_id UUID,
+            service_id UUID,
             price_list_id UUID,
             total_lessons INTEGER NOT NULL,
             lessons_left INTEGER NOT NULL,

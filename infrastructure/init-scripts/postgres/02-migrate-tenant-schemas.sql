@@ -245,6 +245,8 @@ BEGIN
             id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
             student_id UUID NOT NULL,
             course_id UUID,
+            group_id UUID,
+            service_id UUID,
             price_list_id UUID,
             total_lessons INTEGER NOT NULL,
             lessons_left INTEGER NOT NULL,
@@ -260,6 +262,9 @@ BEGIN
             updated_by VARCHAR(255),
             version BIGINT DEFAULT 0
         )', t_schema);
+    -- Add group_id / service_id if table already existed without them
+    EXECUTE format('ALTER TABLE %I.subscriptions ADD COLUMN IF NOT EXISTS group_id   UUID', t_schema);
+    EXECUTE format('ALTER TABLE %I.subscriptions ADD COLUMN IF NOT EXISTS service_id UUID', t_schema);
 
     -- ===== price_lists (payment) =====
     EXECUTE format('
@@ -336,6 +341,22 @@ BEGIN
             updated_by VARCHAR(255),
             version BIGINT DEFAULT 0,
             UNIQUE (lesson_id, student_id)
+        )', t_schema);
+
+    -- ===== services (individual/group services) =====
+    EXECUTE format('
+        CREATE TABLE IF NOT EXISTS %I.services (
+            id          UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+            name        VARCHAR(255) NOT NULL,
+            description TEXT,
+            price       DECIMAL(15, 2),
+            type        VARCHAR(30) DEFAULT ''INDIVIDUAL'',
+            status      VARCHAR(20) DEFAULT ''ACTIVE'',
+            created_at  TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+            updated_at  TIMESTAMP WITH TIME ZONE,
+            created_by  VARCHAR(255),
+            updated_by  VARCHAR(255),
+            version     BIGINT DEFAULT 0
         )', t_schema);
 
     -- ===== Drop obsolete tables =====

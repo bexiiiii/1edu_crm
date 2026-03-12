@@ -1,6 +1,8 @@
 package com.ondeedu.analytics.dto.response;
 
+import lombok.AllArgsConstructor;
 import lombok.Builder;
+import lombok.NoArgsConstructor;
 import lombok.Data;
 
 import java.math.BigDecimal;
@@ -10,6 +12,8 @@ import java.util.UUID;
 
 @Data
 @Builder
+@NoArgsConstructor
+@AllArgsConstructor
 public class SubscriptionReportResponse {
 
     private BigDecimal totalAmount;
@@ -19,6 +23,8 @@ public class SubscriptionReportResponse {
 
     @Data
     @Builder
+@NoArgsConstructor
+@AllArgsConstructor
     public static class SubscriptionRowDto {
         private UUID subscriptionId;
         private UUID studentId;

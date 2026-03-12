@@ -1,6 +1,8 @@
 package com.ondeedu.analytics.dto.response;
 
+import lombok.AllArgsConstructor;
 import lombok.Builder;
+import lombok.NoArgsConstructor;
 import lombok.Data;
 
 import java.math.BigDecimal;
@@ -8,6 +10,8 @@ import java.util.List;
 
 @Data
 @Builder
+@NoArgsConstructor
+@AllArgsConstructor
 public class LeadConversionResponse {
 
     // Конверсия между этапами
@@ -44,6 +48,8 @@ public class LeadConversionResponse {
 
     @Data
     @Builder
+@NoArgsConstructor
+@AllArgsConstructor
     public static class StageConversionDto {
         private String stageFrom;
         private String stageTo;
@@ -53,6 +59,8 @@ public class LeadConversionResponse {
 
     @Data
     @Builder
+@NoArgsConstructor
+@AllArgsConstructor
     public static class SourceConversionDto {
         private String source;
         private long leads;
@@ -62,6 +70,8 @@ public class LeadConversionResponse {
 
     @Data
     @Builder
+@NoArgsConstructor
+@AllArgsConstructor
     public static class ManagerConversionDto {
         private String manager;
         private long leads;
@@ -74,6 +84,8 @@ public class LeadConversionResponse {
 
     @Data
     @Builder
+@NoArgsConstructor
+@AllArgsConstructor
     public static class StageSummaryDto {
         private String stage;
         private long count;

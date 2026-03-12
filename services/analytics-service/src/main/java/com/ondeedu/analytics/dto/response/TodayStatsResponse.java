@@ -2,6 +2,8 @@ package com.ondeedu.analytics.dto.response;
 
 import lombok.Builder;
 import lombok.Data;
+import lombok.NoArgsConstructor;
+import lombok.AllArgsConstructor;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -12,6 +14,8 @@ import java.util.List;
  */
 @Data
 @Builder
+@NoArgsConstructor
+@AllArgsConstructor
 public class TodayStatsResponse {
 
     private LocalDate date;
