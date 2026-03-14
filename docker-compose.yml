@@ -8,6 +8,8 @@
 #   docker-compose down -v            # stop + wipe volumes
 # ============================================================
 
+name: 1edu
+
 # ─── Reusable anchors ────────────────────────────────────────
 x-service-defaults: &service-defaults
   build:
