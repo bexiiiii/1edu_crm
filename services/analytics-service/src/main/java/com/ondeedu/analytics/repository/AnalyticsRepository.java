@@ -198,15 +198,15 @@ public class AnalyticsRepository {
     /** Доходы по группам (group_id из subscriptions) */
     public List<Map<String, Object>> getRevenueByGroup(String schema, LocalDate from, LocalDate to) {
         String sql = """
-                SELECT g.name AS group_name, g.id AS group_id,
+                SELECT sch.name AS group_name, sch.id AS group_id,
                        COALESCE(SUM(t.amount), 0) AS revenue
                 FROM :schema.subscriptions s
-                JOIN :schema.groups g ON g.id = s.group_id
+                JOIN :schema.schedules sch ON sch.id = s.group_id
                 LEFT JOIN :schema.transactions t ON t.student_id = s.student_id
                     AND t.type = 'INCOME' AND t.status = 'COMPLETED'
                     AND t.transaction_date BETWEEN :from AND :to
                 WHERE s.start_date BETWEEN :from AND :to
-                GROUP BY g.id, g.name
+                GROUP BY sch.id, sch.name
                 ORDER BY revenue DESC
                 """.replace(":schema", schema);
         return jdbc.queryForList(sql, new MapSqlParameterSource("from", from).addValue("to", to));
@@ -223,7 +223,7 @@ public class AnalyticsRepository {
                     s.id,
                     s.student_id,
                     CONCAT(st.first_name, ' ', st.last_name) AS student_name,
-                    COALESCE(g.name, srv.name, 'Без услуги') AS service_name,
+                    COALESCE(sch.name, c.name, 'Без услуги') AS service_name,
                     s.amount,
                     s.status,
                     s.start_date,
@@ -233,13 +233,13 @@ public class AnalyticsRepository {
                     (SELECT COUNT(*) FROM :schema.attendances a
                        JOIN :schema.lessons l ON l.id = a.lesson_id
                       WHERE a.student_id = s.student_id
-                        AND l.group_id = s.group_id
+                        AND COALESCE(l.group_id, l.service_id) = COALESCE(s.group_id, s.service_id, s.course_id)
                         AND a.status = 'ATTENDED'
                     ) AS attendance_count
                 FROM :schema.subscriptions s
                 JOIN :schema.students st ON st.id = s.student_id
-                LEFT JOIN :schema.groups g ON g.id = s.group_id
-                LEFT JOIN :schema.services srv ON srv.id = s.service_id
+                LEFT JOIN :schema.schedules sch ON sch.id = s.group_id
+                LEFT JOIN :schema.courses c ON c.id = COALESCE(s.service_id, s.course_id)
                 WHERE s.start_date BETWEEN :from AND :to
                 ORDER BY s.created_at DESC
                 """.replace(":schema", schema);
@@ -393,11 +393,11 @@ public class AnalyticsRepository {
                     ROUND(AVG(EXTRACT(EPOCH FROM (COALESCE(sg_all.completed_at, NOW()) - sg_all.enrolled_at)) / (30 * 24 * 3600))::numeric, 1) AS avg_tenure_months,
                     ROUND(SUM(EXTRACT(EPOCH FROM (COALESCE(sg_all.completed_at, NOW()) - sg_all.enrolled_at)) / (30 * 24 * 3600))::numeric, 1) AS total_tenure_months
                 FROM :schema.staff sf
-                LEFT JOIN :schema.groups g ON g.teacher_id = sf.id
-                LEFT JOIN :schema.student_groups sg ON sg.group_id = g.id
-                LEFT JOIN :schema.student_groups sg_all ON sg_all.group_id = g.id
-                LEFT JOIN :schema.subscriptions s ON s.group_id = g.id
-                LEFT JOIN :schema.lessons l ON l.group_id = g.id
+                LEFT JOIN :schema.schedules sch ON sch.teacher_id = sf.id
+                LEFT JOIN :schema.student_groups sg ON sg.group_id = sch.id
+                LEFT JOIN :schema.student_groups sg_all ON sg_all.group_id = sch.id
+                LEFT JOIN :schema.subscriptions s ON s.group_id = sch.id
+                LEFT JOIN :schema.lessons l ON l.group_id = sch.id
                 LEFT JOIN :schema.attendances a ON a.lesson_id = l.id
                 LEFT JOIN :schema.transactions t ON t.student_id = sg.student_id
                 WHERE sf.role = 'TEACHER'
@@ -413,13 +413,13 @@ public class AnalyticsRepository {
                 SELECT
                     sf.id AS staff_id,
                     COUNT(DISTINCT sg.student_id) AS students_count,
-                    COALESCE(SUM(g.max_students), 0) AS capacity,
-                    CASE WHEN COALESCE(SUM(g.max_students), 0) = 0 THEN 0
-                         ELSE ROUND(100.0 * COUNT(DISTINCT sg.student_id) / SUM(g.max_students), 2)
+                    COALESCE(SUM(sch.max_students), 0) AS capacity,
+                    CASE WHEN COALESCE(SUM(sch.max_students), 0) = 0 THEN 0
+                         ELSE ROUND(100.0 * COUNT(DISTINCT sg.student_id) / SUM(sch.max_students), 2)
                     END AS load_pct
                 FROM :schema.staff sf
-                LEFT JOIN :schema.groups g ON g.teacher_id = sf.id AND g.status = 'ACTIVE'
-                LEFT JOIN :schema.student_groups sg ON sg.group_id = g.id AND sg.status = 'ACTIVE'
+                LEFT JOIN :schema.schedules sch ON sch.teacher_id = sf.id AND sch.status = 'ACTIVE'
+                LEFT JOIN :schema.student_groups sg ON sg.group_id = sch.id AND sg.status = 'ACTIVE'
                 WHERE sf.role = 'TEACHER'
                 GROUP BY sf.id
                 """.replace(":schema", schema);
@@ -486,17 +486,17 @@ public class AnalyticsRepository {
     public List<Map<String, Object>> getGroupLoad(String schema) {
         String sql = """
                 SELECT
-                    g.id AS group_id,
-                    g.name AS group_name,
+                    sch.id AS group_id,
+                    sch.name AS group_name,
                     COUNT(DISTINCT sg.student_id) AS students_count,
-                    COALESCE(g.max_students, 0) AS capacity,
-                    CASE WHEN COALESCE(g.max_students, 0) = 0 THEN
+                    COALESCE(sch.max_students, 0) AS capacity,
+                    CASE WHEN COALESCE(sch.max_students, 0) = 0 THEN
                              CASE WHEN COUNT(DISTINCT sg.student_id) > 0 THEN 100 ELSE 0 END
-                         ELSE ROUND(100.0 * COUNT(DISTINCT sg.student_id) / g.max_students, 2)
+                         ELSE ROUND(100.0 * COUNT(DISTINCT sg.student_id) / sch.max_students, 2)
                     END AS load_pct
-                FROM :schema.groups g
-                LEFT JOIN :schema.student_groups sg ON sg.group_id = g.id AND sg.status = 'ACTIVE'
-                GROUP BY g.id, g.name, g.max_students
+                FROM :schema.schedules sch
+                LEFT JOIN :schema.student_groups sg ON sg.group_id = sch.id AND sg.status = 'ACTIVE'
+                GROUP BY sch.id, sch.name, sch.max_students
                 ORDER BY load_pct DESC
                 """.replace(":schema", schema);
         return jdbc.queryForList(sql, new MapSqlParameterSource());
@@ -590,12 +590,12 @@ public class AnalyticsRepository {
     /** Загрузка групп (среднее) */
     public Double getAvgGroupLoad(String schema) {
         String sql = """
-                SELECT CASE WHEN COALESCE(SUM(g.max_students), 0) = 0 THEN 0
-                            ELSE ROUND(100.0 * COUNT(DISTINCT sg.student_id) / SUM(g.max_students), 2)
+                SELECT CASE WHEN COALESCE(SUM(sch.max_students), 0) = 0 THEN 0
+                            ELSE ROUND(100.0 * COUNT(DISTINCT sg.student_id) / SUM(sch.max_students), 2)
                        END
-                FROM :schema.groups g
-                LEFT JOIN :schema.student_groups sg ON sg.group_id = g.id AND sg.status = 'ACTIVE'
-                WHERE g.status = 'ACTIVE'
+                FROM :schema.schedules sch
+                LEFT JOIN :schema.student_groups sg ON sg.group_id = sch.id AND sg.status = 'ACTIVE'
+                WHERE sch.status = 'ACTIVE'
                 """.replace(":schema", schema);
         Double result = jdbc.queryForObject(sql, new MapSqlParameterSource(), Double.class);
         return result != null ? result : 0.0;
@@ -717,14 +717,14 @@ public class AnalyticsRepository {
                     s.id,
                     s.student_id,
                     CONCAT(st.first_name, ' ', st.last_name) AS student_name,
-                    COALESCE(g.name, srv.name, '—') AS group_name,
+                    COALESCE(sch.name, c.name, '—') AS group_name,
                     s.lessons_left,
                     s.amount,
                     s.end_date
                 FROM :schema.subscriptions s
                 JOIN :schema.students st ON st.id = s.student_id
-                LEFT JOIN :schema.groups   g   ON g.id   = s.group_id
-                LEFT JOIN :schema.services srv ON srv.id = s.service_id
+                LEFT JOIN :schema.schedules sch ON sch.id = s.group_id
+                LEFT JOIN :schema.courses c ON c.id = COALESCE(s.service_id, s.course_id)
                 WHERE s.status = 'ACTIVE'
                   AND s.end_date BETWEEN :today AND :deadline
                 ORDER BY s.end_date
@@ -742,14 +742,14 @@ public class AnalyticsRepository {
                     s.id,
                     s.student_id,
                     CONCAT(st.first_name, ' ', st.last_name) AS student_name,
-                    COALESCE(g.name, srv.name, '—') AS group_name,
+                    COALESCE(sch.name, c.name, '—') AS group_name,
                     s.lessons_left,
                     s.amount,
                     s.end_date
                 FROM :schema.subscriptions s
                 JOIN :schema.students st ON st.id = s.student_id
-                LEFT JOIN :schema.groups   g   ON g.id   = s.group_id
-                LEFT JOIN :schema.services srv ON srv.id = s.service_id
+                LEFT JOIN :schema.schedules sch ON sch.id = s.group_id
+                LEFT JOIN :schema.courses c ON c.id = COALESCE(s.service_id, s.course_id)
                 WHERE s.status = 'ACTIVE'
                   AND s.lessons_left > 0
                   AND s.lessons_left <= 2
@@ -767,14 +767,14 @@ public class AnalyticsRepository {
                     s.id,
                     s.student_id,
                     CONCAT(st.first_name, ' ', st.last_name) AS student_name,
-                    COALESCE(g.name, srv.name, '—') AS group_name,
+                    COALESCE(sch.name, c.name, '—') AS group_name,
                     s.lessons_left,
                     s.amount,
                     s.end_date
                 FROM :schema.subscriptions s
                 JOIN :schema.students st ON st.id = s.student_id
-                LEFT JOIN :schema.groups   g   ON g.id   = s.group_id
-                LEFT JOIN :schema.services srv ON srv.id = s.service_id
+                LEFT JOIN :schema.schedules sch ON sch.id = s.group_id
+                LEFT JOIN :schema.courses c ON c.id = COALESCE(s.service_id, s.course_id)
                 WHERE s.status = 'ACTIVE'
                   AND (s.end_date < :today OR s.lessons_left = 0)
                 ORDER BY s.end_date NULLS LAST
@@ -831,20 +831,20 @@ public class AnalyticsRepository {
                     a.student_id,
                     CONCAT(st.first_name, ' ', st.last_name) AS student_name,
                     a.lesson_id,
-                    COALESCE(g.name, srv.name, '—') AS group_name,
+                    COALESCE(sch.name, c.name, '—') AS group_name,
                     l.lesson_date
                 FROM :schema.attendances a
                 JOIN :schema.lessons  l  ON l.id  = a.lesson_id
                 JOIN :schema.students st ON st.id = a.student_id
-                LEFT JOIN :schema.groups   g   ON g.id   = l.group_id
-                LEFT JOIN :schema.services srv ON srv.id = l.service_id
+                LEFT JOIN :schema.schedules sch ON sch.id = l.group_id
+                LEFT JOIN :schema.courses c ON c.id = l.service_id
                 WHERE a.status = 'ATTENDED'
                   AND l.lesson_date >= CURRENT_DATE - :limitDays
                   AND NOT EXISTS (
                       SELECT 1
                       FROM :schema.subscriptions sub
                       WHERE sub.student_id = a.student_id
-                        AND (sub.group_id = l.group_id OR sub.service_id = l.service_id)
+                        AND COALESCE(sub.group_id, sub.service_id, sub.course_id) = COALESCE(l.group_id, l.service_id)
                         AND sub.status = 'ACTIVE'
                         AND sub.lessons_left > 0
                   )
