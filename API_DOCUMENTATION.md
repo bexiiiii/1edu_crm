@@ -70,7 +70,7 @@
 | Путь | Сервис |
 |------|--------|
 | `/api/v1/students/**` | student-service |
-| `/api/v1/courses/**`, `/api/v1/groups/**` | course-service |
+| `/api/v1/courses/**` | course-service |
 | `/api/v1/leads/**` | lead-service |
 | `/api/v1/payments/**`, `/api/v1/subscriptions/**`, `/api/v1/price-lists/**` | payment-service |
 | `/api/v1/schedules/**`, `/api/v1/rooms/**` | schedule-service |
@@ -86,6 +86,8 @@
 | `/api/v1/tenants/**`, `/api/v1/admin/**` | tenant-service |
 | `/api/v1/notifications/**` | notification-service |
 | `/api/v1/files/**` | file-service |
+
+> Gateway также маршрутизирует legacy aliases `/api/v1/groups/**` и `/api/v1/invoices/**`, но для фронта используйте только публичные пути, описанные ниже.
 
 ---
 
@@ -151,7 +153,7 @@ grant_type=password&client_id=1edu-web-app&username=<login>&password=<pass>
 
 ### Ответ API — `ApiResponse<T>`
 
-Все эндпоинты возвращают обёртку:
+Почти все эндпоинты возвращают обёртку:
 
 ```json
 {
@@ -173,6 +175,8 @@ grant_type=password&client_id=1edu-web-app&username=<login>&password=<pass>
   "timestamp": "2026-01-01T10:00:00Z"
 }
 ```
+
+> Исключение: `GET /api/v1/reports/generate` возвращает бинарный файл напрямую, без `ApiResponse`.
 
 ### Пагинированный ответ — `PageResponse<T>`
 
@@ -340,10 +344,6 @@ interface TenantDto {
   trialEndsAt: string;       // LocalDate ISO
   contactPerson: string;
   notes: string;
-  bannedAt: string | null;
-  bannedReason: string | null;
-  bannedUntil: string | null;
-  deletedAt: string | null;
   createdAt: string;         // Instant ISO
   updatedAt: string;
 }
@@ -351,7 +351,40 @@ interface TenantDto {
 
 ---
 
-### 5.1 CRUD тенантов (`/api/v1/tenants`)
+### TenantStatsDto
+
+```typescript
+interface TenantStatsDto {
+  id: string;
+  name: string;
+  subdomain: string;
+  email: string;
+  phone: string;
+  contactPerson: string | null;
+  status: TenantStatus;
+  plan: TenantPlan;
+  trialEndsAt: string | null;
+  createdAt: string;
+  maxStudents: number | null;
+  maxStaff: number | null;
+  studentsCount: number;
+  activeStudentsCount: number;
+  staffCount: number;
+  activeSubscriptionsCount: number;
+  lessonsThisMonth: number;
+  revenueThisMonth: number;
+  revenueTotal: number;
+  bannedAt: string | null;
+  bannedReason: string | null;
+  bannedUntil: string | null;
+  deletedAt: string | null;
+  schemaName: string | null;
+}
+```
+
+---
+
+### 6.1 CRUD тенантов (`/api/v1/tenants`)
 
 #### `POST /api/v1/tenants` — Создать тенант
 **Доступ:** `SUPER_ADMIN`
@@ -429,14 +462,44 @@ interface TenantDto {
 **Доступ:** `TENANT_ADMIN`
 
 **Query Params:**
-- `query` (string): поиск по имени / субдомену
+- `query` (string): поиск по имени / email
 - `page`, `size`
 
 **Response:** `ApiResponse<PageResponse<TenantDto>>`
 
 ---
 
-### 5.2 Admin управление (`/api/v1/admin`)
+### 6.2 Super Admin Dashboard (`/api/v1/admin/dashboard`)
+
+#### `GET /api/v1/admin/dashboard` — Глобальный dashboard платформы
+**Доступ:** `SUPER_ADMIN`
+
+**Response:**
+```typescript
+interface AdminDashboardResponse {
+  totalTenants: number;
+  trialTenants: number;
+  activeTenants: number;
+  suspendedTenants: number;
+  inactiveTenants: number;
+  basicPlanCount: number;
+  professionalPlanCount: number;
+  enterprisePlanCount: number;
+  totalStudentsAllTenants: number;
+  totalStaffAllTenants: number;
+  totalActiveSubscriptions: number;
+  totalLessonsThisMonth: number;
+  totalRevenueThisMonth: number;
+  totalRevenueAllTime: number;
+  topTenantsByRevenue: TenantStatsDto[];
+  newTenantsLast30Days: number;
+  expiringTrialTenants: TenantStatsDto[];
+}
+```
+
+---
+
+### 6.3 Admin управление (`/api/v1/admin`)
 
 #### `GET /api/v1/admin/tenants` — Список тенантов (с фильтром)
 **Доступ:** `SUPER_ADMIN`
@@ -445,27 +508,6 @@ interface TenantDto {
 - `status` (optional)
 
 **Response:** `ApiResponse<List<TenantStatsDto>>`
-
-```typescript
-interface TenantStatsDto {
-  id: string;
-  name: string;
-  subdomain: string;
-  email: string;
-  phone: string;
-  status: TenantStatus;
-  plan: TenantPlan;
-  studentsCount: number;
-  staffCount: number;
-  activeSubscriptions: number;
-  monthlyRevenue: number;
-  bannedAt: string | null;
-  bannedReason: string | null;
-  bannedUntil: string | null;
-  deletedAt: string | null;
-  createdAt: string;
-}
-```
 
 ---
 
@@ -566,7 +608,7 @@ interface TenantStatsDto {
 
 ---
 
-### 5.3 Super Admin Аналитика (`/api/v1/admin/analytics`)
+### 6.4 Super Admin Аналитика (`/api/v1/admin/analytics`)
 
 #### `GET /api/v1/admin/analytics/platform` — Platform KPIs
 **Доступ:** `SUPER_ADMIN`
@@ -608,7 +650,8 @@ interface PlatformKpiResponse {
 ```typescript
 interface RevenueTrendDto {
   month: string;       // "2026-01"
-  revenue: number;
+  totalRevenue: number;
+  tenantCount: number;
 }
 ```
 
@@ -628,6 +671,7 @@ interface TenantGrowthDto {
   newTenants: number;
   churnedTenants: number;
   netGrowth: number;
+  cumulativeTenants: number;
 }
 ```
 
@@ -641,11 +685,10 @@ interface TenantGrowthDto {
 interface ChurnAnalyticsResponse {
   churnRate30d: number;
   churnRate90d: number;
-  churnByPlan: {
-    plan: string;
-    churnRate: number;
-    churnedCount: number;
-  }[];
+  churnedLast30Days: number;
+  churnedLast90Days: number;
+  byPlan: Record<string, number>;
+  recentlyChurned: TenantStatsDto[];
 }
 ```
 
@@ -671,7 +714,7 @@ interface UserDto {
 
 ---
 
-### 6.1 Управление пользователями (`/api/v1/auth/users`)
+### 7.1 Управление пользователями (`/api/v1/auth/users`)
 
 #### `POST /api/v1/auth/users` — Создать пользователя (сотрудника)
 **Доступ:** `TENANT_ADMIN`
@@ -763,7 +806,7 @@ interface UserDto {
 
 ---
 
-### 6.2 Профиль текущего пользователя (`/api/v1/auth/profile`)
+### 7.2 Профиль текущего пользователя (`/api/v1/auth/profile`)
 
 #### `GET /api/v1/auth/profile` — Получить свой профиль
 **Доступ:** Любой аутентифицированный
@@ -805,7 +848,7 @@ interface UserDto {
 
 ---
 
-## 7. Student Service (8102)
+## 8. Student Service (8102)
 
 ### StudentDto
 
@@ -832,7 +875,7 @@ interface StudentDto {
 
 ---
 
-### 7.1 CRUD студентов (`/api/v1/students`)
+### 8.1 CRUD студентов (`/api/v1/students`)
 
 #### `POST /api/v1/students` — Создать студента
 **Доступ:** `TENANT_ADMIN` | `STUDENTS_CREATE`
@@ -922,6 +965,8 @@ interface StudentDto {
 **Path Params:**
 - `groupId` (UUID): ID группы (Schedule)
 
+**Query Params:** `page`, `size`
+
 **Response:** `ApiResponse<PageResponse<StudentDto>>`
 
 ---
@@ -956,7 +1001,7 @@ interface StudentStatsDto {
 
 ---
 
-## 8. Lead Service (8104)
+## 9. Lead Service (8104)
 
 ### LeadDto
 
@@ -980,7 +1025,7 @@ interface LeadDto {
 
 ---
 
-### 8.1 CRUD лидов (`/api/v1/leads`)
+### 9.1 CRUD лидов (`/api/v1/leads`)
 
 #### `POST /api/v1/leads` — Создать лид
 **Доступ:** `TENANT_ADMIN` | `LEADS_CREATE`
@@ -1066,7 +1111,7 @@ interface LeadDto {
 
 ---
 
-## 9. Course Service (8106)
+## 10. Course Service (8106)
 
 ### CourseDto
 
@@ -1090,7 +1135,7 @@ interface CourseDto {
 
 ---
 
-### 9.1 CRUD курсов (`/api/v1/courses`)
+### 10.1 CRUD курсов (`/api/v1/courses`)
 
 #### `POST /api/v1/courses` — Создать курс
 **Доступ:** `TENANT_ADMIN` | `GROUPS_CREATE`
@@ -1170,11 +1215,13 @@ interface CourseDto {
 #### `GET /api/v1/courses/teacher/{teacherId}` — Курсы преподавателя
 **Доступ:** `TENANT_ADMIN` | `GROUPS_VIEW`
 
+**Query Params:** `page`, `size`, `sort`
+
 **Response:** `ApiResponse<PageResponse<CourseDto>>`
 
 ---
 
-## 10. Schedule Service (8108)
+## 11. Schedule Service (8108)
 
 ### RoomDto
 
@@ -1214,7 +1261,7 @@ interface ScheduleDto {
 
 ---
 
-### 10.1 Аудитории (`/api/v1/rooms`)
+### 11.1 Аудитории (`/api/v1/rooms`)
 
 #### `POST /api/v1/rooms` — Создать аудиторию
 **Доступ:** `TENANT_ADMIN` | `MANAGER`
@@ -1234,7 +1281,7 @@ interface ScheduleDto {
 ---
 
 #### `GET /api/v1/rooms` — Список аудиторий
-**Доступ:** Все роли
+**Доступ:** `TENANT_ADMIN`, `MANAGER`, `RECEPTIONIST`, `TEACHER`
 
 **Query Params:**
 - `status` (optional): `ACTIVE | INACTIVE`
@@ -1245,7 +1292,7 @@ interface ScheduleDto {
 ---
 
 #### `GET /api/v1/rooms/{id}` — Получить аудиторию
-**Доступ:** Все роли
+**Доступ:** `TENANT_ADMIN`, `MANAGER`, `RECEPTIONIST`, `TEACHER`
 
 **Response:** `ApiResponse<RoomDto>`
 
@@ -1275,13 +1322,15 @@ interface ScheduleDto {
 ---
 
 #### `GET /api/v1/rooms/search` — Поиск аудиторий
+**Доступ:** `TENANT_ADMIN`, `MANAGER`, `RECEPTIONIST`, `TEACHER`
+
 **Query Params:** `query`, `page`, `size`
 
 **Response:** `ApiResponse<PageResponse<RoomDto>>`
 
 ---
 
-### 10.2 Расписание / Группы (`/api/v1/schedules`)
+### 11.2 Расписание / Группы (`/api/v1/schedules`)
 
 #### `POST /api/v1/schedules` — Создать группу/расписание
 **Доступ:** `TENANT_ADMIN` | `GROUPS_CREATE`
@@ -1353,18 +1402,22 @@ interface ScheduleDto {
 #### `GET /api/v1/schedules/room/{roomId}` — Расписание аудитории
 **Доступ:** `TENANT_ADMIN` | `GROUPS_VIEW`
 
+**Query Params:** `page`, `size`, `sort`
+
 **Response:** `ApiResponse<PageResponse<ScheduleDto>>`
 
 ---
 
 #### `GET /api/v1/schedules/search` — Поиск расписаний
+**Доступ:** `TENANT_ADMIN` | `GROUPS_VIEW`
+
 **Query Params:** `query`, `page`, `size`
 
 **Response:** `ApiResponse<PageResponse<ScheduleDto>>`
 
 ---
 
-## 11. Payment Service (8110)
+## 12. Payment Service (8110)
 
 ### SubscriptionDto
 
@@ -1373,6 +1426,8 @@ interface SubscriptionDto {
   id: string;
   studentId: string;
   courseId: string | null;
+  groupId: string | null;
+  serviceId: string | null;
   priceListId: string | null;
   totalLessons: number;
   lessonsLeft: number;
@@ -1405,7 +1460,7 @@ interface PriceListDto {
 
 ---
 
-### 11.1 Прайс-листы (`/api/v1/price-lists`)
+### 12.1 Прайс-листы (`/api/v1/price-lists`)
 
 #### `POST /api/v1/price-lists` — Создать прайс-лист
 **Доступ:** `TENANT_ADMIN` | `MANAGER`
@@ -1428,7 +1483,7 @@ interface PriceListDto {
 ---
 
 #### `GET /api/v1/price-lists` — Список прайс-листов
-**Доступ:** Все роли
+**Доступ:** `TENANT_ADMIN`, `MANAGER`, `RECEPTIONIST`, `TEACHER`
 
 **Query Params:**
 - `active` (boolean, optional)
@@ -1439,7 +1494,7 @@ interface PriceListDto {
 ---
 
 #### `GET /api/v1/price-lists/{id}` — Получить прайс-лист
-**Доступ:** Все роли
+**Доступ:** `TENANT_ADMIN`, `MANAGER`, `RECEPTIONIST`, `TEACHER`
 
 **Response:** `ApiResponse<PriceListDto>`
 
@@ -1460,13 +1515,15 @@ interface PriceListDto {
 ---
 
 #### `GET /api/v1/price-lists/course/{courseId}` — Прайс-листы курса
-**Доступ:** Все роли
+**Доступ:** `TENANT_ADMIN`, `MANAGER`, `RECEPTIONIST`, `TEACHER`
+
+**Query Params:** `page`, `size`, `sort`
 
 **Response:** `ApiResponse<PageResponse<PriceListDto>>`
 
 ---
 
-### 11.2 Абонементы (`/api/v1/subscriptions`)
+### 12.2 Абонементы (`/api/v1/subscriptions`)
 
 #### `POST /api/v1/subscriptions` — Создать абонемент
 **Доступ:** `TENANT_ADMIN` | `SUBSCRIPTIONS_CREATE`
@@ -1544,7 +1601,7 @@ interface PriceListDto {
 
 ---
 
-### 11.3 Платежи студентов (`/api/v1/payments/student-payments`)
+### 12.3 Платежи студентов (`/api/v1/payments/student-payments`)
 
 #### `POST /api/v1/payments/student-payments` — Записать платёж
 **Доступ:** `TENANT_ADMIN` | `FINANCE_CREATE`
@@ -1663,7 +1720,7 @@ interface StudentDebtDto {
 
 ---
 
-## 12. Finance Service (8112)
+## 13. Finance Service (8112)
 
 ### TransactionDto
 
@@ -1686,7 +1743,7 @@ interface TransactionDto {
 
 ---
 
-### 12.1 Транзакции (`/api/v1/finance/transactions`)
+### 13.1 Транзакции (`/api/v1/finance/transactions`)
 
 #### `POST /api/v1/finance/transactions` — Создать транзакцию
 **Доступ:** `TENANT_ADMIN` | `FINANCE_CREATE`
@@ -1756,24 +1813,26 @@ interface TransactionDto {
 #### `GET /api/v1/finance/transactions/student/{studentId}` — Транзакции студента
 **Доступ:** `TENANT_ADMIN` | `FINANCE_VIEW`
 
+**Query Params:** `page`, `size`, `sort`
+
 **Response:** `ApiResponse<PageResponse<TransactionDto>>`
 
 ---
 
-## 13. Analytics Service (8114)
+## 14. Analytics Service (8114)
 
 Все эндпоинты аналитики доступны для `TENANT_ADMIN` и `MANAGER`.
 
 ---
 
-### 13.1 Главный дашборд
+### 14.1 Главный дашборд
 
 #### `GET /api/v1/analytics/dashboard` — Дашборд руководителя
 
 **Query Params:**
 - `from`: `YYYY-MM-DD`
 - `to`: `YYYY-MM-DD`
-- `lessonType` (optional): `GROUP | INDIVIDUAL | TRIAL`
+- `lessonType` (optional): `ALL | GROUP | INDIVIDUAL | TRIAL`
 
 **Response:**
 ```typescript
@@ -1830,8 +1889,11 @@ interface DashboardResponse {
   topEmployee: {
     staffId: string;
     fullName: string;
+    index: number;
     revenue: number;
-    studentsCount: number;
+    revenueDeltaPct: number;
+    groupLoadRate: number;
+    activeStudents: number;
   };
 
   // Помесячная посещаемость
@@ -1840,14 +1902,14 @@ interface DashboardResponse {
   currentMonthAttendanceDelta: number;
 
   // Списки студентов
-  joinedStudents: { studentId: string; fullName: string; joinedAt: string }[];
-  leftStudents: { studentId: string; fullName: string; leftAt: string }[];
+  joinedStudents: { studentId: string; fullName: string }[];
+  leftStudents: { studentId: string; fullName: string }[];
 }
 ```
 
 ---
 
-### 13.2 Сводка за сегодня
+### 14.2 Сводка за сегодня
 
 #### `GET /api/v1/analytics/today` — Сводка за дату
 
@@ -1908,7 +1970,7 @@ interface ExpiredSubscriptionDto {
 
 ---
 
-### 13.3 Финансовый отчёт
+### 14.3 Финансовый отчёт
 
 #### `GET /api/v1/analytics/finance-report`
 
@@ -1925,22 +1987,29 @@ interface FinanceReportResponse {
   expensesDeltaPct: number;
   profit: number;
   profitDeltaPct: number;
-  monthly: { month: string; revenue: number; expenses: number; profit: number }[];
+  monthly: { month: string; label: string; revenue: number; expenses: number; profit: number }[];
   revenueByCategory: { category: string; amount: number }[];
-  revenueBySource: { source: string; amount: number }[];
+  revenueBySource: { category: string; amount: number }[];
   revenueByGroup: { groupId: string; groupName: string; revenue: number }[];
   expensesByCategory: { category: string; amount: number }[];
   reconciliation: {
-    subscriptionRevenue: number;
-    transactionRevenue: number;
-    difference: number;
+    totalSubscriptionAmount: number;
+    revenueFromSubscriptions: number;
+    paidBeforePeriod: number;
+    debtFromSubscriptions: number;
+    coverageRate: number;
+    paidAfterPeriod: number;
+    paidBeforePeriodPayments: number;
+    revenueNotFromSubscriptions: number;
+    studentsWithoutPayments: number;
+    subscriptionsWithoutPayments: number;
   };
 }
 ```
 
 ---
 
-### 13.4 Отчёт по абонементам
+### 14.4 Отчёт по абонементам
 
 #### `GET /api/v1/analytics/subscriptions`
 
@@ -1975,7 +2044,7 @@ interface SubscriptionReportResponse {
 
 ---
 
-### 13.5 Воронка продаж
+### 14.5 Воронка продаж
 
 #### `GET /api/v1/analytics/funnel`
 
@@ -2007,7 +2076,7 @@ interface SalesFunnelResponse {
 
 ---
 
-### 13.6 Конверсия лидов
+### 14.6 Конверсия лидов
 
 #### `GET /api/v1/analytics/lead-conversions`
 
@@ -2016,9 +2085,18 @@ interface SalesFunnelResponse {
 **Response:**
 ```typescript
 interface LeadConversionResponse {
-  stageConversions: { from: string; to: string; count: number; rate: number }[];
-  bySource: { source: string; total: number; converted: number; rate: number }[];
-  byManager: { managerId: string; managerName: string; total: number; converted: number; rate: number }[];
+  stageConversions: { stageFrom: string; stageTo: string; entries: number; strictConversionPct: number }[];
+  bySource: { source: string; leads: number; contracts: number; conversionPct: number }[];
+  byManager: {
+    manager: string;
+    leads: number;
+    contracts: number;
+    conversionPct: number;
+    frtP50Days: number;
+    frtP75Days: number;
+    frtP90Days: number;
+  }[];
+  stageSummary: { stage: string; count: number; pct: number }[];
   avgDaysToContract: number;
   medianDaysP50: number;
   medianDaysP75: number;
@@ -2038,7 +2116,7 @@ interface LeadConversionResponse {
 
 ---
 
-### 13.7 Эффективность менеджеров
+### 14.7 Эффективность менеджеров
 
 #### `GET /api/v1/analytics/managers`
 
@@ -2061,7 +2139,7 @@ interface ManagerEfficiencyResponse {
 
 ---
 
-### 13.8 Аналитика преподавателей
+### 14.8 Аналитика преподавателей
 
 #### `GET /api/v1/analytics/teachers`
 
@@ -2070,7 +2148,15 @@ interface ManagerEfficiencyResponse {
 **Response:**
 ```typescript
 interface TeacherAnalyticsResponse {
-  topEmployee: { staffId: string; fullName: string; revenue: number; studentsCount: number };
+  topEmployee: {
+    staffId: string;
+    fullName: string;
+    index: number;
+    revenue: number;
+    revenueDeltaPct: number;
+    groupLoadRate: number;
+    activeStudents: number;
+  };
   rows: {
     staffId: string;
     fullName: string;
@@ -2081,6 +2167,7 @@ interface TeacherAnalyticsResponse {
     revenueDeltaPct: number;
     totalStudents: number;
     avgTenureMonths: number;
+    totalTenureMonths: number;
     groupLoadRate: number;
     index: number;    // рейтинг
   }[];
@@ -2089,14 +2176,14 @@ interface TeacherAnalyticsResponse {
 
 ---
 
-### 13.9 Когортный анализ удержания
+### 14.9 Когортный анализ удержания
 
 #### `GET /api/v1/analytics/retention`
 
 **Query Params:**
 - `from`: `YYYY-MM-DD`
 - `to`: `YYYY-MM-DD`
-- `cohortType` (optional): `MONTHLY | WEEKLY`
+- `cohortType` (optional): `FIRST_PAYMENT | FIRST_VISIT`
 
 **Response:**
 ```typescript
@@ -2117,7 +2204,7 @@ interface RetentionResponse {
 
 ---
 
-### 13.10 Загрузка групп
+### 14.10 Загрузка групп
 
 #### `GET /api/v1/analytics/group-load`
 
@@ -2138,7 +2225,7 @@ interface GroupLoadResponse {
 
 ---
 
-### 13.11 Загрузка аудиторий
+### 14.11 Загрузка аудиторий
 
 #### `GET /api/v1/analytics/room-load`
 
@@ -2169,7 +2256,7 @@ interface RoomLoadResponse {
 
 ---
 
-### 13.12 Посещаемость группы
+### 14.12 Посещаемость группы
 
 #### `GET /api/v1/analytics/group-attendance/{groupId}`
 
@@ -2191,7 +2278,7 @@ interface GroupAttendanceResponse {
 
 ---
 
-## 14. Notification Service (8116)
+## 15. Notification Service (8116)
 
 ### NotificationDto
 
@@ -2214,7 +2301,7 @@ interface NotificationDto {
 
 ---
 
-### 14.1 Уведомления (`/api/v1/notifications`)
+### 15.1 Уведомления (`/api/v1/notifications`)
 
 #### `GET /api/v1/notifications` — Список уведомлений
 **Доступ:** `TENANT_ADMIN`, `MANAGER`
@@ -2235,7 +2322,7 @@ interface NotificationDto {
 
 ---
 
-## 15. File Service (8118)
+## 16. File Service (8118)
 
 ### FileUploadResponse
 
@@ -2253,7 +2340,7 @@ interface FileUploadResponse {
 
 ---
 
-### 15.1 Файлы (`/api/v1/files`)
+### 16.1 Файлы (`/api/v1/files`)
 
 #### `POST /api/v1/files/upload` — Загрузить файл
 **Доступ:** Любой аутентифицированный
@@ -2288,30 +2375,30 @@ folder: "avatars"    // необязательно: avatars | documents | report
 
 ---
 
-## 16. Report Service (8120)
+## 17. Report Service (8120)
 
-### 16.1 Генерация отчётов (`/api/v1/reports`)
+### 17.1 Генерация отчётов (`/api/v1/reports`)
 
 #### `GET /api/v1/reports/generate` — Сгенерировать отчёт
 **Доступ:** `TENANT_ADMIN`, `MANAGER`
 
 **Query Params:**
-- `type`: тип отчёта — `FINANCE | ATTENDANCE | SUBSCRIPTIONS | STAFF | STUDENTS`
-- `format`: `PDF | XLSX`
+- `type`: тип отчёта — `DASHBOARD | FINANCE | STUDENTS | ATTENDANCE | SUBSCRIPTIONS | TEACHERS`
+- `format`: `PDF | EXCEL`
 - `from` (optional): `YYYY-MM-DD`
 - `to` (optional): `YYYY-MM-DD`
 
 **Response:** Бинарный файл с заголовком:
 ```http
 Content-Type: application/pdf  (или application/vnd.openxmlformats-officedocument.spreadsheetml.sheet)
-Content-Disposition: attachment; filename="report_2026-02.pdf"
+Content-Disposition: attachment; filename="report.pdf"  (или "report.xlsx")
 ```
 
 > Используйте `blob` режим в axios для скачивания файла.
 
 ---
 
-## 17. Staff Service (8122)
+## 18. Staff Service (8122)
 
 ### StaffDto
 
@@ -2337,7 +2424,7 @@ interface StaffDto {
 
 ---
 
-### 17.1 CRUD сотрудников (`/api/v1/staff`)
+### 18.1 CRUD сотрудников (`/api/v1/staff`)
 
 #### `POST /api/v1/staff` — Создать сотрудника
 **Доступ:** `TENANT_ADMIN` | `STAFF_CREATE`
@@ -2410,7 +2497,7 @@ interface StaffDto {
 
 ---
 
-## 18. Task Service (8124)
+## 19. Task Service (8124)
 
 ### TaskDto
 
@@ -2431,7 +2518,7 @@ interface TaskDto {
 
 ---
 
-### 18.1 CRUD задач (`/api/v1/tasks`)
+### 19.1 CRUD задач (`/api/v1/tasks`)
 
 #### `POST /api/v1/tasks` — Создать задачу
 **Доступ:** `TENANT_ADMIN` | `TASKS_CREATE`
@@ -2498,18 +2585,22 @@ interface TaskDto {
 #### `GET /api/v1/tasks/overdue` — Просроченные задачи
 **Доступ:** `TENANT_ADMIN` | `TASKS_VIEW`
 
+**Query Params:** `page`, `size`, `sort`
+
 **Response:** `ApiResponse<PageResponse<TaskDto>>`
 
 ---
 
 #### `GET /api/v1/tasks/search` — Поиск задач
+**Доступ:** `TENANT_ADMIN` | `TASKS_VIEW`
+
 **Query Params:** `query`, `page`, `size`
 
 **Response:** `ApiResponse<PageResponse<TaskDto>>`
 
 ---
 
-## 19. Lesson Service (8126)
+## 20. Lesson Service (8126)
 
 ### LessonDto
 
@@ -2551,7 +2642,7 @@ interface AttendanceDto {
 
 ---
 
-### 19.1 Занятия (`/api/v1/lessons`)
+### 20.1 Занятия (`/api/v1/lessons`)
 
 #### `POST /api/v1/lessons` — Создать занятие
 **Доступ:** `TENANT_ADMIN` | `LESSONS_CREATE`
@@ -2697,7 +2788,7 @@ interface AttendanceDto {
 
 ---
 
-### 19.2 Посещаемость (`/api/v1/lessons/{lessonId}/attendance`)
+### 20.2 Посещаемость (`/api/v1/lessons/{lessonId}/attendance`)
 
 > Для конкретного урока используй вложенные routes `/api/v1/lessons/{lessonId}/attendance/...`.
 > Отдельный route `/api/v1/attendance/student/{studentId}` существует только для истории посещений студента.
@@ -2769,7 +2860,7 @@ interface AttendanceDto {
 
 ---
 
-## 20. Settings Service (8128)
+## 21. Settings Service (8128)
 
 ### SettingsDto
 
@@ -2834,10 +2925,10 @@ interface SettingsDto {
 
 ---
 
-### 20.1 Основные настройки (`/api/v1/settings`)
+### 21.1 Основные настройки (`/api/v1/settings`)
 
 #### `GET /api/v1/settings` — Получить настройки тенанта
-**Доступ:** Все роли
+**Доступ:** `TENANT_ADMIN`, `MANAGER`, `RECEPTIONIST`, `TEACHER`
 
 **Response:** `ApiResponse<SettingsDto>`
 
@@ -2865,7 +2956,7 @@ interface SettingsDto {
 
 ---
 
-### 20.2 Настройка ролей (`/api/v1/settings/roles`)
+### 21.2 Настройка ролей (`/api/v1/settings/roles`)
 
 #### `GET /api/v1/settings/roles/permissions` — Все доступные permission-коды
 **Доступ:** `TENANT_ADMIN`
@@ -2887,6 +2978,13 @@ interface RoleConfigDto {
   permissions: string[];
 }
 ```
+
+---
+
+#### `GET /api/v1/settings/roles/{id}` — Получить конфигурацию роли
+**Доступ:** `TENANT_ADMIN`
+
+**Response:** `ApiResponse<RoleConfigDto>`
 
 ---
 
@@ -2920,7 +3018,7 @@ interface RoleConfigDto {
 
 ---
 
-### 20.3 Источники оплаты (`/api/v1/settings/payment-sources`)
+### 21.3 Источники оплаты (`/api/v1/settings/payment-sources`)
 
 #### `GET /api/v1/settings/payment-sources` — Список источников
 **Доступ:** `TENANT_ADMIN`, `MANAGER`, `RECEPTIONIST`
@@ -2968,10 +3066,10 @@ interface PaymentSourceDto {
 
 ---
 
-### 20.4 Настройка статусов посещаемости (`/api/v1/settings/attendance-statuses`)
+### 21.4 Настройка статусов посещаемости (`/api/v1/settings/attendance-statuses`)
 
 #### `GET /api/v1/settings/attendance-statuses` — Список статусов
-**Доступ:** Все роли
+**Доступ:** `TENANT_ADMIN`, `MANAGER`, `RECEPTIONIST`, `TEACHER`
 
 **Response:** `ApiResponse<List<AttendanceStatusConfigDto>>`
 
@@ -3023,9 +3121,9 @@ interface AttendanceStatusConfigDto {
 
 ---
 
-## 21. Audit Service (8130)
+## 22. Audit Service (8130)
 
-### 21.1 Аудит-лог (`/api/v1/audit`)
+### 22.1 Аудит-лог (`/api/v1/audit`)
 
 #### `GET /api/v1/audit/system` — Системный лог
 **Доступ:** `SUPER_ADMIN`
@@ -3082,7 +3180,7 @@ interface TenantAuditLog {
 
 ---
 
-## 22. Справочник Enum-ов
+## 23. Справочник Enum-ов
 
 ```typescript
 // Студент
