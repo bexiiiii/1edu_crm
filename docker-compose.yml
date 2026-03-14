@@ -369,6 +369,8 @@ services:
       GRPC_SERVER_PORT: "9102"
       GRPC_CLIENT_COURSE_SERVICE_ADDRESS: discovery:///course-service
       GRPC_CLIENT_PAYMENT_SERVICE_ADDRESS: discovery:///payment-service
+      SPRING_CLOUD_CONFIG_ENABLED: "false"
+      SPRING_CLOUD_CONFIG_IMPORT_CHECK_ENABLED: "false"
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://localhost:8102/actuator/health | grep -q UP"]
       <<: *healthcheck-spring
@@ -388,6 +390,8 @@ services:
       <<: *spring-env
       SERVER_PORT: "8104"
       GRPC_SERVER_PORT: "9104"
+      SPRING_CLOUD_CONFIG_ENABLED: "false"
+      SPRING_CLOUD_CONFIG_IMPORT_CHECK_ENABLED: "false"
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://localhost:8104/actuator/health | grep -q UP"]
       <<: *healthcheck-spring
@@ -501,6 +505,8 @@ services:
       <<: *spring-env
       SERVER_PORT: "8116"
       GRPC_SERVER_PORT: "-1"
+      SPRING_CLOUD_CONFIG_ENABLED: "false"
+      SPRING_CLOUD_CONFIG_IMPORT_CHECK_ENABLED: "false"
     depends_on:
       rabbitmq:
         condition: service_healthy
