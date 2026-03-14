@@ -3,6 +3,7 @@ package com.ondeedu.student.entity;
 import com.ondeedu.common.dto.BaseEntity;
 import jakarta.persistence.*;
 import lombok.*;
+import org.hibernate.annotations.ColumnTransformer;
 
 import java.time.LocalDate;
 
@@ -87,6 +88,7 @@ public class Student extends BaseEntity {
     private String comment;
 
     @Column(name = "metadata", columnDefinition = "jsonb")
+    @ColumnTransformer(write = "?::jsonb")
     private String metadata;
 
     public String getFullName() {

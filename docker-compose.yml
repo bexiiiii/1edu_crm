@@ -8,8 +8,6 @@
 #   docker-compose down -v            # stop + wipe volumes
 # ============================================================
 
-name: 1edu
-
 # ─── Reusable anchors ────────────────────────────────────────
 x-service-defaults: &service-defaults
   build:
@@ -713,4 +711,5 @@ volumes:
 # ─── Network ─────────────────────────────────────────────────
 networks:
   1edu-network:
-    driver: bridge
+    external: true
+    name: 1edu_1edu-network
