@@ -14,9 +14,7 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Ensures Keycloak has the required client settings and protocol mappers for JWT claims.
- * - permissions mapper for ondeedu-app client
- * - tenant_id mapper for 1edu-web-app client (frontend)
+ * Ensures the frontend Keycloak client has the required login settings and JWT mappers.
  */
 @Slf4j
 @Service
@@ -24,26 +22,29 @@ public class KeycloakSetupService {
 
     private final Keycloak keycloak;
     private final String realm;
+    private final String frontendClientId;
 
     public KeycloakSetupService(Keycloak keycloak,
-                                @Value("${keycloak.realm}") String realm) {
+                                @Value("${keycloak.realm}") String realm,
+                                @Value("${keycloak.frontend-client-id:1edu-web-app}") String frontendClientId) {
         this.keycloak = keycloak;
         this.realm = realm;
+        this.frontendClientId = frontendClientId;
     }
 
     @EventListener(ApplicationReadyEvent.class)
     public void ensureMappers() {
         ensureFrontendClientSettings();
-        ensureMapper("ondeedu-app", "permissions-mapper", "permissions", "permissions", true);
-        ensureMapper("1edu-web-app", "tenant_id-mapper", "tenant_id", "tenant_id", false);
-        ensureMapper("ondeedu-app", "tenant_id-mapper", "tenant_id", "tenant_id", false);
+        ensureUserAttributeMapper("tenant_id-mapper", "tenant_id", "tenant_id", false);
+        ensureUserAttributeMapper("permissions-mapper", "permissions", "permissions", true);
+        ensureRealmAccessRolesMapper();
     }
 
     private void ensureFrontendClientSettings() {
         try {
-            ClientRepresentation client = findClient("1edu-web-app");
+            ClientRepresentation client = findClient(frontendClientId);
             if (client == null) {
-                log.warn("Keycloak client '1edu-web-app' not found - skipping client setup");
+                log.warn("Keycloak client '{}' not found - skipping client setup", frontendClientId);
                 return;
             }
 
@@ -65,23 +66,23 @@ public class KeycloakSetupService {
             }
 
             if (!changed) {
-                log.info("Keycloak client '1edu-web-app' already has required login settings");
+                log.info("Keycloak client '{}' already has required login settings", frontendClientId);
                 return;
             }
 
             keycloak.realm(realm).clients().get(client.getId()).update(client);
-            log.info("Updated Keycloak client '1edu-web-app' login settings");
+            log.info("Updated Keycloak client '{}' login settings", frontendClientId);
         } catch (Exception e) {
-            log.warn("Could not set up frontend client '1edu-web-app': {}", e.getMessage());
+            log.warn("Could not set up frontend client '{}': {}", frontendClientId, e.getMessage());
         }
     }
 
-    private void ensureMapper(String clientId, String mapperName, String userAttribute,
-                               String claimName, boolean multivalued) {
+    private void ensureUserAttributeMapper(String mapperName, String userAttribute,
+                                           String claimName, boolean multivalued) {
         try {
-            ClientRepresentation client = findClient(clientId);
+            ClientRepresentation client = findClient(frontendClientId);
             if (client == null) {
-                log.warn("Keycloak client '{}' not found — skipping mapper '{}'", clientId, mapperName);
+                log.warn("Keycloak client '{}' not found - skipping mapper '{}'", frontendClientId, mapperName);
                 return;
             }
 
@@ -95,7 +96,7 @@ public class KeycloakSetupService {
                     .anyMatch(m -> mapperName.equals(m.getName()));
 
             if (alreadyExists) {
-                log.info("Keycloak mapper '{}' already exists for client '{}'", mapperName, clientId);
+                log.info("Keycloak mapper '{}' already exists for client '{}'", mapperName, frontendClientId);
                 return;
             }
 
@@ -118,14 +119,63 @@ public class KeycloakSetupService {
             try (var response = keycloak.realm(realm).clients().get(clientUuid)
                     .getProtocolMappers().createMapper(mapper)) {
                 if (response.getStatus() == 201) {
-                    log.info("Created Keycloak mapper '{}' for client '{}'", mapperName, clientId);
+                    log.info("Created Keycloak mapper '{}' for client '{}'", mapperName, frontendClientId);
                 } else {
                     log.warn("Failed to create mapper '{}' for client '{}', status: {}",
-                            mapperName, clientId, response.getStatus());
+                            mapperName, frontendClientId, response.getStatus());
                 }
             }
         } catch (Exception e) {
-            log.warn("Could not set up mapper '{}' for client '{}': {}", mapperName, clientId, e.getMessage());
+            log.warn("Could not set up mapper '{}' for client '{}': {}", mapperName, frontendClientId, e.getMessage());
+        }
+    }
+
+    private void ensureRealmAccessRolesMapper() {
+        try {
+            ClientRepresentation client = findClient(frontendClientId);
+            if (client == null) {
+                log.warn("Keycloak client '{}' not found - skipping mapper 'realm-access-roles'", frontendClientId);
+                return;
+            }
+
+            String clientUuid = client.getId();
+            List<ProtocolMapperRepresentation> existing = keycloak.realm(realm)
+                    .clients().get(clientUuid)
+                    .getProtocolMappers().getMappersPerProtocol("openid-connect");
+
+            boolean alreadyExists = existing != null && existing.stream()
+                    .anyMatch(m -> "realm-access-roles".equals(m.getName()));
+
+            if (alreadyExists) {
+                log.info("Keycloak mapper 'realm-access-roles' already exists for client '{}'", frontendClientId);
+                return;
+            }
+
+            ProtocolMapperRepresentation mapper = new ProtocolMapperRepresentation();
+            mapper.setName("realm-access-roles");
+            mapper.setProtocol("openid-connect");
+            mapper.setProtocolMapper("oidc-usermodel-realm-role-mapper");
+
+            Map<String, String> config = new HashMap<>();
+            config.put("claim.name", "realm_access.roles");
+            config.put("jsonType.label", "String");
+            config.put("multivalued", "true");
+            config.put("id.token.claim", "true");
+            config.put("access.token.claim", "true");
+            config.put("userinfo.token.claim", "true");
+            mapper.setConfig(config);
+
+            try (var response = keycloak.realm(realm).clients().get(clientUuid)
+                    .getProtocolMappers().createMapper(mapper)) {
+                if (response.getStatus() == 201) {
+                    log.info("Created Keycloak mapper 'realm-access-roles' for client '{}'", frontendClientId);
+                } else {
+                    log.warn("Failed to create mapper 'realm-access-roles' for client '{}', status: {}",
+                            frontendClientId, response.getStatus());
+                }
+            }
+        } catch (Exception e) {
+            log.warn("Could not set up mapper 'realm-access-roles' for client '{}': {}", frontendClientId, e.getMessage());
         }
     }
 

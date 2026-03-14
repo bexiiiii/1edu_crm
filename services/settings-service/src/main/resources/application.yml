@@ -43,7 +43,7 @@ spring:
     oauth2:
       resourceserver:
         jwt:
-          issuer-uri: http://localhost:8080/realms/ondeedu
+          issuer-uri: http://localhost:8080/auth/realms/ondeedu
 
 eureka:
   client:

@@ -15,13 +15,14 @@ spring:
     oauth2:
       resourceserver:
         jwt:
-          issuer-uri: http://localhost:8080/realms/ondeedu
+          issuer-uri: http://localhost:8080/auth/realms/ondeedu
 
 keycloak:
-  server-url: http://localhost:8080
+  server-url: http://localhost:8080/auth
   realm: ondeedu
   client-id: crm-admin
   client-secret: ${KEYCLOAK_CLIENT_SECRET:change-me}
+  frontend-client-id: ${KEYCLOAK_FRONTEND_CLIENT_ID:1edu-web-app}
 
 eureka:
   client:

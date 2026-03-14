@@ -130,9 +130,7 @@ grant_type=password&client_id=1edu-web-app&username=<login>&password=<pass>
 
 ```json
 {
-  "sub": "user-uuid",
   "tenant_id": "tenant-uuid",
-  "roles": ["TENANT_ADMIN"],
   "permissions": ["STUDENTS_VIEW", "LESSONS_CREATE"],
   "realm_access": {
     "roles": ["TENANT_ADMIN", "offline_access", "uma_authorization"]
@@ -141,9 +139,8 @@ grant_type=password&client_id=1edu-web-app&username=<login>&password=<pass>
 ```
 
 > `tenant_id` — UUID тенанта, передаётся в заголовке `X-Tenant-ID` при запросах.
-> `roles` — роль пользователя (через `realm-roles` mapper в `1edu-web-app-dedicated` scope).
-> `permissions` — гранулярные права (через `permissions-mapper`).
-> `realm_access.roles` — также содержит роли, доступен для обратной совместимости.
+> `permissions` — гранулярные права (через `permissions-mapper` клиента `1edu-web-app`).
+> `realm_access.roles` — роли пользователя; именно их backend использует в `@PreAuthorize("hasRole(...)")`.
 
 ---
 
@@ -3133,7 +3130,7 @@ VITE_KEYCLOAK_CLIENT_ID=1edu-web-app
 **.env.local (если хочешь переключиться на локальный бекенд):**
 ```env
 VITE_API_BASE_URL=http://localhost:8090
-VITE_KEYCLOAK_URL=http://localhost:8080
+VITE_KEYCLOAK_URL=http://localhost:8080/auth
 VITE_KEYCLOAK_REALM=ondeedu
 VITE_KEYCLOAK_CLIENT_ID=1edu-web-app
 ```

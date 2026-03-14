@@ -31,14 +31,17 @@ public class KeycloakUserService {
 
     private final Keycloak keycloak;
     private final String realm;
+    private final String frontendClientId;
 
     @Value("${keycloak.server-url}")
     private String serverUrl;
 
     public KeycloakUserService(Keycloak keycloak,
-                               @Value("${keycloak.realm}") String realm) {
+                               @Value("${keycloak.realm}") String realm,
+                               @Value("${keycloak.frontend-client-id:1edu-web-app}") String frontendClientId) {
         this.keycloak = keycloak;
         this.realm = realm;
+        this.frontendClientId = frontendClientId;
     }
 
     public UserDto createUser(CreateUserRequest request) {
@@ -259,7 +262,7 @@ public class KeycloakUserService {
             throw new BusinessException("PASSWORD_MISMATCH", "New password and confirmation do not match");
         }
 
-        // Verify current password via direct grant
+        // Verify the current password against the same frontend client used for login.
         UserRepresentation userRep;
         try {
             userRep = keycloak.realm(realm).users().get(userId).toRepresentation();
@@ -271,7 +274,7 @@ public class KeycloakUserService {
                 .serverUrl(serverUrl)
                 .realm(realm)
                 .grantType("password")
-                .clientId("ondeedu-app")
+                .clientId(frontendClientId)
                 .username(userRep.getUsername())
                 .password(request.getCurrentPassword())
                 .build()) {
@@ -292,7 +295,7 @@ public class KeycloakUserService {
     /**
      * Assign a list of permission codes to a user.
      * Permissions are stored in Keycloak user attributes and included in JWT
-     * via the "permissions-mapper" protocol mapper set up by KeycloakSetupService.
+     * via the frontend client's "permissions-mapper" protocol mapper.
      */
     public UserDto assignPermissions(String userId, List<String> permissions) {
         storePermissionsAttribute(userId, permissions);
