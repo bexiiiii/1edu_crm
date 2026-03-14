@@ -1,19 +1,12 @@
 package com.ondeedu.common.tenant;
 
-import org.hibernate.cfg.AvailableSettings;
 import org.hibernate.engine.jdbc.connections.spi.MultiTenantConnectionProvider;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
-import org.springframework.boot.autoconfigure.orm.jpa.HibernatePropertiesCustomizer;
-import org.springframework.stereotype.Component;
 
 import javax.sql.DataSource;
 import java.sql.Connection;
 import java.sql.SQLException;
-import java.util.Map;
 
-@Component
-@ConditionalOnBean(DataSource.class)
-public class TenantSchemaConnectionProvider implements MultiTenantConnectionProvider<String>, HibernatePropertiesCustomizer {
+public class TenantSchemaConnectionProvider implements MultiTenantConnectionProvider<String> {
 
     private final DataSource dataSource;
 
@@ -23,7 +16,9 @@ public class TenantSchemaConnectionProvider implements MultiTenantConnectionProv
 
     @Override
     public Connection getAnyConnection() throws SQLException {
-        return dataSource.getConnection();
+        Connection connection = dataSource.getConnection();
+        connection.setSchema(TenantSchemaResolver.defaultSchema());
+        return connection;
     }
 
     @Override
@@ -34,13 +29,13 @@ public class TenantSchemaConnectionProvider implements MultiTenantConnectionProv
     @Override
     public Connection getConnection(String tenantIdentifier) throws SQLException {
         Connection connection = getAnyConnection();
-        connection.setSchema(tenantIdentifier);
+        connection.setSchema(tenantIdentifier != null ? tenantIdentifier : TenantSchemaResolver.defaultSchema());
         return connection;
     }
 
     @Override
     public void releaseConnection(String tenantIdentifier, Connection connection) throws SQLException {
-        connection.setSchema("public");
+        connection.setSchema(TenantSchemaResolver.defaultSchema());
         releaseAnyConnection(connection);
     }
 
@@ -57,10 +52,5 @@ public class TenantSchemaConnectionProvider implements MultiTenantConnectionProv
     @Override
     public <T> T unwrap(Class<T> unwrapType) {
         throw new UnsupportedOperationException("Cannot unwrap to " + unwrapType);
-    }
-
-    @Override
-    public void customize(Map<String, Object> hibernateProperties) {
-        hibernateProperties.put(AvailableSettings.MULTI_TENANT_CONNECTION_PROVIDER, this);
     }
 }
