@@ -17,7 +17,9 @@ import org.keycloak.representations.idm.CredentialRepresentation;
 import org.keycloak.representations.idm.RoleRepresentation;
 import org.keycloak.representations.idm.UserRepresentation;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.stereotype.Service;
+import org.springframework.util.StringUtils;
 
 import java.util.Collections;
 import java.util.HashMap;
@@ -216,6 +218,36 @@ public class KeycloakUserService {
         }
     }
 
+    public String resolveCurrentUserId(Jwt jwt) {
+        if (jwt == null) {
+            throw new BusinessException("USER_ID_MISSING",
+                    "Current access token is missing. Please sign in again.");
+        }
+
+        if (StringUtils.hasText(jwt.getSubject())) {
+            return jwt.getSubject();
+        }
+
+        String preferredUsername = jwt.getClaimAsString("preferred_username");
+        if (StringUtils.hasText(preferredUsername)) {
+            String userId = findUserIdByUsername(preferredUsername);
+            if (userId != null) {
+                return userId;
+            }
+        }
+
+        String email = jwt.getClaimAsString("email");
+        if (StringUtils.hasText(email)) {
+            String userId = findUserIdByEmail(email);
+            if (userId != null) {
+                return userId;
+            }
+        }
+
+        throw new BusinessException("USER_ID_MISSING",
+                "Current access token does not contain a usable user identifier. Please sign in again.");
+    }
+
     public UserDto getProfile(String userId) {
         return getUser(userId);
     }
@@ -346,6 +378,30 @@ public class KeycloakUserService {
             }
         } catch (Exception e) {
             log.warn("Could not remove existing roles for user '{}': {}", userId, e.getMessage());
+        }
+    }
+
+    private String findUserIdByUsername(String username) {
+        try {
+            return keycloak.realm(realm).users().searchByUsername(username, true).stream()
+                    .findFirst()
+                    .map(UserRepresentation::getId)
+                    .orElse(null);
+        } catch (Exception e) {
+            log.warn("Could not resolve Keycloak user by username '{}': {}", username, e.getMessage());
+            return null;
+        }
+    }
+
+    private String findUserIdByEmail(String email) {
+        try {
+            return keycloak.realm(realm).users().searchByEmail(email, true).stream()
+                    .findFirst()
+                    .map(UserRepresentation::getId)
+                    .orElse(null);
+        } catch (Exception e) {
+            log.warn("Could not resolve Keycloak user by email '{}': {}", email, e.getMessage());
+            return null;
         }
     }
 

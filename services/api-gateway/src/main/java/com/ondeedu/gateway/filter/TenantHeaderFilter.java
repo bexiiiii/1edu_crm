@@ -8,6 +8,7 @@ import org.springframework.http.server.reactive.ServerHttpRequest;
 import org.springframework.security.core.context.ReactiveSecurityContextHolder;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.stereotype.Component;
+import org.springframework.util.StringUtils;
 import org.springframework.web.server.ServerWebExchange;
 import reactor.core.publisher.Mono;
 
@@ -27,7 +28,7 @@ public class TenantHeaderFilter implements GlobalFilter, Ordered {
                     securityContext.getAuthentication().getPrincipal() instanceof Jwt jwt) {
 
                     String tenantId = jwt.getClaimAsString(TENANT_CLAIM);
-                    String userId = jwt.getSubject();
+                    String userId = resolveUserId(jwt);
 
                     ServerHttpRequest.Builder requestBuilder = exchange.getRequest().mutate();
 
@@ -50,5 +51,19 @@ public class TenantHeaderFilter implements GlobalFilter, Ordered {
     @Override
     public int getOrder() {
         return -100;
+    }
+
+    private String resolveUserId(Jwt jwt) {
+        if (StringUtils.hasText(jwt.getSubject())) {
+            return jwt.getSubject();
+        }
+
+        String preferredUsername = jwt.getClaimAsString("preferred_username");
+        if (StringUtils.hasText(preferredUsername)) {
+            return preferredUsername;
+        }
+
+        String email = jwt.getClaimAsString("email");
+        return StringUtils.hasText(email) ? email : null;
     }
 }

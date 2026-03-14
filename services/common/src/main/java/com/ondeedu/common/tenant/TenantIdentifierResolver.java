@@ -13,12 +13,10 @@ import java.util.Map;
 @ConditionalOnBean(DataSource.class)
 public class TenantIdentifierResolver implements CurrentTenantIdentifierResolver<String>, HibernatePropertiesCustomizer {
 
-    private static final String DEFAULT_SCHEMA = "tenant_default";
-
     @Override
     public String resolveCurrentTenantIdentifier() {
         String schema = TenantContext.getSchemaName();
-        return schema != null ? schema : DEFAULT_SCHEMA;
+        return schema != null ? schema : TenantSchemaResolver.defaultSchema();
     }
 
     @Override

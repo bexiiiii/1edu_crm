@@ -24,7 +24,7 @@ public final class TenantContext {
 
     public static String getSchemaName() {
         String schema = CURRENT_SCHEMA.get();
-        return schema != null ? schema : "tenant_default";
+        return schema != null ? schema : TenantSchemaResolver.defaultSchema();
     }
 
     public static void setUserId(String userId) {

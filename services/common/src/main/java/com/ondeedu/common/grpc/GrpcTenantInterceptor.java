@@ -1,6 +1,7 @@
 package com.ondeedu.common.grpc;
 
 import com.ondeedu.common.tenant.TenantContext;
+import com.ondeedu.common.tenant.TenantSchemaResolver;
 import io.grpc.*;
 import lombok.extern.slf4j.Slf4j;
 import net.devh.boot.grpc.server.interceptor.GrpcGlobalServerInterceptor;
@@ -26,7 +27,12 @@ public class GrpcTenantInterceptor implements ServerInterceptor {
 
         if (tenantId != null) {
             TenantContext.setTenantId(tenantId);
-            TenantContext.setSchemaName("tenant_" + tenantId);
+            String schemaName = TenantSchemaResolver.schemaNameForTenantId(tenantId);
+            if (schemaName != null) {
+                TenantContext.setSchemaName(schemaName);
+            } else {
+                log.warn("Ignoring invalid tenant id for schema resolution: {}", tenantId);
+            }
         }
 
         if (userId != null) {

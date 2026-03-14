@@ -29,7 +29,7 @@ public class ProfileController {
     @GetMapping
     @Operation(summary = "Get current user profile")
     public ApiResponse<UserDto> getProfile(@AuthenticationPrincipal Jwt jwt) {
-        String userId = jwt.getSubject();
+        String userId = keycloakUserService.resolveCurrentUserId(jwt);
         return ApiResponse.success(keycloakUserService.getProfile(userId));
     }
 
@@ -38,7 +38,7 @@ public class ProfileController {
     public ApiResponse<UserDto> updateProfile(
             @AuthenticationPrincipal Jwt jwt,
             @RequestBody UpdateProfileRequest request) {
-        String userId = jwt.getSubject();
+        String userId = keycloakUserService.resolveCurrentUserId(jwt);
         return ApiResponse.success(keycloakUserService.updateProfile(userId, request), "Profile updated successfully");
     }
 
@@ -47,7 +47,7 @@ public class ProfileController {
     public ApiResponse<Void> changePassword(
             @AuthenticationPrincipal Jwt jwt,
             @Valid @RequestBody ChangeOwnPasswordRequest request) {
-        String userId = jwt.getSubject();
+        String userId = keycloakUserService.resolveCurrentUserId(jwt);
         keycloakUserService.changeOwnPassword(userId, request);
         return ApiResponse.success("Password changed successfully");
     }

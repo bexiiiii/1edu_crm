@@ -7,6 +7,7 @@ import org.springframework.lang.NonNull;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.util.StringUtils;
 import org.springframework.stereotype.Component;
 import org.springframework.web.servlet.HandlerInterceptor;
 
@@ -26,8 +27,13 @@ public class TenantInterceptor implements HandlerInterceptor {
 
         if (tenantId != null) {
             TenantContext.setTenantId(tenantId);
-            TenantContext.setSchemaName("tenant_" + tenantId);
-            log.debug("Set tenant context: {}", tenantId);
+            String schemaName = TenantSchemaResolver.schemaNameForTenantId(tenantId);
+            if (schemaName != null) {
+                TenantContext.setSchemaName(schemaName);
+                log.debug("Set tenant context: {} -> {}", tenantId, schemaName);
+            } else {
+                log.warn("Ignoring invalid tenant id for schema resolution: {}", tenantId);
+            }
         }
 
         String userId = extractUserId();
@@ -72,7 +78,17 @@ public class TenantInterceptor implements HandlerInterceptor {
     private String extractUserId() {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
         if (authentication != null && authentication.getPrincipal() instanceof Jwt jwt) {
-            return jwt.getSubject();
+            if (StringUtils.hasText(jwt.getSubject())) {
+                return jwt.getSubject();
+            }
+            String preferredUsername = jwt.getClaimAsString("preferred_username");
+            if (StringUtils.hasText(preferredUsername)) {
+                return preferredUsername;
+            }
+            String email = jwt.getClaimAsString("email");
+            if (StringUtils.hasText(email)) {
+                return email;
+            }
         }
         return null;
     }
