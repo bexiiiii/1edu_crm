@@ -65,7 +65,7 @@
       "webOrigins": ["http://localhost:3001"],
       "protocol": "openid-connect",
       "standardFlowEnabled": true,
-      "directAccessGrantsEnabled": false
+      "directAccessGrantsEnabled": true
     },
     {
       "clientId": "1edu-mobile-app",

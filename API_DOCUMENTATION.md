@@ -124,6 +124,7 @@ grant_type=password&client_id=1edu-web-app&username=<login>&password=<pass>
 ```
 
 > **Важно**: Keycloak развёрнут с context path `/auth`. URL токена всегда включает `/auth/realms/...`.
+> **Важно**: для этого сценария у клиента `1edu-web-app` должен быть включён `Direct Access Grants`.
 
 ### Структура JWT (полезные claims)
 
@@ -3126,7 +3127,7 @@ enum TenantPlan { BASIC, PROFESSIONAL, ENTERPRISE }
 VITE_API_BASE_URL=https://beta.1edu.kz
 VITE_KEYCLOAK_URL=https://beta.1edu.kz/auth
 VITE_KEYCLOAK_REALM=ondeedu
-VITE_KEYCLOAK_CLIENT_ID=crm-frontend
+VITE_KEYCLOAK_CLIENT_ID=1edu-web-app
 ```
 
 **.env.local (если хочешь переключиться на локальный бекенд):**
@@ -3134,7 +3135,7 @@ VITE_KEYCLOAK_CLIENT_ID=crm-frontend
 VITE_API_BASE_URL=http://localhost:8090
 VITE_KEYCLOAK_URL=http://localhost:8080
 VITE_KEYCLOAK_REALM=ondeedu
-VITE_KEYCLOAK_CLIENT_ID=crm-frontend
+VITE_KEYCLOAK_CLIENT_ID=1edu-web-app
 ```
 
 **api.ts:**
