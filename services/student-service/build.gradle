@@ -18,8 +18,8 @@ dependencies {
     annotationProcessor 'org.mapstruct:mapstruct-processor:1.6.3'
     annotationProcessor 'org.projectlombok:lombok-mapstruct-binding:0.2.0'
 
-    // Elasticsearch for search
-    implementation 'org.springframework.data:spring-data-elasticsearch'
+    // Elasticsearch for student search index
+    implementation 'org.springframework.boot:spring-boot-starter-data-elasticsearch'
 
     // Testing
     testImplementation 'org.springframework.boot:spring-boot-starter-test'

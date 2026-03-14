@@ -18,4 +18,17 @@ public interface NotificationRepository extends JpaRepository<NotificationLog, U
     Page<NotificationLog> findByTenantId(String tenantId, Pageable pageable);
 
     Page<NotificationLog> findByType(NotificationType type, Pageable pageable);
+
+    Page<NotificationLog> findByTypeAndStatus(NotificationType type, NotificationStatus status, Pageable pageable);
+
+    Page<NotificationLog> findByTenantIdAndStatus(String tenantId, NotificationStatus status, Pageable pageable);
+
+    Page<NotificationLog> findByTenantIdAndType(String tenantId, NotificationType type, Pageable pageable);
+
+    Page<NotificationLog> findByTenantIdAndTypeAndStatus(
+            String tenantId,
+            NotificationType type,
+            NotificationStatus status,
+            Pageable pageable
+    );
 }

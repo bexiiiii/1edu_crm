@@ -14,6 +14,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
 
 import java.time.Instant;
 import java.util.UUID;
@@ -56,17 +57,36 @@ public class NotificationService {
     }
 
     @Transactional(readOnly = true)
-    public PageResponse<NotificationDto> listLogs(NotificationType type, NotificationStatus status, Pageable pageable) {
+    public PageResponse<NotificationDto> listLogs(
+            String tenantId,
+            NotificationType type,
+            NotificationStatus status,
+            Pageable pageable
+    ) {
         Page<NotificationLog> page;
-        if (type != null && status != null) {
-            page = notificationRepository.findAll(pageable);
-        } else if (type != null) {
-            page = notificationRepository.findByType(type, pageable);
-        } else if (status != null) {
-            page = notificationRepository.findByStatus(status, pageable);
+
+        if (StringUtils.hasText(tenantId)) {
+            if (type != null && status != null) {
+                page = notificationRepository.findByTenantIdAndTypeAndStatus(tenantId, type, status, pageable);
+            } else if (type != null) {
+                page = notificationRepository.findByTenantIdAndType(tenantId, type, pageable);
+            } else if (status != null) {
+                page = notificationRepository.findByTenantIdAndStatus(tenantId, status, pageable);
+            } else {
+                page = notificationRepository.findByTenantId(tenantId, pageable);
+            }
         } else {
-            page = notificationRepository.findAll(pageable);
+            if (type != null && status != null) {
+                page = notificationRepository.findByTypeAndStatus(type, status, pageable);
+            } else if (type != null) {
+                page = notificationRepository.findByType(type, pageable);
+            } else if (status != null) {
+                page = notificationRepository.findByStatus(status, pageable);
+            } else {
+                page = notificationRepository.findAll(pageable);
+            }
         }
+
         return PageResponse.from(page, notificationMapper::toDto);
     }
 
@@ -77,9 +97,12 @@ public class NotificationService {
     }
 
     @Transactional(readOnly = true)
-    public NotificationDto getById(UUID id) {
+    public NotificationDto getById(UUID id, String tenantId) {
         NotificationLog log = notificationRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("NotificationLog", "id", id));
+        if (StringUtils.hasText(tenantId) && !tenantId.equals(log.getTenantId())) {
+            throw new ResourceNotFoundException("NotificationLog", "id", id);
+        }
         return notificationMapper.toDto(log);
     }
 }

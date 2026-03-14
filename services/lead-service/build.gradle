@@ -12,8 +12,8 @@ dependencyManagement {
 dependencies {
     implementation project(':services:common')
 
-    // Elasticsearch for lead search
-    implementation 'org.springframework.data:spring-data-elasticsearch'
+    // Elasticsearch for lead search index
+    implementation 'org.springframework.boot:spring-boot-starter-data-elasticsearch'
 
     // Lombok (compileOnly не транзитивен из common)
     compileOnly 'org.projectlombok:lombok'

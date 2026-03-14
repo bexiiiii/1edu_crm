@@ -859,14 +859,27 @@ interface StudentDto {
   lastName: string;
   middleName: string | null;
   fullName: string;
+  customer: string | null;
+  studentPhoto: string | null;
   email: string | null;
   phone: string | null;
   birthDate: string | null;      // "YYYY-MM-DD"
   status: StudentStatus;          // ACTIVE | INACTIVE | GRADUATED | DROPPED | ON_HOLD
   parentName: string | null;
   parentPhone: string | null;
+  studentPhone: string | null;
+  gender: 'MALE' | 'FEMALE' | null;
   address: string | null;
   city: string | null;
+  school: string | null;
+  grade: string | null;
+  additionalInfo: string | null;
+  contract: string | null;
+  discount: string | null;
+  comment: string | null;
+  stateOrderParticipant: boolean | null;
+  loyalty: string | null;
+  additionalPhones: string[];
   notes: string | null;
   createdAt: string;
   updatedAt: string;
@@ -883,24 +896,49 @@ interface StudentDto {
 **Request Body:**
 ```json
 {
-  "firstName": "Алиса",
-  "lastName": "Иванова",
-  "middleName": "Петровна",
+  "fullName": "Алиса Петровна Иванова",
+  "status": "ACTIVE",
+  "customer": "Заказчик 1",
   "email": "alice@example.com",
   "phone": "+998901234567",
+  "studentPhone": "+998901234569",
   "birthDate": "2005-05-15",
+  "gender": "FEMALE",
   "parentName": "Иванова Мария",
   "parentPhone": "+998901234568",
   "address": "ул. Пушкина, д. 1",
   "city": "Ташкент",
-  "notes": "Занимается английским"
+  "school": "Школа №12",
+  "grade": "9",
+  "contract": "DOG-2026-001",
+  "discount": "10",
+  "comment": "Занимается английским",
+  "stateOrderParticipant": true,
+  "loyalty": "GOLD",
+  "additionalPhones": ["+998901234570"],
+  "notes": "Основной контакт через WhatsApp"
 }
 ```
 
 **Валидация:**
-- `firstName`, `lastName`: обязательные, макс. 100 символов
+- Нужно передать либо `fullName`, либо связку `firstName` + `lastName`
+- `fullName`: макс. 255 символов
+- `firstName`, `lastName`, `middleName`: макс. 100 символов
 - `email`: формат email (необязательный)
-- `phone`: макс. 20 символов
+- `phone`, `parentPhone`, `studentPhone`: макс. 20 символов
+- `status`: `ACTIVE | INACTIVE | GRADUATED | DROPPED | ON_HOLD`
+- `gender`: `MALE | FEMALE`
+
+**Поддерживаемые поля create/update:**
+- `fullName`, `firstName`, `lastName`, `middleName`
+- `status`
+- `customer`, `studentPhoto`
+- `email`, `phone`, `studentPhone`, `additionalPhones`
+- `birthDate`, `gender`
+- `parentName`, `parentPhone`
+- `address`, `city`, `school`, `grade`
+- `additionalInfo`, `contract`, `discount`, `comment`, `notes`
+- `stateOrderParticipant`, `loyalty`
 
 **Response:** `ApiResponse<StudentDto>`
 
@@ -930,10 +968,12 @@ interface StudentDto {
 **Request Body:** (все поля опциональны)
 ```json
 {
-  "firstName": "Алиса",
-  "lastName": "Петрова",
+  "fullName": "Алиса Петровна Петрова",
   "status": "INACTIVE",
-  "phone": "+998901111111"
+  "phone": "+998901111111",
+  "studentPhone": "+998901111112",
+  "discount": "15",
+  "loyalty": "PLATINUM"
 }
 ```
 
@@ -954,6 +994,8 @@ interface StudentDto {
 **Query Params:**
 - `query` (string): поиск по ФИО / телефону / email
 - `page`, `size`
+
+> Поиск сначала идёт через Elasticsearch tenant index. Если индекс пустой или Elasticsearch временно недоступен, backend автоматически делает fallback в PostgreSQL и переиндексирует найденных студентов.
 
 **Response:** `ApiResponse<PageResponse<StudentDto>>`
 
@@ -1104,8 +1146,10 @@ interface LeadDto {
 **Доступ:** `TENANT_ADMIN` | `LEADS_VIEW`
 
 **Query Params:**
-- `query`: поиск по ФИО / телефону
+- `query`: поиск по ФИО / телефону / email / source / courseInterest
 - `page`, `size`
+
+> Поиск сначала идёт через Elasticsearch tenant index. Если индекс пустой или Elasticsearch недоступен, backend делает fallback в PostgreSQL и постепенно доиндексирует лиды.
 
 **Response:** `ApiResponse<PageResponse<LeadDto>>`
 
@@ -2304,7 +2348,10 @@ interface NotificationDto {
 ### 15.1 Уведомления (`/api/v1/notifications`)
 
 #### `GET /api/v1/notifications` — Список уведомлений
-**Доступ:** `TENANT_ADMIN`, `MANAGER`
+**Доступ:** `TENANT_ADMIN`, `MANAGER`, `SUPER_ADMIN`
+
+> Для обычного tenant user backend автоматически ограничивает выборку текущим `tenant_id` из JWT.
+> `SUPER_ADMIN` без `X-Tenant-ID` видит общую выборку, с `X-Tenant-ID` получает уведомления конкретного тенанта.
 
 **Query Params:**
 - `type` (optional): `EMAIL | SMS`
@@ -2316,7 +2363,7 @@ interface NotificationDto {
 ---
 
 #### `GET /api/v1/notifications/{id}` — Получить уведомление
-**Доступ:** `TENANT_ADMIN`, `MANAGER`
+**Доступ:** `TENANT_ADMIN`, `MANAGER`, `SUPER_ADMIN`
 
 **Response:** `ApiResponse<NotificationDto>`
 
@@ -3154,7 +3201,8 @@ interface SystemAuditLog {
 #### `GET /api/v1/audit/tenant` — Лог тенанта
 **Доступ:** `TENANT_ADMIN`, `SUPER_ADMIN`
 
-> `SUPER_ADMIN` должен передавать `X-Tenant-ID` заголовок.
+> Для tenant user tenant определяется из JWT claim `tenant_id`.
+> `SUPER_ADMIN` может явно выбрать tenant через `X-Tenant-ID`.
 
 **Query Params:**
 - `category` (optional): категория события

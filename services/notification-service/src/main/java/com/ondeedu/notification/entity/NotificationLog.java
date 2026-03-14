@@ -16,7 +16,7 @@ import java.time.Instant;
 @AllArgsConstructor
 @EqualsAndHashCode(callSuper = true)
 @Entity
-@Table(name = "notification_logs")
+@Table(name = "notification_logs", schema = "system")
 public class NotificationLog extends BaseEntity {
 
     @Enumerated(EnumType.STRING)

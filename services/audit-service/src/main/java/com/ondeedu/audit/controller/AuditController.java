@@ -12,7 +12,12 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.GrantedAuthority;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.Instant;
@@ -54,17 +59,52 @@ public class AuditController {
             @RequestParam(required = false) String actorId,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant from,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant to,
+            @RequestHeader(value = "X-Tenant-ID", required = false) String tenantHeader,
+            @AuthenticationPrincipal Jwt jwt,
+            Authentication authentication,
             @RequestParam(defaultValue = "0")  int page,
             @RequestParam(defaultValue = "50") int size) {
 
-        // TenantContext is populated by TenantInterceptor from JWT tenant_id claim
-        // SUPER_ADMIN can override via X-Tenant-ID header (already handled)
-        String tenantId = TenantContext.getTenantId();
-        if (tenantId == null || tenantId.isBlank()) {
-            throw new BusinessException("Tenant context is not set. SUPER_ADMIN must provide X-Tenant-ID header.");
+        String tenantId = resolveTenantId(authentication, jwt, tenantHeader);
+        if (!StringUtils.hasText(tenantId)) {
+            throw new BusinessException(
+                    "TENANT_CONTEXT_MISSING",
+                    "Tenant context is not set. Sign in again or provide X-Tenant-ID header.",
+                    org.springframework.http.HttpStatus.BAD_REQUEST
+            );
         }
 
         return ApiResponse.success(
                 auditLogService.getTenantLogs(tenantId, category, action, actorId, from, to, page, size));
+    }
+
+    private String resolveTenantId(Authentication authentication, Jwt jwt, String tenantHeader) {
+        if (isSuperAdmin(authentication) && StringUtils.hasText(tenantHeader)) {
+            return tenantHeader;
+        }
+
+        String tenantId = TenantContext.getTenantId();
+        if (StringUtils.hasText(tenantId)) {
+            return tenantId;
+        }
+
+        if (jwt != null) {
+            tenantId = jwt.getClaimAsString("tenant_id");
+            if (StringUtils.hasText(tenantId)) {
+                return tenantId;
+            }
+        }
+
+        return null;
+    }
+
+    private boolean isSuperAdmin(Authentication authentication) {
+        if (authentication == null) {
+            return false;
+        }
+
+        return authentication.getAuthorities().stream()
+                .map(GrantedAuthority::getAuthority)
+                .anyMatch("ROLE_SUPER_ADMIN"::equals);
     }
 }

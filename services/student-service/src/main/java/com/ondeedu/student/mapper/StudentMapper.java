@@ -10,11 +10,14 @@ import org.mapstruct.*;
 public interface StudentMapper {
 
     @Mapping(target = "fullName", expression = "java(student.getFullName())")
+    @Mapping(target = "additionalPhones", ignore = true)
+    @Mapping(target = "stateOrderParticipant", ignore = true)
+    @Mapping(target = "loyalty", ignore = true)
     StudentDto toDto(Student student);
 
     @BeanMapping(builder = @Builder(disableBuilder = true))
     @Mapping(target = "id", ignore = true)
-    @Mapping(target = "status", constant = "ACTIVE")
+    @Mapping(target = "status", ignore = true)
     @Mapping(target = "createdAt", ignore = true)
     @Mapping(target = "updatedAt", ignore = true)
     @Mapping(target = "createdBy", ignore = true)
@@ -29,6 +32,7 @@ public interface StudentMapper {
     @Mapping(target = "createdBy", ignore = true)
     @Mapping(target = "updatedBy", ignore = true)
     @Mapping(target = "version", ignore = true)
+    @Mapping(target = "status", ignore = true)
     @Mapping(target = "metadata", ignore = true)
     void updateEntity(@MappingTarget Student student, UpdateStudentRequest request);
 }
