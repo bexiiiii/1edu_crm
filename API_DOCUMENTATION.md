@@ -74,7 +74,7 @@
 | `/api/v1/leads/**` | lead-service |
 | `/api/v1/payments/**`, `/api/v1/subscriptions/**`, `/api/v1/price-lists/**` | payment-service |
 | `/api/v1/schedules/**`, `/api/v1/rooms/**` | schedule-service |
-| `/api/v1/lessons/**`, `/api/v1/attendance/**` | lesson-service |
+| `/api/v1/lessons/**` (включая `/api/v1/lessons/{lessonId}/attendance/**`), `/api/v1/attendance/**` | lesson-service |
 | `/api/v1/settings/**` | settings-service |
 | `/api/v1/audit/**` | audit-service |
 | `/api/v1/staff/**` | staff-service |
@@ -98,10 +98,13 @@
 ```http
 Authorization: Bearer <access_token>
 Content-Type: application/json
-X-Tenant-ID: <tenant_uuid>
 ```
 
-> `X-Tenant-ID` — UUID тенанта. Для обычных пользователей берётся из JWT claim `tenant_id` автоматически бэкендом. Передавай явно только если у тебя несколько тенантов (SUPER_ADMIN) или для явного указания контекста.
+> `X-Tenant-ID` не нужен для обычного tenant frontend. Gateway и backend сами берут tenant context из JWT claim `tenant_id`.
+>
+> Передавай `X-Tenant-ID` явно только в специальных сценариях:
+> - запросы от `SUPER_ADMIN`
+> - ручное переключение tenant context в админском интерфейсе
 
 ### Как получить токен
 
@@ -138,7 +141,7 @@ grant_type=password&client_id=1edu-web-app&username=<login>&password=<pass>
 }
 ```
 
-> `tenant_id` — UUID тенанта, передаётся в заголовке `X-Tenant-ID` при запросах.
+> `tenant_id` — UUID тенанта в JWT. Для обычных пользователей фронт хранит его только как контекст UI; вручную копировать его в `X-Tenant-ID` не требуется.
 > `permissions` — гранулярные права (через `permissions-mapper` клиента `1edu-web-app`).
 > `realm_access.roles` — роли пользователя; именно их backend использует в `@PreAuthorize("hasRole(...)")`.
 
@@ -297,7 +300,7 @@ grant_type=password&client_id=1edu-web-app&username=<login>&password=<pass>
 1. Создаётся тенант в системе (статус `ACTIVE`, план `BASIC`)
 2. Создаётся PostgreSQL схема для тенанта
 3. Создаётся пользователь `TENANT_ADMIN` в Keycloak с атрибутом `tenant_id` = UUID тенанта
-4. `tenant_id` попадает в JWT через protocol mapper — используй его как `X-Tenant-ID` для последующих запросов
+4. `tenant_id` попадает в JWT через protocol mapper — фронт может использовать его для UI/контекста, но обычные API-запросы идут только с `Authorization: Bearer ...`
 5. Если шаг 3 падает — тенант удаляется (rollback)
 
 **Ошибки:**
@@ -2581,9 +2584,22 @@ interface AttendanceDto {
 - `type` (optional): `GROUP | INDIVIDUAL | TRIAL`
 - `status` (optional): `PLANNED | COMPLETED | CANCELLED | TEACHER_ABSENT | TEACHER_SICK`
 - `date` (optional): `YYYY-MM-DD` — конкретный день
-- `page`, `size`
+- `from` (optional): `YYYY-MM-DD` — начало диапазона
+- `to` (optional): `YYYY-MM-DD` — конец диапазона
+- `page`, `size`, `sort`
 
 **Response:** `ApiResponse<PageResponse<LessonDto>>`
+
+---
+
+#### `GET /api/v1/lessons/calendar` — Занятия для календаря
+**Доступ:** `TENANT_ADMIN` | `LESSONS_VIEW`
+
+**Query Params:**
+- `from`: `YYYY-MM-DD`
+- `to`: `YYYY-MM-DD`
+
+**Response:** `ApiResponse<List<LessonDto>>`
 
 ---
 
@@ -2675,11 +2691,16 @@ interface AttendanceDto {
 #### `GET /api/v1/lessons/teacher/{teacherId}` — Занятия преподавателя
 **Доступ:** `TENANT_ADMIN` | `LESSONS_VIEW`
 
+**Query Params:** `page`, `size`, `sort`
+
 **Response:** `ApiResponse<PageResponse<LessonDto>>`
 
 ---
 
 ### 19.2 Посещаемость (`/api/v1/lessons/{lessonId}/attendance`)
+
+> Для конкретного урока используй вложенные routes `/api/v1/lessons/{lessonId}/attendance/...`.
+> Отдельный route `/api/v1/attendance/student/{studentId}` существует только для истории посещений студента.
 
 #### `POST /api/v1/lessons/{lessonId}/attendance` — Отметить посещение
 **Доступ:** `TENANT_ADMIN` | `LESSONS_MARK_ATTENDANCE`
@@ -3147,14 +3168,15 @@ const api = axios.create({
 // Interceptor для авторизации
 api.interceptors.request.use(config => {
   const token = localStorage.getItem('access_token');
-  const tenantId = localStorage.getItem('tenant_id');
   if (token) config.headers.Authorization = `Bearer ${token}`;
-  if (tenantId) config.headers['X-Tenant-ID'] = tenantId;
   return config;
 });
 
 export default api;
 ```
+
+> Для обычного tenant frontend этого достаточно.
+> Если у тебя есть отдельный `SUPER_ADMIN` интерфейс с ручным выбором тенанта, только тогда добавляй `X-Tenant-ID` точечно для нужных запросов.
 
 **keycloak.ts (если используешь keycloak-js):**
 ```typescript
