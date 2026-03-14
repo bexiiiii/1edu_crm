@@ -34,6 +34,10 @@ spring:
         jwt:
           issuer-uri: http://localhost:8080/auth/realms/ondeedu
 
+ondeedu:
+  multitenancy:
+    enabled: false
+
 eureka:
   client:
     service-url:

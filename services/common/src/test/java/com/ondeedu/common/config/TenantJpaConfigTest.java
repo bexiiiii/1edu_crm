@@ -15,6 +15,7 @@ class TenantJpaConfigTest {
 
     private final ApplicationContextRunner contextRunner = new ApplicationContextRunner()
             .withUserConfiguration(TenantJpaConfig.class)
+            .withPropertyValues("spring.datasource.url=jdbc:postgresql://localhost:5432/test")
             .withBean(DataSource.class, () -> mock(DataSource.class));
 
     @Test
@@ -24,5 +25,16 @@ class TenantJpaConfigTest {
             assertThat(context).hasSingleBean(TenantIdentifierResolver.class);
             assertThat(context).hasSingleBean(HibernatePropertiesCustomizer.class);
         });
+    }
+
+    @Test
+    void skipsTenantAwareHibernateBeansWhenMultiTenancyDisabled() {
+        contextRunner
+                .withPropertyValues("ondeedu.multitenancy.enabled=false")
+                .run(context -> {
+                    assertThat(context).doesNotHaveBean(TenantSchemaConnectionProvider.class);
+                    assertThat(context).doesNotHaveBean(TenantIdentifierResolver.class);
+                    assertThat(context).doesNotHaveBean(HibernatePropertiesCustomizer.class);
+                });
     }
 }
