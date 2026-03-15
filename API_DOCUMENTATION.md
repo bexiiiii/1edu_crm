@@ -1460,12 +1460,21 @@ interface ScheduleDto {
 }
 ```
 
+> Backend автоматически синхронизирует связанные занятия в `lesson-service`:
+> - для дат, которые остались в расписании, `PLANNED` занятия обновляются по новым `startTime`, `endTime`, `teacherId`, `roomId`, `maxStudents`;
+> - для новых дат создаются новые занятия;
+> - лишние `PLANNED` занятия удаляются;
+> - если обновление требует удалить или убрать из диапазона уже `COMPLETED`, `CANCELLED`, `TEACHER_ABSENT` или `TEACHER_SICK` занятия, backend вернёт `400 SCHEDULE_UPDATE_BLOCKED`, чтобы не потерять историю.
+
 **Response:** `ApiResponse<ScheduleDto>`
 
 ---
 
 #### `DELETE /api/v1/schedules/{id}` — Удалить расписание
 **Доступ:** `TENANT_ADMIN` | `GROUPS_DELETE`
+
+> Перед удалением backend пытается удалить связанные `PLANNED` занятия из `lesson-service`.
+> Если по расписанию уже есть занятия не в статусе `PLANNED`, backend вернёт `400 SCHEDULE_DELETE_BLOCKED`.
 
 **Response:** `ApiResponse<Void>`
 

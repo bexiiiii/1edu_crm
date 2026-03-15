@@ -39,6 +39,7 @@ public class LessonGrpcService extends LessonServiceGrpc.LessonServiceImplBase {
             if (request.hasGroupId()) dto.setGroupId(UUID.fromString(request.getGroupId().getValue()));
             if (request.hasServiceId()) dto.setServiceId(UUID.fromString(request.getServiceId().getValue()));
             if (request.hasTeacherId()) dto.setTeacherId(UUID.fromString(request.getTeacherId().getValue()));
+            if (request.hasSubstituteTeacherId()) dto.setSubstituteTeacherId(UUID.fromString(request.getSubstituteTeacherId().getValue()));
             if (request.hasRoomId()) dto.setRoomId(UUID.fromString(request.getRoomId().getValue()));
             if (!request.getLessonType().isEmpty()) dto.setLessonType(LessonType.valueOf(request.getLessonType()));
             if (request.hasCapacity()) dto.setCapacity(request.getCapacity().getValue());
@@ -78,6 +79,10 @@ public class LessonGrpcService extends LessonServiceGrpc.LessonServiceImplBase {
             if (request.hasLessonDate()) dto.setLessonDate(LocalDate.parse(request.getLessonDate().getValue()));
             if (request.hasStartTime()) dto.setStartTime(LocalTime.parse(request.getStartTime().getValue()));
             if (request.hasEndTime()) dto.setEndTime(LocalTime.parse(request.getEndTime().getValue()));
+            if (request.hasGroupId()) dto.setGroupId(UUID.fromString(request.getGroupId().getValue()));
+            if (request.hasTeacherId()) dto.setTeacherId(UUID.fromString(request.getTeacherId().getValue()));
+            if (request.hasRoomId()) dto.setRoomId(UUID.fromString(request.getRoomId().getValue()));
+            if (request.hasCapacity()) dto.setCapacity(request.getCapacity().getValue());
             if (request.hasStatus()) dto.setStatus(LessonStatus.valueOf(request.getStatus().getValue()));
             if (request.hasTopic()) dto.setTopic(request.getTopic().getValue());
             if (request.hasHomework()) dto.setHomework(request.getHomework().getValue());

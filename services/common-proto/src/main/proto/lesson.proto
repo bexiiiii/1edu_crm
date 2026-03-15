@@ -97,6 +97,7 @@ message UpdateLessonRequest {
   google.protobuf.StringValue topic = 10;
   google.protobuf.StringValue homework = 11;
   google.protobuf.StringValue notes = 12;
+  google.protobuf.Int32Value capacity = 13;
 }
 
 message DeleteLessonRequest {
