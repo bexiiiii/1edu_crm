@@ -648,6 +648,7 @@ services:
       <<: *spring-env
       SERVER_PORT: "8108"
       GRPC_SERVER_PORT: "9108"
+      GRPC_CLIENT_LESSON_SERVICE_ADDRESS: discovery:///lesson-service
       JAVA_OPTS: "-Xms${JVM_XMS_MEDIUM:-192m} -Xmx${JVM_XMX_MEDIUM:-384m}"
     depends_on:
       postgres:

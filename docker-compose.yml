@@ -430,6 +430,7 @@ services:
       <<: *spring-env
       SERVER_PORT: "8108"
       GRPC_SERVER_PORT: "9108"
+      GRPC_CLIENT_LESSON_SERVICE_ADDRESS: discovery:///lesson-service
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://localhost:8108/actuator/health | grep -q UP"]
       <<: *healthcheck-spring

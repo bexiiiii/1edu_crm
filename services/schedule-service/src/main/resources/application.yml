@@ -54,6 +54,8 @@ grpc:
   client:
     GLOBAL:
       negotiation-type: plaintext
+    lesson-service:
+      address: static://localhost:9126
 
 management:
   endpoints:

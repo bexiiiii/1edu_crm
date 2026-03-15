@@ -1411,6 +1411,18 @@ interface ScheduleDto {
 }
 ```
 
+> После создания расписания backend автоматически создаёт записи в `lesson-service`:
+> - если `endDate` задан, создаётся серия занятий по всем датам в диапазоне `startDate..endDate`, которые входят в `daysOfWeek`;
+> - если `endDate` не задан, создаётся только первое подходящее занятие;
+> - если `daysOfWeek` пустой, создаётся одно занятие на `startDate`.
+>
+> Созданные занятия эквивалентны ручному `POST /api/v1/lessons` с:
+> - `groupId = schedule.id`
+> - `teacherId = schedule.teacherId`
+> - `roomId = schedule.roomId`
+> - `capacity = schedule.maxStudents`
+> - `lessonType = GROUP`
+
 **Response:** `ApiResponse<ScheduleDto>`
 
 ---
