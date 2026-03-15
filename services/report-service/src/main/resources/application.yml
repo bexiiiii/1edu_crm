@@ -12,6 +12,11 @@ server:
 spring:
   application:
     name: report-service
+  cloud:
+    config:
+      enabled: false
+      import-check:
+        enabled: false
   autoconfigure:
     exclude:
       - org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration

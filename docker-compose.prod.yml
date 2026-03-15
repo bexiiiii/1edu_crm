@@ -1039,6 +1039,8 @@ services:
       GRPC_CLIENT_GLOBAL_NEGOTIATION_TYPE: plaintext
       GRPC_CLIENT_ANALYTICS_SERVICE_ADDRESS: discovery:///analytics-service
       MANAGEMENT_ZIPKIN_TRACING_ENDPOINT: ${ZIPKIN_ENDPOINT}
+      SPRING_CLOUD_CONFIG_ENABLED: "false"
+      SPRING_CLOUD_CONFIG_IMPORT_CHECK_ENABLED: "false"
       JAVA_OPTS: "-Xms${JVM_XMS_SMALL:-128m} -Xmx${JVM_XMX_SMALL:-256m}"
     depends_on:
       analytics-service:

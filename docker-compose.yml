@@ -648,6 +648,8 @@ services:
       GRPC_CLIENT_GLOBAL_NEGOTIATION_TYPE: plaintext
       GRPC_CLIENT_ANALYTICS_SERVICE_ADDRESS: discovery:///analytics-service
       MANAGEMENT_ZIPKIN_TRACING_ENDPOINT: ${ZIPKIN_ENDPOINT}
+      SPRING_CLOUD_CONFIG_ENABLED: "false"
+      SPRING_CLOUD_CONFIG_IMPORT_CHECK_ENABLED: "false"
     depends_on:
       analytics-service:
         condition: service_healthy
