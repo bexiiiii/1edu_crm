@@ -12,6 +12,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import net.devh.boot.grpc.server.service.GrpcService;
 
+import java.math.BigDecimal;
 import java.util.UUID;
 
 @Slf4j
@@ -91,6 +92,56 @@ public class PaymentGrpcService extends PaymentServiceGrpc.PaymentServiceImplBas
         } catch (Exception e) {
             log.error("gRPC getPaymentsByStudent error", e);
             observer.onNext(ListPaymentsResponse.newBuilder().setSuccess(false).build());
+            observer.onCompleted();
+        }
+    }
+
+    @Override
+    public void ensureCourseSubscription(EnsureCourseSubscriptionRequest request,
+                                         StreamObserver<PaymentResponse> observer) {
+        try {
+            BigDecimal amount = request.hasAmount() ? GrpcUtils.fromMoney(request.getAmount()) : BigDecimal.ZERO;
+            String currency = request.hasAmount() ? request.getAmount().getCurrency() : null;
+
+            SubscriptionDto dto = subscriptionService.ensureCourseSubscription(
+                    UUID.fromString(request.getStudentId()),
+                    UUID.fromString(request.getCourseId()),
+                    request.getCourseName(),
+                    amount,
+                    currency
+            );
+
+            observer.onNext(buildResponse(true, "Course subscription synced", dto));
+            observer.onCompleted();
+        } catch (Exception e) {
+            log.error("gRPC ensureCourseSubscription error", e);
+            observer.onNext(PaymentResponse.newBuilder()
+                    .setSuccess(false)
+                    .setMessage(StringValue.of(e.getMessage()))
+                    .build());
+            observer.onCompleted();
+        }
+    }
+
+    @Override
+    public void cancelCourseSubscription(CancelCourseSubscriptionRequest request,
+                                         StreamObserver<PaymentResponse> observer) {
+        try {
+            subscriptionService.cancelCourseSubscription(
+                    UUID.fromString(request.getStudentId()),
+                    UUID.fromString(request.getCourseId())
+            );
+            observer.onNext(PaymentResponse.newBuilder()
+                    .setSuccess(true)
+                    .setMessage(StringValue.of("Course subscription cancelled"))
+                    .build());
+            observer.onCompleted();
+        } catch (Exception e) {
+            log.error("gRPC cancelCourseSubscription error", e);
+            observer.onNext(PaymentResponse.newBuilder()
+                    .setSuccess(false)
+                    .setMessage(StringValue.of(e.getMessage()))
+                    .build());
             observer.onCompleted();
         }
     }

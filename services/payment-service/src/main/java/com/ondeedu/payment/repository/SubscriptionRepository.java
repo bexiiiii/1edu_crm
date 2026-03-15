@@ -28,6 +28,12 @@ public interface SubscriptionRepository extends JpaRepository<Subscription, UUID
 
     boolean existsByStudentIdAndCourseIdAndStatus(UUID studentId, UUID courseId, SubscriptionStatus status);
 
+    List<Subscription> findByStudentIdAndCourseIdAndStatusOrderByCreatedAtDesc(
+            UUID studentId,
+            UUID courseId,
+            SubscriptionStatus status
+    );
+
     @Query("SELECT COALESCE(SUM(s.amount), 0) FROM Subscription s WHERE s.studentId = :studentId")
     BigDecimal sumAmountByStudentId(@Param("studentId") UUID studentId);
 

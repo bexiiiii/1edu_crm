@@ -14,4 +14,6 @@ public interface CourseStudentRepository extends JpaRepository<CourseStudent, UU
     List<CourseStudent> findByCourseIdInOrderByCourseIdAscCreatedAtAsc(Collection<UUID> courseIds);
 
     void deleteByCourseId(UUID courseId);
+
+    void deleteByCourseIdAndStudentIdIn(UUID courseId, Collection<UUID> studentIds);
 }

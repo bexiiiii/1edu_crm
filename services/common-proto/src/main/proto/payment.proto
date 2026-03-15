@@ -16,6 +16,8 @@ service PaymentService {
   rpc GetPayment(GetPaymentRequest) returns (PaymentResponse);
   rpc ListPayments(ListPaymentsRequest) returns (ListPaymentsResponse);
   rpc GetPaymentsByStudent(GetPaymentsByStudentRequest) returns (ListPaymentsResponse);
+  rpc EnsureCourseSubscription(EnsureCourseSubscriptionRequest) returns (PaymentResponse);
+  rpc CancelCourseSubscription(CancelCourseSubscriptionRequest) returns (PaymentResponse);
 
   // Payment processing
   rpc ProcessPayment(ProcessPaymentRequest) returns (PaymentResponse);
@@ -99,6 +101,20 @@ message GetPaymentsByStudentRequest {
   com.ondeedu.grpc.common.TenantContext context = 1;
   string student_id = 2;
   com.ondeedu.grpc.common.PageRequest page = 3;
+}
+
+message EnsureCourseSubscriptionRequest {
+  com.ondeedu.grpc.common.TenantContext context = 1;
+  string student_id = 2;
+  string course_id = 3;
+  string course_name = 4;
+  com.ondeedu.grpc.common.Money amount = 5;
+}
+
+message CancelCourseSubscriptionRequest {
+  com.ondeedu.grpc.common.TenantContext context = 1;
+  string student_id = 2;
+  string course_id = 3;
 }
 
 message ProcessPaymentRequest {

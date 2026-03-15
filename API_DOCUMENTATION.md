@@ -1201,7 +1201,12 @@ interface CourseDto {
 }
 ```
 
-> `studentIds` опционален. Если передан, backend сохраняет множественную связь студентов с курсом прямо при создании. Это связь с `course`, а не автоматическая запись в `schedule/group`.
+> `studentIds` опционален. Если передан, backend:
+> - сохраняет множественную связь студентов с курсом;
+> - автоматически создаёт для каждого студента `subscription` в `payment-service`, если для пары `studentId + courseId` ещё нет активной подписки;
+> - выставляет сумму подписки равной `basePrice` курса.
+>
+> Это не автоматическая запись в `schedule/group`. Для уроков/посещаемости по-прежнему нужен `schedule`.
 
 **Response:** `ApiResponse<CourseDto>`
 
@@ -1239,7 +1244,9 @@ interface CourseDto {
 }
 ```
 
-> Если в `PUT /api/v1/courses/{id}` передать `studentIds: []`, все текущие привязки студентов к курсу будут очищены.
+> Если в `PUT /api/v1/courses/{id}` передать `studentIds: []`, все текущие привязки студентов к курсу будут очищены, а auto-created course subscriptions для этих студентов будут отменены.
+>
+> Если в `PUT /api/v1/courses/{id}` изменить `basePrice` или `name`, backend пересинхронизирует auto-created course subscriptions текущих студентов курса.
 
 **Response:** `ApiResponse<CourseDto>`
 
@@ -1249,6 +1256,8 @@ interface CourseDto {
 **Доступ:** `TENANT_ADMIN` | `GROUPS_DELETE`
 
 **Response:** `ApiResponse<Void>`
+
+> При удалении курса backend также отменяет auto-created course subscriptions, которые были созданы через `studentIds` у этого курса.
 
 ---
 
@@ -1678,6 +1687,12 @@ interface PriceListDto {
 
 #### `GET /api/v1/payments/student-payments/student/{studentId}` — История платежей студента
 **Доступ:** `TENANT_ADMIN` | `FINANCE_VIEW`
+
+> Если студент был добавлен в курс через `studentIds` в `POST/PUT /api/v1/courses`, здесь автоматически появится course subscription.
+> Для такого auto-created course subscription:
+> - `courseId` будет заполнен;
+> - `totalAmount` будет равен `basePrice` курса;
+> - если по подписке ещё не было оплат, `totalDebt` будет равен сумме курса.
 
 **Response:**
 ```typescript

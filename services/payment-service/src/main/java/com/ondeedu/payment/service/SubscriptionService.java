@@ -20,12 +20,18 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.util.List;
 import java.util.UUID;
 
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class SubscriptionService {
+
+    private static final String AUTO_COURSE_SUBSCRIPTION_PREFIX = "[AUTO_COURSE_SUBSCRIPTION]";
+    private static final String DEFAULT_CURRENCY = "KZT";
 
     private final SubscriptionRepository subscriptionRepository;
     private final PriceListRepository priceListRepository;
@@ -51,6 +57,98 @@ public class SubscriptionService {
         subscription = subscriptionRepository.save(subscription);
         log.info("Created subscription {} for student {}", subscription.getId(), subscription.getStudentId());
         return subscriptionMapper.toDto(subscription);
+    }
+
+    @Transactional
+    @CacheEvict(value = "subscriptions", allEntries = true)
+    public SubscriptionDto ensureCourseSubscription(UUID studentId, UUID courseId, String courseName,
+                                                    BigDecimal amount, String currency) {
+        List<Subscription> activeSubscriptions = subscriptionRepository
+                .findByStudentIdAndCourseIdAndStatusOrderByCreatedAtDesc(
+                        studentId,
+                        courseId,
+                        SubscriptionStatus.ACTIVE
+                );
+
+        Subscription autoSubscription = activeSubscriptions.stream()
+                .filter(this::isAutoCourseSubscription)
+                .findFirst()
+                .orElse(null);
+
+        if (autoSubscription != null) {
+            BigDecimal normalizedAmount = normalizeAmount(amount);
+            String normalizedCurrency = normalizeCurrency(currency);
+            String notes = buildAutoCourseSubscriptionNote(courseName);
+            boolean changed = false;
+
+            if (autoSubscription.getAmount() == null || autoSubscription.getAmount().compareTo(normalizedAmount) != 0) {
+                autoSubscription.setAmount(normalizedAmount);
+                changed = true;
+            }
+            if (!normalizedCurrency.equals(autoSubscription.getCurrency())) {
+                autoSubscription.setCurrency(normalizedCurrency);
+                changed = true;
+            }
+            if (!notes.equals(autoSubscription.getNotes())) {
+                autoSubscription.setNotes(notes);
+                changed = true;
+            }
+
+            if (changed) {
+                autoSubscription = subscriptionRepository.save(autoSubscription);
+                log.info("Updated auto course subscription {} for course {}", autoSubscription.getId(), courseId);
+            }
+            return subscriptionMapper.toDto(autoSubscription);
+        }
+
+        if (!activeSubscriptions.isEmpty()) {
+            Subscription existingSubscription = activeSubscriptions.getFirst();
+            log.info("Skipping auto course subscription for student {} and course {} because active subscription {} already exists",
+                    studentId, courseId, existingSubscription.getId());
+            return subscriptionMapper.toDto(existingSubscription);
+        }
+
+        Subscription subscription = Subscription.builder()
+                .studentId(studentId)
+                .courseId(courseId)
+                .totalLessons(1)
+                .lessonsLeft(1)
+                .startDate(LocalDate.now())
+                .amount(normalizeAmount(amount))
+                .currency(normalizeCurrency(currency))
+                .notes(buildAutoCourseSubscriptionNote(courseName))
+                .status(SubscriptionStatus.ACTIVE)
+                .build();
+
+        subscription = subscriptionRepository.save(subscription);
+        log.info("Created auto course subscription {} for student {} and course {}",
+                subscription.getId(), studentId, courseId);
+        return subscriptionMapper.toDto(subscription);
+    }
+
+    @Transactional
+    @CacheEvict(value = "subscriptions", allEntries = true)
+    public void cancelCourseSubscription(UUID studentId, UUID courseId) {
+        List<Subscription> activeSubscriptions = subscriptionRepository
+                .findByStudentIdAndCourseIdAndStatusOrderByCreatedAtDesc(
+                        studentId,
+                        courseId,
+                        SubscriptionStatus.ACTIVE
+                );
+
+        List<Subscription> autoSubscriptions = activeSubscriptions.stream()
+                .filter(this::isAutoCourseSubscription)
+                .toList();
+
+        if (autoSubscriptions.isEmpty()) {
+            log.debug("No active auto course subscriptions found for student {} and course {}", studentId, courseId);
+            return;
+        }
+
+        autoSubscriptions.forEach(subscription -> subscription.setStatus(SubscriptionStatus.CANCELLED));
+        subscriptionRepository.saveAll(autoSubscriptions);
+        log.info("Cancelled {} auto course subscriptions for student {} and course {}",
+                autoSubscriptions.size(), studentId, courseId);
     }
 
     @Transactional(readOnly = true)
@@ -111,5 +209,25 @@ public class SubscriptionService {
             page = subscriptionRepository.findAll(pageable);
         }
         return PageResponse.from(page, subscriptionMapper::toDto);
+    }
+
+    private boolean isAutoCourseSubscription(Subscription subscription) {
+        return subscription.getNotes() != null
+                && subscription.getNotes().startsWith(AUTO_COURSE_SUBSCRIPTION_PREFIX);
+    }
+
+    private String buildAutoCourseSubscriptionNote(String courseName) {
+        String normalizedCourseName = courseName == null || courseName.isBlank()
+                ? "Course"
+                : courseName.trim();
+        return AUTO_COURSE_SUBSCRIPTION_PREFIX + " " + normalizedCourseName;
+    }
+
+    private BigDecimal normalizeAmount(BigDecimal amount) {
+        return amount != null ? amount : BigDecimal.ZERO;
+    }
+
+    private String normalizeCurrency(String currency) {
+        return currency != null && !currency.isBlank() ? currency : DEFAULT_CURRENCY;
     }
 }

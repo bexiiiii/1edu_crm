@@ -2,6 +2,7 @@ package com.ondeedu.course.service;
 
 import com.ondeedu.common.dto.PageResponse;
 import com.ondeedu.common.exception.ResourceNotFoundException;
+import com.ondeedu.course.client.PaymentGrpcClient;
 import com.ondeedu.course.dto.CourseDto;
 import com.ondeedu.course.dto.CreateCourseRequest;
 import com.ondeedu.course.dto.UpdateCourseRequest;
@@ -26,6 +27,7 @@ import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -37,13 +39,14 @@ public class CourseService {
     private final CourseRepository courseRepository;
     private final CourseStudentRepository courseStudentRepository;
     private final CourseMapper courseMapper;
+    private final PaymentGrpcClient paymentGrpcClient;
 
     @Transactional
     @CacheEvict(value = "courses", allEntries = true)
     public CourseDto createCourse(CreateCourseRequest request) {
         Course course = courseMapper.toEntity(request);
         course = courseRepository.save(course);
-        syncCourseStudents(course.getId(), request.getStudentIds());
+        syncCourseStudents(course, List.of(), normalizeStudentIds(request.getStudentIds()));
         log.info("Created course: {} ({})", course.getName(), course.getId());
         return toDto(course);
     }
@@ -61,11 +64,13 @@ public class CourseService {
     public CourseDto updateCourse(UUID id, UpdateCourseRequest request) {
         Course course = courseRepository.findById(id)
             .orElseThrow(() -> new ResourceNotFoundException("Course", "id", id));
+        List<UUID> existingStudentIds = getStudentIds(course.getId());
         courseMapper.updateEntity(course, request);
         course = courseRepository.save(course);
-        if (request.getStudentIds() != null) {
-            syncCourseStudents(id, request.getStudentIds());
-        }
+        List<UUID> targetStudentIds = request.getStudentIds() != null
+                ? normalizeStudentIds(request.getStudentIds())
+                : existingStudentIds;
+        syncCourseStudents(course, existingStudentIds, targetStudentIds);
         log.info("Updated course: {}", id);
         return toDto(course);
     }
@@ -73,9 +78,9 @@ public class CourseService {
     @Transactional
     @CacheEvict(value = "courses", key = "#id")
     public void deleteCourse(UUID id) {
-        if (!courseRepository.existsById(id)) {
-            throw new ResourceNotFoundException("Course", "id", id);
-        }
+        Course course = courseRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Course", "id", id));
+        cancelCourseSubscriptions(course, getStudentIds(id));
         courseStudentRepository.deleteByCourseId(id);
         courseRepository.deleteById(id);
         log.info("Deleted course: {}", id);
@@ -125,21 +130,54 @@ public class CourseService {
         return dto;
     }
 
-    private void syncCourseStudents(UUID courseId, List<UUID> studentIds) {
-        courseStudentRepository.deleteByCourseId(courseId);
+    private void syncCourseStudents(Course course, List<UUID> existingStudentIds, List<UUID> targetStudentIds) {
+        Set<UUID> existingStudentIdSet = new LinkedHashSet<>(existingStudentIds);
+        Set<UUID> targetStudentIdSet = new LinkedHashSet<>(targetStudentIds);
 
-        List<UUID> normalizedStudentIds = normalizeStudentIds(studentIds);
-        if (normalizedStudentIds.isEmpty()) {
+        List<UUID> addedStudentIds = targetStudentIdSet.stream()
+                .filter(studentId -> !existingStudentIdSet.contains(studentId))
+                .toList();
+        List<UUID> removedStudentIds = existingStudentIdSet.stream()
+                .filter(studentId -> !targetStudentIdSet.contains(studentId))
+                .toList();
+
+        syncCourseSubscriptions(course, targetStudentIds, removedStudentIds);
+
+        if (!removedStudentIds.isEmpty()) {
+            courseStudentRepository.deleteByCourseIdAndStudentIdIn(course.getId(), removedStudentIds);
+        }
+
+        if (addedStudentIds.isEmpty()) {
             return;
         }
 
-        List<CourseStudent> courseStudents = normalizedStudentIds.stream()
+        List<CourseStudent> courseStudents = addedStudentIds.stream()
                 .map(studentId -> CourseStudent.builder()
-                        .courseId(courseId)
+                        .courseId(course.getId())
                         .studentId(studentId)
                         .build())
                 .toList();
         courseStudentRepository.saveAll(courseStudents);
+    }
+
+    private void syncCourseSubscriptions(Course course, List<UUID> targetStudentIds, List<UUID> removedStudentIds) {
+        targetStudentIds.forEach(studentId ->
+                paymentGrpcClient.ensureCourseSubscription(studentId, course.getId(), course.getName(), course.getBasePrice())
+        );
+
+        removedStudentIds.forEach(studentId ->
+                paymentGrpcClient.cancelCourseSubscription(studentId, course.getId())
+        );
+    }
+
+    private void cancelCourseSubscriptions(Course course, List<UUID> studentIds) {
+        studentIds.forEach(studentId -> paymentGrpcClient.cancelCourseSubscription(studentId, course.getId()));
+    }
+
+    private List<UUID> getStudentIds(UUID courseId) {
+        return courseStudentRepository.findByCourseIdOrderByCreatedAtAsc(courseId).stream()
+                .map(CourseStudent::getStudentId)
+                .toList();
     }
 
     private Map<UUID, List<UUID>> loadStudentIds(Collection<Course> courses) {
