@@ -411,6 +411,7 @@ services:
       <<: *spring-env
       SERVER_PORT: "8106"
       GRPC_SERVER_PORT: "9106"
+      GRPC_CLIENT_PAYMENT_SERVICE_ADDRESS: discovery:///payment-service
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://localhost:8106/actuator/health | grep -q UP"]
       <<: *healthcheck-spring
