@@ -1172,6 +1172,7 @@ interface CourseDto {
   status: CourseStatus;       // ACTIVE | INACTIVE | ARCHIVED
   teacherId: string | null;
   roomId: string | null;
+  studentIds: string[];       // UUID[] студентов, привязанных к курсу
   createdAt: string;
   updatedAt: string;
 }
@@ -1195,9 +1196,12 @@ interface CourseDto {
   "enrollmentLimit": 15,
   "color": "#2196F3",
   "teacherId": "uuid",
-  "roomId": "uuid"
+  "roomId": "uuid",
+  "studentIds": ["student-uuid-1", "student-uuid-2"]
 }
 ```
+
+> `studentIds` опционален. Если передан, backend сохраняет множественную связь студентов с курсом прямо при создании. Это связь с `course`, а не автоматическая запись в `schedule/group`.
 
 **Response:** `ApiResponse<CourseDto>`
 
@@ -1230,9 +1234,12 @@ interface CourseDto {
 {
   "name": "Новое название",
   "status": "INACTIVE",
-  "basePrice": 600000
+  "basePrice": 600000,
+  "studentIds": ["student-uuid-3", "student-uuid-4"]
 }
 ```
+
+> Если в `PUT /api/v1/courses/{id}` передать `studentIds: []`, все текущие привязки студентов к курсу будут очищены.
 
 **Response:** `ApiResponse<CourseDto>`
 

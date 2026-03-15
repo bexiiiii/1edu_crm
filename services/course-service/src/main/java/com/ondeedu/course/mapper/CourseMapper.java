@@ -9,6 +9,7 @@ import org.mapstruct.*;
 @Mapper(componentModel = "spring", nullValuePropertyMappingStrategy = NullValuePropertyMappingStrategy.IGNORE)
 public interface CourseMapper {
 
+    @Mapping(target = "studentIds", ignore = true)
     CourseDto toDto(Course course);
 
     @BeanMapping(builder = @Builder(disableBuilder = true))
