@@ -1,6 +1,7 @@
 package com.ondeedu.notification.listener;
 
 import com.ondeedu.common.config.RabbitMQConfig;
+import com.ondeedu.common.event.AssignmentNotificationEvent;
 import com.ondeedu.common.event.PaymentCompletedEvent;
 import com.ondeedu.common.event.StudentCreatedEvent;
 import com.ondeedu.notification.service.NotificationService;
@@ -32,5 +33,10 @@ public class NotificationListener {
     public void onPaymentCompleted(PaymentCompletedEvent event) {
         // Log receipt notification
         log.info("Payment completed for tenant: {}", event.getTenantId());
+    }
+
+    @RabbitListener(queues = RabbitMQConfig.NOTIFICATION_ASSIGNMENT_QUEUE)
+    public void onAssignmentNotification(AssignmentNotificationEvent event) {
+        notificationService.createInAppNotification(event);
     }
 }

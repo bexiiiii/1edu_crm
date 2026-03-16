@@ -26,11 +26,13 @@ public class TaskService {
 
     private final TaskRepository taskRepository;
     private final TaskMapper taskMapper;
+    private final TaskAssignmentNotificationService taskAssignmentNotificationService;
 
     @Transactional
     public TaskDto createTask(CreateTaskRequest request) {
         Task task = taskMapper.toEntity(request);
         task = taskRepository.save(task);
+        taskAssignmentNotificationService.notifyIfAssigned(null, task);
         log.info("Created task: {}", task.getTitle());
         return taskMapper.toDto(task);
     }
@@ -46,8 +48,10 @@ public class TaskService {
     public TaskDto updateTask(UUID id, UpdateTaskRequest request) {
         Task task = taskRepository.findById(id)
             .orElseThrow(() -> new ResourceNotFoundException("Task", "id", id));
+        UUID previousAssignedTo = task.getAssignedTo();
         taskMapper.updateEntity(task, request);
         task = taskRepository.save(task);
+        taskAssignmentNotificationService.notifyIfAssigned(previousAssignedTo, task);
         log.info("Updated task: {}", id);
         return taskMapper.toDto(task);
     }

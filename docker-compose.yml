@@ -390,6 +390,7 @@ services:
       <<: *spring-env
       SERVER_PORT: "8104"
       GRPC_SERVER_PORT: "9104"
+      GRPC_CLIENT_STAFF_SERVICE_ADDRESS: discovery:///staff-service
       SPRING_CLOUD_CONFIG_ENABLED: "false"
       SPRING_CLOUD_CONFIG_IMPORT_CHECK_ENABLED: "false"
     healthcheck:
@@ -589,6 +590,7 @@ services:
       <<: *spring-env
       SERVER_PORT: "8124"
       GRPC_SERVER_PORT: "9124"
+      GRPC_CLIENT_STAFF_SERVICE_ADDRESS: discovery:///staff-service
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://localhost:8124/actuator/health | grep -q UP"]
       <<: *healthcheck-spring

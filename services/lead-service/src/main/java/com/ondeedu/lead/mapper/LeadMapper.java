@@ -15,7 +15,6 @@ public interface LeadMapper {
     @BeanMapping(builder = @Builder(disableBuilder = true))
     @Mapping(target = "id", ignore = true)
     @Mapping(target = "stage", constant = "NEW")
-    @Mapping(target = "assignedTo", ignore = true)
     @Mapping(target = "createdAt", ignore = true)
     @Mapping(target = "updatedAt", ignore = true)
     @Mapping(target = "createdBy", ignore = true)

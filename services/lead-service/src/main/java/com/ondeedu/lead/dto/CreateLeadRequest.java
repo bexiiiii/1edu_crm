@@ -17,4 +17,5 @@ public class CreateLeadRequest {
     private String source;
     private String courseInterest;
     private String notes;
+    private String assignedTo;
 }

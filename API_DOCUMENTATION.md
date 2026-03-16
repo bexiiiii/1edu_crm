@@ -1081,9 +1081,12 @@ interface LeadDto {
   "email": "maria@example.com",
   "source": "Instagram",
   "courseInterest": "Английский язык",
-  "notes": "Интересуется групповыми занятиями"
+  "notes": "Интересуется групповыми занятиями",
+  "assignedTo": "staff-uuid"
 }
 ```
+
+> Если передан `assignedTo`, backend создаёт `IN_APP` уведомление для назначенного сотрудника.
 
 **Response:** `ApiResponse<LeadDto>`
 
@@ -1120,6 +1123,8 @@ interface LeadDto {
   "notes": "Перезвонить завтра"
 }
 ```
+
+> Если `assignedTo` изменился, backend создаёт `IN_APP` уведомление для нового ответственного сотрудника.
 
 **Response:** `ApiResponse<LeadDto>`
 
@@ -2372,8 +2377,10 @@ interface GroupAttendanceResponse {
 ```typescript
 interface NotificationDto {
   id: string;
-  type: string;               // EMAIL | SMS
+  type: string;               // EMAIL | SMS | IN_APP
   recipientEmail: string | null;
+  recipientStaffId: string | null;
+  recipientName: string | null;
   recipientPhone: string | null;
   subject: string | null;
   body: string;
@@ -2382,6 +2389,8 @@ interface NotificationDto {
   sentAt: string | null;
   tenantId: string;
   eventType: string;
+  referenceType: string | null; // TASK | LEAD | ...
+  referenceId: string | null;
   createdAt: string;
 }
 ```
@@ -2391,14 +2400,16 @@ interface NotificationDto {
 ### 15.1 Уведомления (`/api/v1/notifications`)
 
 #### `GET /api/v1/notifications` — Список уведомлений
-**Доступ:** `TENANT_ADMIN`, `MANAGER`, `SUPER_ADMIN`
+**Доступ:** любой аутентифицированный пользователь tenant
 
-> Для обычного tenant user backend автоматически ограничивает выборку текущим `tenant_id` из JWT.
+> Для обычного tenant user backend автоматически ограничивает выборку текущим пользователем по `email` / `preferred_username` из JWT.
+> `TENANT_ADMIN`, `MANAGER`, `SUPER_ADMIN` могут получать общую tenant-выборку; для просмотра только своих уведомлений передай `mine=true`.
 > `SUPER_ADMIN` без `X-Tenant-ID` видит общую выборку, с `X-Tenant-ID` получает уведомления конкретного тенанта.
 
 **Query Params:**
-- `type` (optional): `EMAIL | SMS`
+- `type` (optional): `EMAIL | SMS | IN_APP`
 - `status` (optional): `PENDING | SENT | FAILED`
+- `mine` (optional): `true | false` — принудительно вернуть только уведомления текущего пользователя
 - `page`, `size`
 
 **Response:** `ApiResponse<PageResponse<NotificationDto>>`
@@ -2406,7 +2417,10 @@ interface NotificationDto {
 ---
 
 #### `GET /api/v1/notifications/{id}` — Получить уведомление
-**Доступ:** `TENANT_ADMIN`, `MANAGER`, `SUPER_ADMIN`
+**Доступ:** любой аутентифицированный пользователь tenant
+
+> Для обычного tenant user доступно только собственное уведомление.
+> `TENANT_ADMIN`, `MANAGER`, `SUPER_ADMIN` могут открыть любое tenant-уведомление; `mine=true` принудительно ограничивает доступ своими уведомлениями.
 
 **Response:** `ApiResponse<NotificationDto>`
 
@@ -2625,6 +2639,8 @@ interface TaskDto {
 }
 ```
 
+> Если передан `assignedTo`, backend создаёт `IN_APP` уведомление для назначенного сотрудника.
+
 **Response:** `ApiResponse<TaskDto>`
 
 ---
@@ -2649,6 +2665,18 @@ interface TaskDto {
 
 #### `PUT /api/v1/tasks/{id}` — Обновить задачу
 **Доступ:** `TENANT_ADMIN` | `TASKS_EDIT`
+
+**Request Body:**
+```json
+{
+  "title": "Позвонить студентке Алисе",
+  "status": "IN_PROGRESS",
+  "assignedTo": "staff-uuid",
+  "dueDate": "2026-02-16"
+}
+```
+
+> Если `assignedTo` изменился, backend создаёт `IN_APP` уведомление для нового ответственного сотрудника.
 
 **Response:** `ApiResponse<TaskDto>`
 

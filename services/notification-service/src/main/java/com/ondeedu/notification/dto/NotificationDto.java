@@ -19,6 +19,8 @@ public class NotificationDto {
     private UUID id;
     private NotificationType type;
     private String recipientEmail;
+    private UUID recipientStaffId;
+    private String recipientName;
     private String recipientPhone;
     private String subject;
     private String body;
@@ -27,5 +29,7 @@ public class NotificationDto {
     private Instant sentAt;
     private String tenantId;
     private String eventType;
+    private String referenceType;
+    private UUID referenceId;
     private Instant createdAt;
 }

@@ -9,6 +9,7 @@ import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
 
 import java.time.Instant;
+import java.util.UUID;
 
 @Data
 @Builder
@@ -25,6 +26,12 @@ public class NotificationLog extends BaseEntity {
 
     @Column(name = "recipient_email", length = 255)
     private String recipientEmail;
+
+    @Column(name = "recipient_staff_id")
+    private UUID recipientStaffId;
+
+    @Column(name = "recipient_name", length = 255)
+    private String recipientName;
 
     @Column(name = "recipient_phone", length = 20)
     private String recipientPhone;
@@ -51,4 +58,10 @@ public class NotificationLog extends BaseEntity {
 
     @Column(name = "event_type", length = 100)
     private String eventType;
+
+    @Column(name = "reference_type", length = 50)
+    private String referenceType;
+
+    @Column(name = "reference_id")
+    private UUID referenceId;
 }

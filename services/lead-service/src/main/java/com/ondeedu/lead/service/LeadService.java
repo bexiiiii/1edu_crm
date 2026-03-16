@@ -31,11 +31,13 @@ public class LeadService {
     private final LeadRepository leadRepository;
     private final LeadMapper leadMapper;
     private final Optional<LeadSearchService> leadSearchService;
+    private final LeadAssignmentNotificationService leadAssignmentNotificationService;
 
     @Transactional
     public LeadDto createLead(CreateLeadRequest request) {
         Lead lead = leadMapper.toEntity(request);
         lead = leadRepository.save(lead);
+        leadAssignmentNotificationService.notifyIfAssigned(null, lead);
         indexLead(lead);
         log.info("Created lead: {} {}", lead.getFirstName(), lead.getLastName());
         return leadMapper.toDto(lead);
@@ -52,8 +54,10 @@ public class LeadService {
     public LeadDto updateLead(UUID id, UpdateLeadRequest request) {
         Lead lead = leadRepository.findById(id)
             .orElseThrow(() -> new ResourceNotFoundException("Lead", "id", id));
+        String previousAssignedTo = lead.getAssignedTo();
         leadMapper.updateEntity(lead, request);
         lead = leadRepository.save(lead);
+        leadAssignmentNotificationService.notifyIfAssigned(previousAssignedTo, lead);
         indexLead(lead);
         log.info("Updated lead: {}", id);
         return leadMapper.toDto(lead);

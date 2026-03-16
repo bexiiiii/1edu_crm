@@ -58,6 +58,8 @@ grpc:
   client:
     GLOBAL:
       negotiation-type: plaintext
+    staff-service:
+      address: static://localhost:9122
 
 management:
   endpoints:

@@ -34,6 +34,7 @@ public class RabbitMQConfig {
     public static final String PAYMENT_COMPLETED_QUEUE = "payment.completed.queue";
     public static final String NOTIFICATION_EMAIL_QUEUE = "notification.email.queue";
     public static final String NOTIFICATION_SMS_QUEUE = "notification.sms.queue";
+    public static final String NOTIFICATION_ASSIGNMENT_QUEUE = "notification.assignment.queue";
     public static final String LEAD_CREATED_QUEUE = "lead.created.queue";
     public static final String LEAD_CONVERTED_QUEUE = "lead.converted.queue";
 
@@ -43,6 +44,7 @@ public class RabbitMQConfig {
     public static final String PAYMENT_COMPLETED_KEY = "payment.completed";
     public static final String NOTIFICATION_EMAIL_KEY = "notification.email";
     public static final String NOTIFICATION_SMS_KEY = "notification.sms";
+    public static final String NOTIFICATION_ASSIGNMENT_KEY = "notification.assignment";
     public static final String LEAD_CREATED_KEY = "lead.created";
     public static final String LEAD_CONVERTED_KEY = "lead.converted";
 
@@ -109,6 +111,11 @@ public class RabbitMQConfig {
     }
 
     @Bean
+    public Queue notificationAssignmentQueue() {
+        return QueueBuilder.durable(NOTIFICATION_ASSIGNMENT_QUEUE).build();
+    }
+
+    @Bean
     public Binding notificationEmailBinding(Queue notificationEmailQueue, TopicExchange notificationExchange) {
         return BindingBuilder.bind(notificationEmailQueue).to(notificationExchange).with(NOTIFICATION_EMAIL_KEY);
     }
@@ -116,6 +123,13 @@ public class RabbitMQConfig {
     @Bean
     public Binding notificationSmsBinding(Queue notificationSmsQueue, TopicExchange notificationExchange) {
         return BindingBuilder.bind(notificationSmsQueue).to(notificationExchange).with(NOTIFICATION_SMS_KEY);
+    }
+
+    @Bean
+    public Binding notificationAssignmentBinding(Queue notificationAssignmentQueue, TopicExchange notificationExchange) {
+        return BindingBuilder.bind(notificationAssignmentQueue)
+                .to(notificationExchange)
+                .with(NOTIFICATION_ASSIGNMENT_KEY);
     }
 
     // Lead Exchange

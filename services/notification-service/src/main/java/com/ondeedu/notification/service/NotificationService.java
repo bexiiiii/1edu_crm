@@ -1,5 +1,6 @@
 package com.ondeedu.notification.service;
 
+import com.ondeedu.common.event.AssignmentNotificationEvent;
 import com.ondeedu.common.dto.PageResponse;
 import com.ondeedu.common.exception.ResourceNotFoundException;
 import com.ondeedu.notification.dto.NotificationDto;
@@ -11,6 +12,7 @@ import com.ondeedu.notification.repository.NotificationRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -56,37 +58,45 @@ public class NotificationService {
         return notificationRepository.save(log);
     }
 
+    @Transactional
+    public NotificationLog createInAppNotification(AssignmentNotificationEvent event) {
+        NotificationLog log = NotificationLog.builder()
+                .type(NotificationType.IN_APP)
+                .tenantId(event.getTenantId())
+                .eventType(event.getEventType())
+                .recipientEmail(event.getRecipientEmail())
+                .recipientStaffId(event.getRecipientStaffId())
+                .recipientName(event.getRecipientName())
+                .subject(event.getSubject())
+                .body(event.getBody())
+                .referenceType(event.getEntityType())
+                .referenceId(event.getEntityId())
+                .status(NotificationStatus.SENT)
+                .sentAt(Instant.now())
+                .build();
+
+        return notificationRepository.save(log);
+    }
+
     @Transactional(readOnly = true)
     public PageResponse<NotificationDto> listLogs(
             String tenantId,
+            String recipientEmail,
             NotificationType type,
             NotificationStatus status,
             Pageable pageable
     ) {
-        Page<NotificationLog> page;
-
-        if (StringUtils.hasText(tenantId)) {
-            if (type != null && status != null) {
-                page = notificationRepository.findByTenantIdAndTypeAndStatus(tenantId, type, status, pageable);
-            } else if (type != null) {
-                page = notificationRepository.findByTenantIdAndType(tenantId, type, pageable);
-            } else if (status != null) {
-                page = notificationRepository.findByTenantIdAndStatus(tenantId, status, pageable);
-            } else {
-                page = notificationRepository.findByTenantId(tenantId, pageable);
-            }
-        } else {
-            if (type != null && status != null) {
-                page = notificationRepository.findByTypeAndStatus(type, status, pageable);
-            } else if (type != null) {
-                page = notificationRepository.findByType(type, pageable);
-            } else if (status != null) {
-                page = notificationRepository.findByStatus(status, pageable);
-            } else {
-                page = notificationRepository.findAll(pageable);
-            }
+        if (recipientEmail != null && !StringUtils.hasText(recipientEmail)) {
+            return PageResponse.from(new PageImpl<>(java.util.List.of(), pageable, 0));
         }
 
+        Page<NotificationLog> page = notificationRepository.search(
+                StringUtils.hasText(tenantId) ? tenantId : null,
+                StringUtils.hasText(recipientEmail) ? recipientEmail : null,
+                type,
+                status,
+                pageable
+        );
         return PageResponse.from(page, notificationMapper::toDto);
     }
 
@@ -97,11 +107,17 @@ public class NotificationService {
     }
 
     @Transactional(readOnly = true)
-    public NotificationDto getById(UUID id, String tenantId) {
+    public NotificationDto getById(UUID id, String tenantId, String recipientEmail) {
         NotificationLog log = notificationRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("NotificationLog", "id", id));
         if (StringUtils.hasText(tenantId) && !tenantId.equals(log.getTenantId())) {
             throw new ResourceNotFoundException("NotificationLog", "id", id);
+        }
+        if (StringUtils.hasText(recipientEmail)) {
+            if (!StringUtils.hasText(log.getRecipientEmail())
+                    || !recipientEmail.equalsIgnoreCase(log.getRecipientEmail())) {
+                throw new ResourceNotFoundException("NotificationLog", "id", id);
+            }
         }
         return notificationMapper.toDto(log);
     }
