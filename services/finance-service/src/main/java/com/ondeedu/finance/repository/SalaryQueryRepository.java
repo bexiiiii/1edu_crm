@@ -1,5 +1,6 @@
 package com.ondeedu.finance.repository;
 
+import com.ondeedu.common.tenant.TenantContext;
 import com.ondeedu.common.payroll.SalaryType;
 import jakarta.persistence.EntityManager;
 import lombok.RequiredArgsConstructor;
@@ -28,6 +29,7 @@ public class SalaryQueryRepository {
 
     @SuppressWarnings("unchecked")
     private List<SalaryComputationRow> execute(LocalDate monthStart, LocalDate monthEnd, UUID staffId) {
+        String schema = resolveSchema();
         StringBuilder sql = new StringBuilder("""
                 SELECT
                     s.id,
@@ -41,18 +43,18 @@ public class SalaryQueryRepository {
                     s.hire_date,
                     COALESCE(SUM(CASE WHEN sg.id IS NOT NULL THEN COALESCE(c.base_price, 0) ELSE 0 END), 0) AS percentage_base_amount,
                     COUNT(sg.id) AS active_student_count
-                FROM staff s
-                LEFT JOIN schedules sch
+                FROM %s.staff s
+                LEFT JOIN %s.schedules sch
                   ON sch.teacher_id = s.id
                  AND sch.start_date <= :monthEnd
                  AND (sch.end_date IS NULL OR sch.end_date >= :monthStart)
-                LEFT JOIN student_groups sg
+                LEFT JOIN %s.student_groups sg
                   ON sg.group_id = sch.id
                  AND (sg.enrolled_at IS NULL OR sg.enrolled_at < :monthEndExclusive)
                  AND (sg.completed_at IS NULL OR sg.completed_at >= :monthStartTs)
-                LEFT JOIN courses c
+                LEFT JOIN %s.courses c
                   ON c.id = sch.course_id
-                """);
+                """.formatted(schema, schema, schema, schema));
 
         if (staffId != null) {
             sql.append(" WHERE s.id = :staffId ");
@@ -84,6 +86,17 @@ public class SalaryQueryRepository {
 
         List<Object[]> rows = query.getResultList();
         return rows.stream().map(this::mapRow).toList();
+    }
+
+    private String resolveSchema() {
+        String schema = TenantContext.getSchemaName();
+        if (schema == null || schema.isBlank()) {
+            return "tenant_default";
+        }
+        if (!schema.matches("^[a-zA-Z0-9_]+$")) {
+            throw new IllegalArgumentException("Invalid tenant schema: " + schema);
+        }
+        return schema;
     }
 
     private SalaryComputationRow mapRow(Object[] row) {
