@@ -8,10 +8,13 @@ import com.ondeedu.schedule.client.LessonGrpcClient.ManagedLesson;
 import com.ondeedu.schedule.dto.CreateScheduleRequest;
 import com.ondeedu.schedule.dto.ScheduleDto;
 import com.ondeedu.schedule.dto.UpdateScheduleRequest;
+import com.ondeedu.schedule.entity.ScheduleStudentEnrollment;
 import com.ondeedu.schedule.entity.Schedule;
 import com.ondeedu.schedule.entity.ScheduleStatus;
 import com.ondeedu.schedule.mapper.ScheduleMapper;
+import com.ondeedu.schedule.repository.CourseStudentLinkRepository;
 import com.ondeedu.schedule.repository.ScheduleRepository;
+import com.ondeedu.schedule.repository.ScheduleStudentEnrollmentRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.cache.annotation.CacheEvict;
@@ -22,12 +25,15 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.DayOfWeek;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 import java.util.function.Supplier;
@@ -38,9 +44,15 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class ScheduleService {
 
+    private static final String ACTIVE_ENROLLMENT_STATUS = "ACTIVE";
+    private static final String DROPPED_ENROLLMENT_STATUS = "DROPPED";
+    private static final String AUTO_FROM_COURSE_NOTE_PREFIX = "AUTO_FROM_COURSE:";
+
     private final ScheduleRepository scheduleRepository;
     private final ScheduleMapper scheduleMapper;
     private final LessonGrpcClient lessonGrpcClient;
+    private final CourseStudentLinkRepository courseStudentLinkRepository;
+    private final ScheduleStudentEnrollmentRepository scheduleStudentEnrollmentRepository;
 
     @Transactional
     @CacheEvict(value = "schedules", allEntries = true)
@@ -49,6 +61,7 @@ public class ScheduleService {
         Schedule schedule = scheduleMapper.toEntity(request);
         schedule = scheduleRepository.saveAndFlush(schedule);
 
+        synchronizeCourseStudents(schedule);
         synchronizeLessonsOnCreate(schedule);
 
         log.info("Created schedule: {} ({})", schedule.getName(), schedule.getId());
@@ -74,6 +87,7 @@ public class ScheduleService {
         validateScheduleRange(schedule.getStartDate(), schedule.getEndDate());
         schedule = scheduleRepository.saveAndFlush(schedule);
 
+        synchronizeCourseStudents(schedule);
         synchronizeLessonsOnUpdate(schedule, existingLessons);
 
         log.info("Updated schedule: {}", id);
@@ -88,6 +102,7 @@ public class ScheduleService {
         List<ManagedLesson> existingLessons = lessonGrpcClient.listGroupLessons(id);
 
         synchronizeLessonsOnDelete(id, existingLessons);
+        closeGroupEnrollments(id);
 
         try {
             scheduleRepository.delete(schedule);
@@ -125,6 +140,112 @@ public class ScheduleService {
     public PageResponse<ScheduleDto> searchSchedules(String query, Pageable pageable) {
         Page<Schedule> page = scheduleRepository.search(query, pageable);
         return PageResponse.from(page, scheduleMapper::toDto);
+    }
+
+    private void synchronizeCourseStudents(Schedule schedule) {
+        if (schedule.getCourseId() == null) {
+            dropAutoCourseEnrollments(schedule.getId());
+            return;
+        }
+
+        List<UUID> courseStudentIds = courseStudentLinkRepository
+                .findStudentIdsByCourseIdOrderByCreatedAtAsc(schedule.getCourseId());
+        Set<UUID> targetStudentIds = new LinkedHashSet<>(courseStudentIds);
+        List<ScheduleStudentEnrollment> groupEnrollments =
+                scheduleStudentEnrollmentRepository.findByGroupId(schedule.getId());
+
+        Map<UUID, ScheduleStudentEnrollment> autoEnrollmentsByStudentId = groupEnrollments.stream()
+                .filter(this::isAutoCourseEnrollment)
+                .collect(Collectors.toMap(
+                        ScheduleStudentEnrollment::getStudentId,
+                        enrollment -> enrollment,
+                        (left, right) -> Comparator
+                                .comparing((ScheduleStudentEnrollment enrollment) -> isActive(enrollment) ? 0 : 1)
+                                .thenComparing(ScheduleStudentEnrollment::getCreatedAt,
+                                        Comparator.nullsLast(Comparator.naturalOrder()))
+                                .compare(left, right) <= 0 ? left : right
+                ));
+
+        Set<UUID> activeStudentIds = groupEnrollments.stream()
+                .filter(this::isActive)
+                .map(ScheduleStudentEnrollment::getStudentId)
+                .collect(Collectors.toCollection(HashSet::new));
+
+        Instant now = Instant.now();
+
+        autoEnrollmentsByStudentId.forEach((studentId, enrollment) -> {
+            if (!targetStudentIds.contains(studentId) && isActive(enrollment)) {
+                markDropped(enrollment, now);
+                activeStudentIds.remove(studentId);
+            }
+        });
+
+        for (UUID studentId : targetStudentIds) {
+            ScheduleStudentEnrollment autoEnrollment = autoEnrollmentsByStudentId.get(studentId);
+            if (autoEnrollment != null) {
+                reactivateAutoEnrollment(autoEnrollment, schedule.getCourseId(), now);
+                activeStudentIds.add(studentId);
+                continue;
+            }
+
+            if (activeStudentIds.contains(studentId)) {
+                continue;
+            }
+
+            scheduleStudentEnrollmentRepository.save(ScheduleStudentEnrollment.builder()
+                    .studentId(studentId)
+                    .groupId(schedule.getId())
+                    .status(ACTIVE_ENROLLMENT_STATUS)
+                    .enrolledAt(now)
+                    .notes(autoCourseNote(schedule.getCourseId()))
+                    .build());
+            activeStudentIds.add(studentId);
+        }
+    }
+
+    private void dropAutoCourseEnrollments(UUID groupId) {
+        Instant now = Instant.now();
+        scheduleStudentEnrollmentRepository.findByGroupIdAndNotesStartingWith(groupId, AUTO_FROM_COURSE_NOTE_PREFIX)
+                .forEach(enrollment -> {
+                    if (isActive(enrollment)) {
+                        markDropped(enrollment, now);
+                    }
+                });
+    }
+
+    private void closeGroupEnrollments(UUID groupId) {
+        Instant now = Instant.now();
+        scheduleStudentEnrollmentRepository.findByGroupIdAndStatus(groupId, ACTIVE_ENROLLMENT_STATUS)
+                .forEach(enrollment -> markDropped(enrollment, now));
+    }
+
+    private void reactivateAutoEnrollment(ScheduleStudentEnrollment enrollment, UUID courseId, Instant now) {
+        enrollment.setNotes(autoCourseNote(courseId));
+        if (!isActive(enrollment)) {
+            enrollment.setStatus(ACTIVE_ENROLLMENT_STATUS);
+            enrollment.setCompletedAt(null);
+            if (enrollment.getEnrolledAt() == null) {
+                enrollment.setEnrolledAt(now);
+            }
+        }
+    }
+
+    private void markDropped(ScheduleStudentEnrollment enrollment, Instant now) {
+        enrollment.setStatus(DROPPED_ENROLLMENT_STATUS);
+        enrollment.setCompletedAt(now);
+    }
+
+    private boolean isActive(ScheduleStudentEnrollment enrollment) {
+        return Objects.equals(ACTIVE_ENROLLMENT_STATUS, enrollment.getStatus());
+    }
+
+    private boolean isAutoCourseEnrollment(ScheduleStudentEnrollment enrollment) {
+        return enrollment.getNotes() != null
+                && enrollment.getNotes().startsWith(AUTO_FROM_COURSE_NOTE_PREFIX);
+    }
+
+    private String autoCourseNote(UUID courseId) {
+        return AUTO_FROM_COURSE_NOTE_PREFIX + courseId;
     }
 
     private void synchronizeLessonsOnCreate(Schedule schedule) {
