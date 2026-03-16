@@ -1,6 +1,5 @@
 package com.ondeedu.finance.repository;
 
-import com.ondeedu.common.tenant.TenantContext;
 import com.ondeedu.common.payroll.SalaryType;
 import jakarta.persistence.EntityManager;
 import lombok.RequiredArgsConstructor;
@@ -18,6 +17,7 @@ import java.util.UUID;
 public class SalaryQueryRepository {
 
     private final EntityManager entityManager;
+    private final SalarySchemaResolver salarySchemaResolver;
 
     public List<SalaryComputationRow> listSalaryRows(LocalDate monthStart, LocalDate monthEnd) {
         return execute(monthStart, monthEnd, null);
@@ -29,7 +29,7 @@ public class SalaryQueryRepository {
 
     @SuppressWarnings("unchecked")
     private List<SalaryComputationRow> execute(LocalDate monthStart, LocalDate monthEnd, UUID staffId) {
-        String schema = resolveSchema();
+        String schema = salarySchemaResolver.resolveCurrentSchema();
         StringBuilder sql = new StringBuilder("""
                 SELECT
                     s.id,
@@ -86,17 +86,6 @@ public class SalaryQueryRepository {
 
         List<Object[]> rows = query.getResultList();
         return rows.stream().map(this::mapRow).toList();
-    }
-
-    private String resolveSchema() {
-        String schema = TenantContext.getSchemaName();
-        if (schema == null || schema.isBlank()) {
-            return "tenant_default";
-        }
-        if (!schema.matches("^[a-zA-Z0-9_]+$")) {
-            throw new IllegalArgumentException("Invalid tenant schema: " + schema);
-        }
-        return schema;
     }
 
     private SalaryComputationRow mapRow(Object[] row) {
