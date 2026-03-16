@@ -25,6 +25,7 @@ public class CreateStaffRequest {
     private String phone;
     @NotNull
     private StaffRole role;
+    private String customStatus;
     private String position;
     private BigDecimal salary;
     @Builder.Default

@@ -77,6 +77,9 @@ public class Staff extends BaseEntity {
     @Builder.Default
     private StaffStatus status = StaffStatus.ACTIVE;
 
+    @Column(name = "custom_status", length = 100)
+    private String customStatus;
+
     //Дополнительно
     @Column(name = "position", length = 200)
     private String position;

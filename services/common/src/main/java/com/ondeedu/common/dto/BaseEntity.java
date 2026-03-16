@@ -40,4 +40,19 @@ public abstract class BaseEntity {
 
     @Version
     private Long version;
+
+    @PrePersist
+    protected void onCreate() {
+        if (createdAt == null) {
+            createdAt = Instant.now();
+        }
+        if (version == null) {
+            version = 0L;
+        }
+    }
+
+    @PreUpdate
+    protected void onUpdate() {
+        updatedAt = Instant.now();
+    }
 }

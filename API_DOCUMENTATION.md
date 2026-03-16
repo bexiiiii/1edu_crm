@@ -735,6 +735,13 @@ interface UserDto {
 
 **Response:** `ApiResponse<UserDto>`
 
+> Текущий backend-flow для выдачи доступа сотруднику такой:
+> 1. создаёшь или выбираешь сотрудника через `/api/v1/staff`
+> 2. создаёшь ему логин/пароль через `/api/v1/auth/users`
+> 3. роль и granular permissions назначаются здесь же
+>
+> Отдельного endpoint вида `POST /api/v1/auth/users/from-staff` сейчас нет.
+
 ---
 
 #### `GET /api/v1/auth/users` — Список пользователей
@@ -2653,6 +2660,7 @@ interface StaffDto {
   phone: string | null;
   role: StaffRole;            // TEACHER | MANAGER | RECEPTIONIST | ACCOUNTANT | ADMIN
   status: StaffStatus;        // ACTIVE | ON_LEAVE | DISMISSED
+  customStatus: string | null; // Кастомный UI-статус из settings/staff-statuses
   position: string | null;
   salary: number | null;      // фиксированная зарплата, если salaryType=FIXED
   salaryType: SalaryType;     // FIXED | PER_STUDENT_PERCENTAGE
@@ -2680,6 +2688,7 @@ interface StaffDto {
   "email": "elena@abc.edu",
   "phone": "+998901234567",
   "role": "TEACHER",
+  "customStatus": "На испытательном сроке",
   "position": "Преподаватель английского",
   "salary": 3000000,
   "salaryType": "FIXED",
@@ -2721,6 +2730,7 @@ interface StaffDto {
 ```json
 {
   "status": "ON_LEAVE",
+  "customStatus": "Удаленно",
   "salary": 3500000,
   "salaryType": "FIXED"
 }
@@ -3217,6 +3227,19 @@ interface SettingsDto {
 
 ---
 
+#### `POST /api/v1/settings/logo` — Загрузить логотип и обновить `logoUrl`
+**Доступ:** `TENANT_ADMIN`
+
+**Request:** `multipart/form-data`
+
+| Поле | Тип | Обязательное | Описание |
+|------|-----|--------------|----------|
+| `file` | file | да | Изображение логотипа |
+
+**Response:** `ApiResponse<SettingsDto>`
+
+---
+
 ### 21.2 Настройка ролей (`/api/v1/settings/roles`)
 
 #### `GET /api/v1/settings/roles/permissions` — Все доступные permission-коды
@@ -3377,6 +3400,133 @@ interface AttendanceStatusConfigDto {
 
 #### `DELETE /api/v1/settings/attendance-statuses/{id}` — Удалить статус
 **Доступ:** `TENANT_ADMIN`
+
+**Response:** `ApiResponse<Void>`
+
+---
+
+### 21.5 Настройка кастомных статусов сотрудников (`/api/v1/settings/staff-statuses`)
+
+#### `GET /api/v1/settings/staff-statuses` — Список кастомных статусов сотрудников
+**Доступ:** `TENANT_ADMIN`, `MANAGER`
+
+**Response:** `ApiResponse<List<StaffStatusConfigDto>>`
+
+```typescript
+interface StaffStatusConfigDto {
+  id: string;
+  name: string;
+  color: string | null;
+  sortOrder: number;
+  active: boolean;
+  createdAt: string;
+  updatedAt: string | null;
+}
+```
+
+#### `POST /api/v1/settings/staff-statuses` — Создать кастомный статус сотрудника
+**Доступ:** `TENANT_ADMIN`
+
+**Request Body:**
+```json
+{
+  "name": "На испытательном сроке",
+  "color": "#FF9800",
+  "sortOrder": 1,
+  "active": true
+}
+```
+
+**Response:** `ApiResponse<StaffStatusConfigDto>`
+
+#### `PUT /api/v1/settings/staff-statuses/{id}` — Обновить кастомный статус сотрудника
+**Доступ:** `TENANT_ADMIN`
+
+**Response:** `ApiResponse<StaffStatusConfigDto>`
+
+#### `DELETE /api/v1/settings/staff-statuses/{id}` — Удалить кастомный статус сотрудника
+**Доступ:** `TENANT_ADMIN`
+
+**Response:** `ApiResponse<Void>`
+
+---
+
+### 21.6 Статьи доходов (`/api/v1/settings/income-categories`)
+
+#### `GET /api/v1/settings/income-categories` — Список статей доходов
+**Доступ:** `TENANT_ADMIN`, `MANAGER`, `ACCOUNTANT`
+
+**Response:** `ApiResponse<List<FinanceCategoryConfigDto>>`
+
+```typescript
+interface FinanceCategoryConfigDto {
+  id: string;
+  name: string;
+  type: "INCOME" | "EXPENSE";
+  color: string | null;
+  sortOrder: number;
+  active: boolean;
+  createdAt: string;
+  updatedAt: string | null;
+}
+```
+
+#### `POST /api/v1/settings/income-categories` — Создать статью дохода
+**Доступ:** `TENANT_ADMIN`, `ACCOUNTANT`
+
+**Request Body:**
+```json
+{
+  "name": "Абонементы",
+  "color": "#4CAF50",
+  "sortOrder": 1,
+  "active": true
+}
+```
+
+**Response:** `ApiResponse<FinanceCategoryConfigDto>`
+
+#### `PUT /api/v1/settings/income-categories/{id}` — Обновить статью дохода
+**Доступ:** `TENANT_ADMIN`, `ACCOUNTANT`
+
+**Response:** `ApiResponse<FinanceCategoryConfigDto>`
+
+#### `DELETE /api/v1/settings/income-categories/{id}` — Удалить статью дохода
+**Доступ:** `TENANT_ADMIN`, `ACCOUNTANT`
+
+**Response:** `ApiResponse<Void>`
+
+---
+
+### 21.7 Статьи расходов (`/api/v1/settings/expense-categories`)
+
+#### `GET /api/v1/settings/expense-categories` — Список статей расходов
+**Доступ:** `TENANT_ADMIN`, `MANAGER`, `ACCOUNTANT`
+
+**Response:** `ApiResponse<List<FinanceCategoryConfigDto>>`
+
+#### `POST /api/v1/settings/expense-categories` — Создать статью расхода
+**Доступ:** `TENANT_ADMIN`, `ACCOUNTANT`
+
+**Request Body:**
+```json
+{
+  "name": "Аренда",
+  "color": "#F44336",
+  "sortOrder": 1,
+  "active": true
+}
+```
+
+**Response:** `ApiResponse<FinanceCategoryConfigDto>`
+
+#### `PUT /api/v1/settings/expense-categories/{id}` — Обновить статью расхода
+**Доступ:** `TENANT_ADMIN`, `ACCOUNTANT`
+
+**Response:** `ApiResponse<FinanceCategoryConfigDto>`
+
+#### `DELETE /api/v1/settings/expense-categories/{id}` — Удалить статью расхода
+**Доступ:** `TENANT_ADMIN`, `ACCOUNTANT`
 
 **Response:** `ApiResponse<Void>`
 

@@ -73,3 +73,7 @@ springdoc:
 logging:
   level:
     com.ondeedu: DEBUG
+
+services:
+  file-service:
+    base-url: ${FILE_SERVICE_BASE_URL:http://localhost:8118}

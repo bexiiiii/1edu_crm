@@ -22,6 +22,7 @@ public class UpdateStaffRequest {
     private String phone;
     private StaffRole role;
     private StaffStatus status;
+    private String customStatus;
     private String position;
     private BigDecimal salary;
     private SalaryType salaryType;

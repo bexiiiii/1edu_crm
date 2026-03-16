@@ -70,6 +70,9 @@ public class TenantService {
             entityManager.createNativeQuery("SELECT system.ensure_settings_schema(:schemaName)")
                 .setParameter("schemaName", schemaName)
                 .getSingleResult();
+            entityManager.createNativeQuery("SELECT system.ensure_extended_settings_schema(:schemaName)")
+                .setParameter("schemaName", schemaName)
+                .getSingleResult();
             log.info("Schema created successfully: {}", schemaName);
         } catch (Exception e) {
             log.error("Failed to create schema for tenant {}: {}", tenant.getId(), e.getMessage());
