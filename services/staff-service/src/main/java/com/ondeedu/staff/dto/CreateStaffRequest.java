@@ -1,6 +1,9 @@
 package com.ondeedu.staff.dto;
 
+import com.ondeedu.common.payroll.SalaryType;
 import com.ondeedu.staff.entity.StaffRole;
+import jakarta.validation.constraints.DecimalMax;
+import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import lombok.*;
@@ -24,6 +27,11 @@ public class CreateStaffRequest {
     private StaffRole role;
     private String position;
     private BigDecimal salary;
+    @Builder.Default
+    private SalaryType salaryType = SalaryType.FIXED;
+    @DecimalMin("0.00")
+    @DecimalMax("100.00")
+    private BigDecimal salaryPercentage;
     private LocalDate hireDate;
     private String notes;
 }

@@ -19,6 +19,8 @@ public interface TransactionMapper {
     @Mapping(target = "createdBy", ignore = true)
     @Mapping(target = "updatedBy", ignore = true)
     @Mapping(target = "version", ignore = true)
+    @Mapping(target = "staffId", ignore = true)
+    @Mapping(target = "salaryMonth", ignore = true)
     Transaction toEntity(CreateTransactionRequest request);
 
     @Mapping(target = "id", ignore = true)
@@ -27,5 +29,7 @@ public interface TransactionMapper {
     @Mapping(target = "createdBy", ignore = true)
     @Mapping(target = "updatedBy", ignore = true)
     @Mapping(target = "version", ignore = true)
+    @Mapping(target = "staffId", ignore = true)
+    @Mapping(target = "salaryMonth", ignore = true)
     void updateEntity(@MappingTarget Transaction transaction, UpdateTransactionRequest request);
 }

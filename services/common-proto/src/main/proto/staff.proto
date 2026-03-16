@@ -34,6 +34,8 @@ message Staff {
   google.protobuf.StringValue notes = 12;
   google.protobuf.Timestamp created_at = 13;
   google.protobuf.Timestamp updated_at = 14;
+  google.protobuf.StringValue salary_type = 15;
+  google.protobuf.DoubleValue salary_percentage = 16;
 }
 
 message CreateStaffRequest {
@@ -48,6 +50,8 @@ message CreateStaffRequest {
   com.ondeedu.grpc.common.Money salary = 9;
   google.protobuf.Timestamp hire_date = 10;
   google.protobuf.StringValue notes = 11;
+  google.protobuf.StringValue salary_type = 12;
+  google.protobuf.DoubleValue salary_percentage = 13;
 }
 
 message GetStaffRequest {
@@ -68,6 +72,8 @@ message UpdateStaffRequest {
   google.protobuf.StringValue position = 10;
   com.ondeedu.grpc.common.Money salary = 11;
   google.protobuf.StringValue notes = 12;
+  google.protobuf.StringValue salary_type = 13;
+  google.protobuf.DoubleValue salary_percentage = 14;
 }
 
 message DeleteStaffRequest {

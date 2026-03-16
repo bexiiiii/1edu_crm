@@ -5,6 +5,7 @@ import com.ondeedu.common.dto.PageResponse;
 import com.ondeedu.finance.dto.*;
 import com.ondeedu.finance.entity.TransactionType;
 import com.ondeedu.finance.service.FinanceService;
+import com.ondeedu.finance.service.SalaryService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -27,6 +28,7 @@ import java.util.UUID;
 public class FinanceController {
 
     private final FinanceService financeService;
+    private final SalaryService salaryService;
 
     @PostMapping("/transactions")
     @ResponseStatus(HttpStatus.CREATED)
@@ -88,5 +90,32 @@ public class FinanceController {
             @PathVariable UUID studentId,
             @PageableDefault(size = 20, sort = "transactionDate", direction = Sort.Direction.DESC) Pageable pageable) {
         return ApiResponse.success(financeService.listByStudent(studentId, pageable));
+    }
+
+    @GetMapping("/salary")
+    @PreAuthorize("hasRole('TENANT_ADMIN') or hasAuthority('FINANCE_VIEW')")
+    @Operation(summary = "Get monthly salary overview by staff")
+    public ApiResponse<SalaryOverviewDto> getSalaryOverview(
+            @RequestParam(required = false) String month,
+            @RequestParam(required = false) Integer year) {
+        return ApiResponse.success(salaryService.getMonthlyOverview(month, year));
+    }
+
+    @GetMapping("/salary/staff/{staffId}")
+    @PreAuthorize("hasRole('TENANT_ADMIN') or hasAuthority('FINANCE_VIEW')")
+    @Operation(summary = "Get salary history for a staff member")
+    public ApiResponse<StaffSalaryHistoryDto> getStaffSalaryHistory(
+            @PathVariable UUID staffId,
+            @RequestParam(required = false) String from,
+            @RequestParam(required = false) String to) {
+        return ApiResponse.success(salaryService.getStaffHistory(staffId, from, to));
+    }
+
+    @PostMapping("/salary/payments")
+    @ResponseStatus(HttpStatus.CREATED)
+    @PreAuthorize("hasRole('TENANT_ADMIN') or hasAuthority('FINANCE_EDIT')")
+    @Operation(summary = "Record a salary payment")
+    public ApiResponse<SalaryPaymentDto> recordSalaryPayment(@Valid @RequestBody CreateSalaryPaymentRequest request) {
+        return ApiResponse.success(salaryService.recordSalaryPayment(request), "Salary payment recorded successfully");
     }
 }

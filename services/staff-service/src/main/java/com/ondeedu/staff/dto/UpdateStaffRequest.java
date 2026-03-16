@@ -1,7 +1,10 @@
 package com.ondeedu.staff.dto;
 
+import com.ondeedu.common.payroll.SalaryType;
 import com.ondeedu.staff.entity.StaffRole;
 import com.ondeedu.staff.entity.StaffStatus;
+import jakarta.validation.constraints.DecimalMax;
+import jakarta.validation.constraints.DecimalMin;
 import lombok.*;
 
 import java.math.BigDecimal;
@@ -21,6 +24,10 @@ public class UpdateStaffRequest {
     private StaffStatus status;
     private String position;
     private BigDecimal salary;
+    private SalaryType salaryType;
+    @DecimalMin("0.00")
+    @DecimalMax("100.00")
+    private BigDecimal salaryPercentage;
     private LocalDate hireDate;
     private String notes;
 }

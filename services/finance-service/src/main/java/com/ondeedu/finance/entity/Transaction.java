@@ -48,6 +48,12 @@ public class Transaction extends BaseEntity {
     @Column(name = "student_id")
     private UUID studentId;
 
+    @Column(name = "staff_id")
+    private UUID staffId;
+
+    @Column(name = "salary_month", length = 7)
+    private String salaryMonth;
+
     @Column(name = "notes", columnDefinition = "TEXT")
     private String notes;
 }

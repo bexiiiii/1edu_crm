@@ -3,10 +3,14 @@ package com.ondeedu.notification.controller;
 import com.ondeedu.common.dto.ApiResponse;
 import com.ondeedu.common.dto.PageResponse;
 import com.ondeedu.common.tenant.TenantContext;
+import com.ondeedu.notification.dto.BroadcastNotificationRequest;
+import com.ondeedu.notification.dto.BroadcastNotificationResultDto;
 import com.ondeedu.notification.dto.NotificationDto;
 import com.ondeedu.notification.entity.NotificationStatus;
 import com.ondeedu.notification.entity.NotificationType;
+import com.ondeedu.notification.service.BroadcastNotificationService;
 import com.ondeedu.notification.service.NotificationService;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
@@ -32,6 +36,7 @@ public class NotificationController {
     );
 
     private final NotificationService notificationService;
+    private final BroadcastNotificationService broadcastNotificationService;
 
     @GetMapping
     @PreAuthorize("isAuthenticated()")
@@ -67,6 +72,16 @@ public class NotificationController {
                 TenantContext.getTenantId(),
                 resolveRecipientEmail(jwt, authentication, mine)
         ));
+    }
+
+    @PostMapping("/broadcast")
+    @PreAuthorize("hasRole('SUPER_ADMIN')")
+    public ApiResponse<BroadcastNotificationResultDto> broadcast(
+            @Valid @RequestBody BroadcastNotificationRequest request) {
+        return ApiResponse.success(
+                broadcastNotificationService.broadcast(TenantContext.getTenantId(), request),
+                "Broadcast notification sent successfully"
+        );
     }
 
     private String resolveRecipientEmail(Jwt jwt, Authentication authentication, boolean mine) {

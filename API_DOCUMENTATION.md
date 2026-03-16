@@ -1827,6 +1827,8 @@ interface TransactionDto {
   description: string | null;
   transactionDate: string;       // "YYYY-MM-DD"
   studentId: string | null;
+  staffId: string | null;
+  salaryMonth: string | null;    // YYYY-MM, только для зарплатных выплат
   notes: string | null;
   createdAt: string;
   updatedAt: string;
@@ -1908,6 +1910,114 @@ interface TransactionDto {
 **Query Params:** `page`, `size`, `sort`
 
 **Response:** `ApiResponse<PageResponse<TransactionDto>>`
+
+---
+
+### 13.2 Зарплата сотрудников (`/api/v1/finance/salary`)
+
+#### `GET /api/v1/finance/salary` — Месячная сводка по зарплатам
+**Доступ:** `TENANT_ADMIN` | `FINANCE_VIEW`
+
+**Query Params:**
+- `month` (optional): `YYYY-MM`
+- `year` (optional): legacy-параметр; если `month=YYYY-MM`, он игнорируется
+
+**Response:**
+```typescript
+interface SalaryOverviewDto {
+  month: string;                // YYYY-MM
+  year: number;
+  currency: string;             // KZT
+  totalStaff: number;
+  totalDue: number;             // сколько должны начислить
+  totalPaid: number;            // сколько уже выплатили
+  totalOutstanding: number;     // долг по зарплате
+  entries: StaffSalarySummaryDto[];
+}
+
+interface StaffSalarySummaryDto {
+  staffId: string;
+  fullName: string;
+  role: StaffRole;
+  status: StaffStatus;
+  salaryType: SalaryType;       // FIXED | PER_STUDENT_PERCENTAGE
+  fixedSalary: number;
+  salaryPercentage: number | null;
+  activeStudentCount: number;   // активные ученики в группах преподавателя за месяц
+  percentageBaseAmount: number; // база расчёта по ученикам
+  dueAmount: number;
+  paidAmount: number;
+  outstandingAmount: number;
+  payments: SalaryPaymentDto[];
+}
+```
+
+---
+
+#### `GET /api/v1/finance/salary/staff/{staffId}` — История зарплаты сотрудника
+**Доступ:** `TENANT_ADMIN` | `FINANCE_VIEW`
+
+**Query Params:**
+- `from` (optional): `YYYY-MM`
+- `to` (optional): `YYYY-MM`
+
+**Response:**
+```typescript
+interface StaffSalaryHistoryDto {
+  staffId: string;
+  fullName: string;
+  role: StaffRole;
+  status: StaffStatus;
+  salaryType: SalaryType;
+  fixedSalary: number;
+  salaryPercentage: number | null;
+  totalDue: number;
+  totalPaid: number;
+  totalOutstanding: number;
+  months: SalaryMonthBreakdownDto[];
+  payments: SalaryPaymentDto[];
+}
+
+interface SalaryMonthBreakdownDto {
+  month: string;                // YYYY-MM
+  activeStudentCount: number;
+  percentageBaseAmount: number;
+  dueAmount: number;
+  paidAmount: number;
+  outstandingAmount: number;
+}
+
+interface SalaryPaymentDto {
+  transactionId: string;
+  staffId: string;
+  salaryMonth: string;          // YYYY-MM
+  amount: number;
+  currency: string;
+  paymentDate: string;          // YYYY-MM-DD
+  notes: string | null;
+  status: TransactionStatus;
+  createdAt: string;
+}
+```
+
+---
+
+#### `POST /api/v1/finance/salary/payments` — Зафиксировать выплату зарплаты
+**Доступ:** `TENANT_ADMIN` | `FINANCE_EDIT`
+
+**Request Body:**
+```json
+{
+  "staffId": "staff-uuid",
+  "salaryMonth": "2026-03",
+  "amount": 180000,
+  "currency": "KZT",
+  "paymentDate": "2026-03-20",
+  "notes": "Частичная выплата"
+}
+```
+
+**Response:** `ApiResponse<SalaryPaymentDto>`
 
 ---
 
@@ -2426,6 +2536,32 @@ interface NotificationDto {
 
 ---
 
+#### `POST /api/v1/notifications/broadcast` — Массовое уведомление всем сотрудникам
+**Доступ:** `SUPER_ADMIN`
+
+> Если `SUPER_ADMIN` передаёт `X-Tenant-ID`, уведомление уходит всем активным сотрудникам конкретного tenant.
+> Если `X-Tenant-ID` не передан, уведомление уходит всем активным сотрудникам всех tenant'ов.
+
+**Request Body:**
+```json
+{
+  "subject": "Технические работы",
+  "body": "Сегодня в 23:00 будут краткие технические работы.",
+  "alsoEmail": true
+}
+```
+
+**Response:**
+```typescript
+interface BroadcastNotificationResultDto {
+  scope: string;          // tenantId | ALL_TENANTS
+  tenantsAffected: number;
+  recipients: number;
+}
+```
+
+---
+
 ## 16. File Service (8118)
 
 ### FileUploadResponse
@@ -2518,7 +2654,9 @@ interface StaffDto {
   role: StaffRole;            // TEACHER | MANAGER | RECEPTIONIST | ACCOUNTANT | ADMIN
   status: StaffStatus;        // ACTIVE | ON_LEAVE | DISMISSED
   position: string | null;
-  salary: number | null;
+  salary: number | null;      // фиксированная зарплата, если salaryType=FIXED
+  salaryType: SalaryType;     // FIXED | PER_STUDENT_PERCENTAGE
+  salaryPercentage: number | null;
   hireDate: string | null;    // "YYYY-MM-DD"
   notes: string | null;
   createdAt: string;
@@ -2544,10 +2682,14 @@ interface StaffDto {
   "role": "TEACHER",
   "position": "Преподаватель английского",
   "salary": 3000000,
+  "salaryType": "FIXED",
+  "salaryPercentage": null,
   "hireDate": "2026-01-15",
   "notes": "Опыт 5 лет"
 }
 ```
+
+> Для преподавателя на проценте укажи `salaryType=PER_STUDENT_PERCENTAGE`, `salary=0` и `salaryPercentage`, например `35`.
 
 **Response:** `ApiResponse<StaffDto>`
 
@@ -2579,7 +2721,8 @@ interface StaffDto {
 ```json
 {
   "status": "ON_LEAVE",
-  "salary": 3500000
+  "salary": 3500000,
+  "salaryType": "FIXED"
 }
 ```
 

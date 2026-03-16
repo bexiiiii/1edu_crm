@@ -60,17 +60,42 @@ public class NotificationService {
 
     @Transactional
     public NotificationLog createInAppNotification(AssignmentNotificationEvent event) {
+        return createInAppNotification(
+                event.getTenantId(),
+                event.getRecipientEmail(),
+                event.getRecipientStaffId(),
+                event.getRecipientName(),
+                event.getSubject(),
+                event.getBody(),
+                event.getEventType(),
+                event.getEntityType(),
+                event.getEntityId()
+        );
+    }
+
+    @Transactional
+    public NotificationLog createInAppNotification(
+            String tenantId,
+            String recipientEmail,
+            UUID recipientStaffId,
+            String recipientName,
+            String subject,
+            String body,
+            String eventType,
+            String referenceType,
+            UUID referenceId
+    ) {
         NotificationLog log = NotificationLog.builder()
                 .type(NotificationType.IN_APP)
-                .tenantId(event.getTenantId())
-                .eventType(event.getEventType())
-                .recipientEmail(event.getRecipientEmail())
-                .recipientStaffId(event.getRecipientStaffId())
-                .recipientName(event.getRecipientName())
-                .subject(event.getSubject())
-                .body(event.getBody())
-                .referenceType(event.getEntityType())
-                .referenceId(event.getEntityId())
+                .tenantId(tenantId)
+                .eventType(eventType)
+                .recipientEmail(recipientEmail)
+                .recipientStaffId(recipientStaffId)
+                .recipientName(recipientName)
+                .subject(subject)
+                .body(body)
+                .referenceType(referenceType)
+                .referenceId(referenceId)
                 .status(NotificationStatus.SENT)
                 .sentAt(Instant.now())
                 .build();

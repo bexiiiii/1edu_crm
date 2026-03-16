@@ -1,5 +1,6 @@
 package com.ondeedu.staff.dto;
 
+import com.ondeedu.common.payroll.SalaryType;
 import com.ondeedu.staff.entity.StaffRole;
 import com.ondeedu.staff.entity.StaffStatus;
 import lombok.*;
@@ -25,6 +26,8 @@ public class StaffDto {
     private StaffStatus status;
     private String position;
     private BigDecimal salary;
+    private SalaryType salaryType;
+    private BigDecimal salaryPercentage;
     private LocalDate hireDate;
     private String notes;
     private Instant createdAt;

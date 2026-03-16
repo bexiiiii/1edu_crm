@@ -1,5 +1,6 @@
 package com.ondeedu.staff.entity;
 
+import com.ondeedu.common.payroll.SalaryType;
 import com.ondeedu.common.dto.BaseEntity;
 import jakarta.persistence.*;
 import lombok.*;
@@ -107,6 +108,14 @@ public class Staff extends BaseEntity {
     @Column(name = "salary", precision = 15, scale = 2)
     private BigDecimal salary;
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "salary_type", length = 30, nullable = false)
+    @Builder.Default
+    private SalaryType salaryType = SalaryType.FIXED;
+
+    @Column(name = "salary_percentage", precision = 5, scale = 2)
+    private BigDecimal salaryPercentage;
+
     @Column(name = "notes", columnDefinition = "TEXT")
     private String notes;
 
@@ -117,4 +126,3 @@ public class Staff extends BaseEntity {
         return firstName + " " + lastName;
     }
 }
-

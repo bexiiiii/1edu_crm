@@ -17,6 +17,7 @@ import net.devh.boot.grpc.server.service.GrpcService;
 import org.springframework.data.domain.Pageable;
 
 import java.util.UUID;
+import java.math.BigDecimal;
 
 @Slf4j
 @GrpcService
@@ -38,6 +39,8 @@ public class StaffGrpcService extends StaffServiceGrpc.StaffServiceImplBase {
                 .role(StaffRole.valueOf(request.getRole()))
                 .position(request.hasPosition() ? request.getPosition().getValue() : null)
                 .salary(request.hasSalary() ? GrpcUtils.fromMoney(request.getSalary()) : null)
+                .salaryType(request.hasSalaryType() ? com.ondeedu.common.payroll.SalaryType.valueOf(request.getSalaryType().getValue()) : null)
+                .salaryPercentage(request.hasSalaryPercentage() ? BigDecimal.valueOf(request.getSalaryPercentage().getValue()) : null)
                 .build();
 
             StaffDto staff = staffService.createStaff(dto);
@@ -85,6 +88,8 @@ public class StaffGrpcService extends StaffServiceGrpc.StaffServiceImplBase {
                 .status(request.hasStatus() ? StaffStatus.valueOf(request.getStatus().getValue()) : null)
                 .position(request.hasPosition() ? request.getPosition().getValue() : null)
                 .salary(request.hasSalary() ? GrpcUtils.fromMoney(request.getSalary()) : null)
+                .salaryType(request.hasSalaryType() ? com.ondeedu.common.payroll.SalaryType.valueOf(request.getSalaryType().getValue()) : null)
+                .salaryPercentage(request.hasSalaryPercentage() ? BigDecimal.valueOf(request.getSalaryPercentage().getValue()) : null)
                 .build();
 
             StaffDto staff = staffService.updateStaff(UUID.fromString(request.getStaffId()), dto);
@@ -181,6 +186,8 @@ public class StaffGrpcService extends StaffServiceGrpc.StaffServiceImplBase {
         if (dto.getPhone() != null) builder.setPhone(StringValue.of(dto.getPhone()));
         if (dto.getPosition() != null) builder.setPosition(StringValue.of(dto.getPosition()));
         if (dto.getSalary() != null) builder.setSalary(GrpcUtils.toMoney(dto.getSalary(), "UZS"));
+        if (dto.getSalaryType() != null) builder.setSalaryType(StringValue.of(dto.getSalaryType().name()));
+        if (dto.getSalaryPercentage() != null) builder.setSalaryPercentage(com.google.protobuf.DoubleValue.of(dto.getSalaryPercentage().doubleValue()));
         if (dto.getNotes() != null) builder.setNotes(StringValue.of(dto.getNotes()));
         if (dto.getCreatedAt() != null) builder.setCreatedAt(GrpcUtils.toTimestamp(dto.getCreatedAt()));
         if (dto.getUpdatedAt() != null) builder.setUpdatedAt(GrpcUtils.toTimestamp(dto.getUpdatedAt()));
