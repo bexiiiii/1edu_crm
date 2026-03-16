@@ -115,13 +115,24 @@ public class NotificationService {
             return PageResponse.from(new PageImpl<>(java.util.List.of(), pageable, 0));
         }
 
-        Page<NotificationLog> page = notificationRepository.search(
-                StringUtils.hasText(tenantId) ? tenantId : null,
-                StringUtils.hasText(recipientEmail) ? recipientEmail : null,
-                type,
-                status,
-                pageable
-        );
+        String normalizedTenantId = StringUtils.hasText(tenantId) ? tenantId : null;
+        Page<NotificationLog> page;
+        if (StringUtils.hasText(recipientEmail)) {
+            page = notificationRepository.searchByRecipientEmail(
+                    normalizedTenantId,
+                    recipientEmail.trim().toLowerCase(),
+                    type,
+                    status,
+                    pageable
+            );
+        } else {
+            page = notificationRepository.search(
+                    normalizedTenantId,
+                    type,
+                    status,
+                    pageable
+            );
+        }
         return PageResponse.from(page, notificationMapper::toDto);
     }
 

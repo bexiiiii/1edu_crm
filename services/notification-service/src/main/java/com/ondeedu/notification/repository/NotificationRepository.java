@@ -37,11 +37,24 @@ public interface NotificationRepository extends JpaRepository<NotificationLog, U
     @Query("""
             SELECT n FROM NotificationLog n
             WHERE (:tenantId IS NULL OR n.tenantId = :tenantId)
-              AND (:recipientEmail IS NULL OR LOWER(n.recipientEmail) = LOWER(:recipientEmail))
               AND (:type IS NULL OR n.type = :type)
               AND (:status IS NULL OR n.status = :status)
             """)
     Page<NotificationLog> search(
+            @Param("tenantId") String tenantId,
+            @Param("type") NotificationType type,
+            @Param("status") NotificationStatus status,
+            Pageable pageable
+    );
+
+    @Query("""
+            SELECT n FROM NotificationLog n
+            WHERE (:tenantId IS NULL OR n.tenantId = :tenantId)
+              AND LOWER(n.recipientEmail) = :recipientEmail
+              AND (:type IS NULL OR n.type = :type)
+              AND (:status IS NULL OR n.status = :status)
+            """)
+    Page<NotificationLog> searchByRecipientEmail(
             @Param("tenantId") String tenantId,
             @Param("recipientEmail") String recipientEmail,
             @Param("type") NotificationType type,
