@@ -508,6 +508,7 @@ services:
       <<: *spring-env
       SERVER_PORT: "8116"
       GRPC_SERVER_PORT: "-1"
+      JAVA_OPTS: "-Xms${JVM_XMS_MEDIUM:-192m} -Xmx${JVM_XMX_MEDIUM:-384m}"
       SPRING_CLOUD_CONFIG_ENABLED: "false"
       SPRING_CLOUD_CONFIG_IMPORT_CHECK_ENABLED: "false"
       SPRING_FLYWAY_VALIDATE_ON_MIGRATE: "false"

@@ -805,7 +805,7 @@ services:
       <<: *spring-env
       SERVER_PORT: "8116"
       GRPC_SERVER_PORT: "-1"
-      JAVA_OPTS: "-Xms${JVM_XMS_SMALL:-128m} -Xmx${JVM_XMX_SMALL:-256m}"
+      JAVA_OPTS: "-Xms${JVM_XMS_MEDIUM:-192m} -Xmx${JVM_XMX_MEDIUM:-384m}"
     depends_on:
       rabbitmq:
         condition: service_healthy
@@ -816,10 +816,10 @@ services:
     deploy:
       resources:
         limits:
-          memory: 384M
+          memory: 512M
           cpus: "0.5"
         reservations:
-          memory: 192M
+          memory: 256M
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://localhost:8116/actuator/health | grep -q UP"]
       <<: *healthcheck-spring
