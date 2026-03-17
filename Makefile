@@ -72,7 +72,8 @@ all: proto build
 # Builds JARs with Gradle (uses server's Gradle cache — fast after first run),
 # then packages into Docker images via Dockerfile.prebuilt (~10 sec per service).
 deploy:
-	./gradlew build -x test
+	docker compose down
+	./gradlew build -x test --no-daemon
 	docker compose build
 	docker compose up -d
 
@@ -80,6 +81,7 @@ deploy:
 #   make deploy-service s=notification-service
 deploy-service:
 	@test -n "$(s)" || (echo "Usage: make deploy-service s=<service-name>" && exit 1)
-	./gradlew :services:$(s):bootJar -x test
+	docker compose stop $(s)
+	./gradlew :services:$(s):bootJar -x test --no-daemon
 	docker compose build --no-deps $(s)
 	docker compose up -d --no-deps $(s)
