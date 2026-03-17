@@ -1,16 +1,18 @@
-.PHONY: help build clean test infra-up infra-down proto all services-up services-down services-logs docker-deploy docker-deploy-fast
+.PHONY: help build clean test infra-up infra-down proto all services-up services-down services-logs deploy deploy-service
 
 help:
 	@echo "1edu CRM - Available commands:"
 	@echo ""
-	@echo "  make build        - Build all services"
-	@echo "  make clean        - Clean build artifacts"
-	@echo "  make test         - Run all tests"
-	@echo "  make proto        - Generate gRPC code from proto files"
-	@echo "  make infra-up     - Start infrastructure (Docker Compose)"
-	@echo "  make infra-down   - Stop infrastructure"
-	@echo "  make infra-logs   - Show infrastructure logs"
-	@echo "  make all          - Build and start everything"
+	@echo "  make build              - Build all service JARs (skip tests)"
+	@echo "  make clean              - Clean build artifacts"
+	@echo "  make test               - Run all tests"
+	@echo "  make proto              - Generate gRPC code from proto files"
+	@echo "  make infra-up           - Start infrastructure (Docker Compose)"
+	@echo "  make infra-down         - Stop infrastructure"
+	@echo "  make infra-logs         - Show infrastructure logs"
+	@echo "  make deploy             - Build JARs + rebuild Docker images + restart all"
+	@echo "  make deploy-service s=X - Rebuild and restart a single service (e.g. s=notification-service)"
+	@echo "  make all                - Build and start everything"
 	@echo ""
 
 build:
@@ -65,3 +67,19 @@ services-logs:
 all: proto build
 	@echo "Build complete. Start infrastructure with 'make infra-up'"
 	@echo "Then run 'make services-up' to start all services."
+
+# ─── Deploy (server-side build, then Docker package) ─────────
+# Builds JARs with Gradle (uses server's Gradle cache — fast after first run),
+# then packages into Docker images via Dockerfile.prebuilt (~10 sec per service).
+deploy:
+	./gradlew build -x test
+	docker compose build
+	docker compose up -d
+
+# Rebuild and restart a single service only:
+#   make deploy-service s=notification-service
+deploy-service:
+	@test -n "$(s)" || (echo "Usage: make deploy-service s=<service-name>" && exit 1)
+	./gradlew :services:$(s):bootJar -x test
+	docker compose build --no-deps $(s)
+	docker compose up -d --no-deps $(s)

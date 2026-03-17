@@ -23,5 +23,6 @@ USER app
 ENTRYPOINT ["java", \
   "-XX:+UseContainerSupport", \
   "-XX:MaxRAMPercentage=75.0", \
+  "-Xss512k", \
   "-Djava.security.egd=file:/dev/./urandom", \
   "-jar", "app.jar"]

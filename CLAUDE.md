@@ -18,6 +18,31 @@ make infra-down     # Stop infrastructure
 make infra-reset    # Stop + wipe volumes + restart infrastructure
 ```
 
+### Deploy on server (recommended — fast builds)
+
+`docker-compose.yml` использует `Dockerfile.prebuilt` — JAR'ы не собираются внутри Docker, сервер сначала строит их через Gradle (используя свой кэш), затем Docker просто упаковывает (~10 сек на сервис):
+
+```bash
+# Первый раз (Gradle скачивает зависимости, ~5-10 мин):
+git pull && make deploy
+
+# Повторные деплои (Gradle кэш уже прогрет, ~1-2 мин на все):
+git pull && make deploy
+
+# Обновить один сервис (самый быстрый вариант):
+make deploy-service s=notification-service
+make deploy-service s=tenant-service
+```
+
+**Как это работает:**
+1. `./gradlew build -x test` — компилирует JAR'ы на сервере (кэш в `~/.gradle`)
+2. `docker compose build` — Docker читает готовые JAR'ы из `services/<name>/build/libs/` и упаковывает в образ (~10 сек каждый)
+3. `docker compose up -d` — перезапускает контейнеры
+
+**Dockerfile.prebuilt** (используется по умолчанию): `FROM eclipse-temurin:21-jre` + копирует JAR + запускает с флагами `-XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0 -Xss512k`.
+
+**Полный Docker-build** (`Dockerfile`) нужен только в CI/CD где нет Gradle на хосте — занимает ~18 мин первый раз.
+
 ### Run individual services
 ```bash
 ./gradlew :services:student-service:bootRun

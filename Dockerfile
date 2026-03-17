@@ -1,6 +1,9 @@
 # ================================================
 # Stage 1: Build (Debian-based for glibc — needed by protoc-gen-grpc-java)
+# Requires Docker BuildKit (enabled by default in Docker 20+).
+# Gradle home is cached between builds — first build ~18 min, subsequent ~2-3 min.
 # ================================================
+# syntax=docker/dockerfile:1
 FROM eclipse-temurin:21-jdk AS builder
 WORKDIR /build
 
@@ -37,14 +40,16 @@ COPY services/config-server/build.gradle     services/config-server/build.gradle
 # Copy proto files (needed for common-proto build)
 COPY services/common-proto/src/ services/common-proto/src/
 
-# Download dependencies (cached if no build.gradle changes)
+# Download dependencies with BuildKit cache — Gradle home persists between builds
 ARG SERVICE_NAME
-RUN chmod +x gradlew && \
+RUN --mount=type=cache,target=/root/.gradle,sharing=locked \
+    chmod +x gradlew && \
     ./gradlew :services:${SERVICE_NAME}:dependencies --no-daemon -q 2>/dev/null || true
 
-# Copy all sources and build the service
+# Copy all sources and build the service (Gradle cache reused)
 COPY services/ services/
-RUN ./gradlew :services:${SERVICE_NAME}:bootJar -x test --no-daemon
+RUN --mount=type=cache,target=/root/.gradle,sharing=locked \
+    ./gradlew :services:${SERVICE_NAME}:bootJar -x test --no-daemon
 
 # ================================================
 # Stage 2: Runtime
