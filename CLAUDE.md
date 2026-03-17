@@ -73,19 +73,19 @@ Tenant schemas are created via `system.create_tenant_schema()` SQL function (see
 | tenant-service | 8100 | 9100 | System schema, no multi-tenancy |
 | auth-service | 8101 | — | Keycloak Admin Client, no DB |
 | student-service | 8102 | 9102 | |
-| lead-service | 8104 | 9104 | |
-| course-service | 8106 | 9106 | |
-| schedule-service | 8108 | 9108 | Room + Schedule entities |
+| lead-service | 8104 | 9104 | Assignment notifications via RabbitMQ |
+| course-service | 8106 | 9106 | Auto-subscription creation via gRPC |
+| schedule-service | 8108 | 9108 | Room + Schedule + auto-lesson creation + student sync |
 | payment-service | 8110 | 9110 | Subscription + PriceList + StudentPayment |
-| finance-service | 8112 | 9112 | Transactions (INCOME/EXPENSE) |
+| finance-service | 8112 | 9112 | Transactions (INCOME/EXPENSE) + Payroll |
 | analytics-service | 8114 | 9114 | NamedParameterJdbcTemplate, no JPA entities |
-| notification-service | 8116 | — | RabbitMQ consumer, Email via Spring Mail |
+| notification-service | 8116 | — | RabbitMQ consumer, Email via Spring Mail, Broadcast |
 | file-service | 8118 | — | MinIO, no DB |
 | report-service | 8120 | — | PDF/Excel, no DB, calls analytics via gRPC |
-| staff-service | 8122 | 9122 | |
-| task-service | 8124 | 9124 | |
+| staff-service | 8122 | 9122 | Salary fields (salaryType, salaryPercentage) |
+| task-service | 8124 | 9124 | Assignment notifications via RabbitMQ |
 | lesson-service | 8126 | 9126 | Lesson + Attendance journal |
-| settings-service | 8128 | 9128 | Tenant settings (upsert, one row per tenant) |
+| settings-service | 8128 | 9128 | Tenant settings + catalogs (attendance/payment/roles/staff/finance) |
 | audit-service | 8130 | — | MongoDB, RabbitMQ listener, no JPA/Redis/gRPC |
 
 ### Key Patterns
@@ -286,16 +286,47 @@ Spring Boot 3.4.2, Spring Cloud 2024.0.0, gRPC 1.68.2, Protobuf 4.29.3, PostgreS
 | `/api/v1/settings` | GET | Все роли | Получить настройки текущего тенанта (или дефолтные если не настроены) |
 | `/api/v1/settings` | PUT | TENANT_ADMIN | Обновить (или создать) настройки тенанта (upsert) |
 
-### Таблица `tenant_settings` (Flyway V1)
+### Таблица `tenant_settings` (Flyway V1, расширена V13/V15)
 Одна строка на тенант-схему. Поля:
 - **Общие**: `timezone` (Asia/Tashkent), `currency` (UZS), `language` (ru)
 - **Рабочие часы**: `working_hours_start` (09:00), `working_hours_end` (21:00)
 - **Рабочие дни**: `working_days` (JSON строка, дефолт: Пн–Сб)
-- **Занятия**: `default_lesson_duration_min` (60), `trial_lesson_duration_min` (45), `max_group_size` (20)
+- **Занятия**: `default_lesson_duration_min` (60), `trial_lesson_duration_min` (45), `max_group_size` (20), `slot_duration_min`
 - **Посещаемость**: `auto_mark_attendance` (false), `attendance_window_days` (7)
 - **Уведомления**: `sms_enabled` (false), `email_enabled` (true), `sms_sender_name`
 - **Финансы**: `late_payment_reminder_days` (3), `subscription_expiry_reminder_days` (3)
-- **UI**: `brand_color` (#4CAF50)
+- **UI**: `brand_color` (#4CAF50), `logo_url`
+- **Профиль центра** (V13): `center_name`, `city`, `work_phone`, `address`, `director_name`, `director_basis`, `corporate_email`, `bank_account`, `bank`, `bin`, `bik`, `requisites`, `branch_count`, `main_direction`
+
+### Каталоги настроек (V13/V15 — pre-configured catalogs)
+
+Системные справочники с дефолтными значениями, которые можно настраивать под тенанта:
+
+| Таблица | Описание | Дефолтные значения |
+|---|---|---|
+| `attendance_status_configs` | Статусы посещаемости с флагами | 6 системных: Посетил, Пропустил, Болел, Отпуск, Посетил авто, Разовый урок |
+| `payment_sources` | Источники оплаты | 5 вариантов: Безналичный, Интернет эквайринг, Наличные, Карта/терминал, Kaspi QR |
+| `role_configs` | Шаблоны ролей с разрешениями | Системные роли CRM |
+| `staff_status_configs` | Статусы сотрудников | Кастомные статусы для UЦ |
+| `finance_category_configs` | Категории доходов/расходов | 7 дефолтных: 3 дохода (Абонементы, Услуги, Прочие), 4 расхода (Зарплаты, Аренда, Маркетинг, Коммунальные) |
+
+Флаги `attendance_status_configs`:
+- `deduct_lesson` — списывать занятие с абонемента
+- `require_payment` — требует оплаты
+- `count_as_attended` — считается посещением
+
+### API (расширенный)
+| Эндпоинт | Метод | Доступ | Описание |
+|---|---|---|---|
+| `/api/v1/settings` | GET | Все роли | Получить настройки (или дефолтные) |
+| `/api/v1/settings` | PUT | TENANT_ADMIN | Upsert настроек (включая logo_url) |
+| `/api/v1/settings/finance-categories` | GET/POST | TENANT_ADMIN | Список/создание категорий финансов |
+| `/api/v1/settings/finance-categories/{id}` | PUT/DELETE | TENANT_ADMIN | Обновление/удаление категории |
+| `/api/v1/settings/staff-statuses` | GET/POST | TENANT_ADMIN | Список/создание статусов сотрудников |
+| `/api/v1/settings/staff-statuses/{id}` | PUT/DELETE | TENANT_ADMIN | Обновление/удаление статуса |
+
+### Logo Upload
+`FileServiceClient` в settings-service — REST-клиент для загрузки логотипа в MinIO через `/api/v1/files/upload`. `upsertSettings()` обрабатывает файл и сохраняет URL в `logo_url`.
 
 ### Поведение upsert
 `SettingsService.upsertSettings()` использует `findAll().stream().findFirst()` — если записи нет, создаёт новую с дефолтными значениями, затем применяет патч через MapStruct (`NullValuePropertyMappingStrategy.IGNORE` — null поля в запросе не перезаписывают).
@@ -391,6 +422,123 @@ TRIAL → ACTIVE → SUSPENDED → INACTIVE (soft delete)
 ### Flyway миграция V2 (tenant-service)
 `V2__add_ban_and_soft_delete.sql` — добавляет поля `banned_at`, `banned_reason`, `banned_until`, `deleted_at` в `system.tenants`, обновляет CHECK constraint для статуса `BANNED`.
 
+## Observability Stack
+
+### Доступ к инструментам
+| Инструмент | URL | Назначение |
+|---|---|---|
+| Grafana | http://localhost:3000 | Дашборды (логин из .env `GF_SECURITY_ADMIN_*`) |
+| Prometheus | http://localhost:9090 | Метрики и алерты |
+| Zipkin | http://localhost:9411 | Distributed tracing |
+| RabbitMQ UI | http://localhost:15672 | Очереди и consumers |
+| Kibana | http://localhost:5601 | Логи (если настроен) |
+
+### Архитектура observability
+- **Metrics**: Micrometer → `/actuator/prometheus` → Prometheus (scrape 15s) → Grafana
+- **Tracing**: Spring Cloud Sleuth → Zipkin (storage: Elasticsearch, индекс `zipkin`)
+- **RabbitMQ metrics**: built-in `rabbitmq_prometheus` plugin → порт 15692 → Prometheus
+- **PostgreSQL metrics**: `postgres-exporter` → порт 9187 → Prometheus
+- **Redis metrics**: `redis_exporter` → порт 9121 → Prometheus
+
+### Grafana дашборды (auto-provisioned)
+Файлы в `infrastructure/grafana/provisioning/dashboards/`:
+| Файл | Дашборд | Что показывает |
+|---|---|---|
+| `01-services-overview.json` | Services Overview | req/s, latency p50/p95/p99, error rate по сервисам |
+| `02-jvm-metrics.json` | JVM Metrics | heap, threads, GC, HikariCP connection pool |
+| `03-infrastructure.json` | Infrastructure | PostgreSQL, Redis, RabbitMQ метрики |
+
+### Prometheus scrape targets
+Все сервисы scrape по именам Docker-контейнеров (`service-name:port/actuator/prometheus`).
+**Порты** — точно по port map из CLAUDE.md.
+
+### Zipkin — persistent storage
+Zipkin использует Elasticsearch для хранения трейсов (`ES_HOSTS=http://elasticsearch:9200`, индекс `zipkin`).
+Данные не теряются при перезапуске контейнера.
+
+### RabbitMQ Prometheus Plugin
+Файл `infrastructure/rabbitmq/enabled_plugins` монтируется в контейнер и включает `rabbitmq_prometheus`.
+Метрики доступны на порту **15692**.
+
+### Правила при добавлении нового сервиса
+1. Добавить job в `infrastructure/prometheus/prometheus.yml` (имя контейнера + правильный порт)
+2. Убедиться что в `application.yml` есть `management.endpoints.web.exposure.include: prometheus`
+3. Добавить панель в `01-services-overview.json` если нужен мониторинг HTTP
+
+## Performance & High-Load Optimizations
+
+### Database Indexes (V16 — tenant-service migration)
+`V16__add_performance_indexes.sql` создаёт функцию `system.add_performance_indexes(schema)` и применяет её ко всем существующим схемам.
+
+Покрытые таблицы и индексы:
+| Таблица | Индексы |
+|---|---|
+| `students` | `phone`, `email` (partial), `status`, `created_at`, GIN trgm на `first_name`/`last_name` |
+| `leads` | `phone`, `stage`, `assigned_to`, `created_at` |
+| `staff` | `role`, `status` |
+| `courses` | `teacher_id`, `status` |
+| `schedules` | `course_id`, `teacher_id`, `status` |
+| `tasks` | `assigned_to`, `status`, `due_date` |
+| `transactions` | `(type, status, transaction_date)` составной, `student_id`, `transaction_date` |
+| `subscriptions` | `student_id`, `status`, `(student_id, status)` составной, `end_date` |
+| `student_payments` | `student_id`, `subscription_id`, `payment_month` |
+| `lessons` | `group_id`, `teacher_id`, `(lesson_date, status)` составной |
+| `attendances` | `lesson_id`, `student_id`, `status` |
+| `student_groups` | `student_id`, `group_id`, `status` |
+
+**Правило для новых таблиц**: при добавлении таблицы в `create_tenant_schema()` — сразу добавлять индексы в `add_performance_indexes()`.
+
+### Tracing & Logging
+Все сервисы: `probability: 0.1` (10% семплинг), `com.ondeedu: INFO`, `org.hibernate.SQL: WARN`.
+**Для отладки локально** — временно поменять на `probability: 1.0` и `DEBUG`.
+
+### RabbitMQ Consumer Concurrency
+Добавлено во все сервисы с RabbitMQ:
+```yaml
+spring.rabbitmq.listener.simple:
+  concurrency: 5        # min threads
+  max-concurrency: 10   # max threads under load
+  prefetch: 20          # сообщений за раз на consumer
+```
+Notification-service: `concurrency: 10`, `max-concurrency: 20`, `prefetch: 30` — высокий приоритет доставки уведомлений.
+
+### Async Email
+`EmailService.sendEmail()` аннотирован `@Async` — SMTP-вызов не блокирует RabbitMQ listener thread. `@EnableAsync` добавлен в `NotificationServiceApplication`. Ошибки SMTP логируются без реброска исключения (fire-and-forget).
+
+### Admin Dashboard — Cache + Parallel
+`AdminDashboardService.getDashboard()`:
+- `@Cacheable(value = "admin:dashboard")` — TTL 5 мин, не гоняем 7×N SQL запросов при каждом вызове
+- `parallelStream()` для `buildStatsWithDb()` — параллельный сбор статистики по схемам
+
+`SuperAdminAnalyticsService.getPlatformKpis()`:
+- `@Cacheable(value = "admin:platform-kpis")` — TTL 10 мин
+- `parallelStream()` + thread-safe `DoubleAdder`/`AtomicLong` — параллельный агрегат по схемам
+
+`SuperAdminAnalyticsService.getRevenueTrend()`:
+- `@Cacheable(value = "admin:revenue-trend")` — TTL 15 мин
+- `parallelStream()` + `synchronized` на записях monthData map
+
+### Redis Cache TTL Strategy (common RedisConfig)
+| TTL | Кэши |
+|---|---|
+| 5 мин | `leads`, `admin:dashboard` |
+| 10 мин | `subscriptions`, `admin:platform-kpis` |
+| 15 мин | `admin:revenue-trend` |
+| 30 мин | `staff`, `settings` |
+| 1 час | `tenants`, `price_lists` |
+| 2 часа | `courses` |
+
+### SettingsService — оптимизированный запрос
+`SettingsRepository.findFirstBy()` вместо `findAll().stream().findFirst()` — возвращает только одну строку из БД (LIMIT 1).
+
+### HikariCP Pool Sizes
+| Сервис | max-pool-size | min-idle |
+|---|---|---|
+| Business services (default) | 10 | 5 |
+| notification-service | 15 | 5 |
+| tenant-service | 15 | 5 |
+| settings-service | 10 | 3 |
+
 ## SUPER_ADMIN Analytics (tenant-service)
 | Эндпоинт | Описание |
 |---|---|
@@ -398,3 +546,103 @@ TRIAL → ACTIVE → SUSPENDED → INACTIVE (soft delete)
 | `GET /api/v1/admin/analytics/revenue-trend?months=12` | Помесячная выручка по всем тенантам |
 | `GET /api/v1/admin/analytics/tenant-growth?months=12` | Рост/отток тенантов по месяцам |
 | `GET /api/v1/admin/analytics/churn` | Churn rate за 30/90 дней, разбивка по планам |
+
+## Finance Service — Payroll (port 8112)
+
+Модуль расчёта зарплат добавлен в finance-service (Flyway V12).
+
+### Модели расчёта зарплаты
+- **FIXED** — фиксированная сумма в месяц
+- **PER_STUDENT_PERCENTAGE** — процент от суммы абонементов студентов в группе
+
+Enum `SalaryType` (FIXED, PER_STUDENT_PERCENTAGE) находится в `com.ondeedu.common.payroll` (common-модуль).
+
+### Изменения схемы (V12)
+- `staff` таблица: добавлены `salary_type`, `salary_percentage`
+- `transactions` таблица: добавлены `staff_id`, `salary_month` (VARCHAR(7), формат `YYYY-MM`)
+- Индексы по `staff_id` и `salary_month`
+
+### Ключевые компоненты
+- `SalaryService` — расчёт зарплат через нативный SQL (не JPA) для производительности на больших объёмах
+- `SalaryQueryRepository` — нативные SQL-запросы для вычислений в разрезе сотрудников
+- `SalarySchemaResolver` — разрешает имена тенант-схем для кросс-тенантных зарплатных запросов (паттерн для других аналогичных задач)
+
+### API Payroll
+| Эндпоинт | Доступ | Описание |
+|---|---|---|
+| `GET /api/v1/finance/salary?month=YYYY-MM&year=YYYY` | TENANT_ADMIN | Обзор зарплат за месяц по всем сотрудникам |
+| `GET /api/v1/finance/salary/staff/{staffId}` | TENANT_ADMIN | История зарплат конкретного сотрудника |
+| `POST /api/v1/finance/salary/payments` | TENANT_ADMIN | Записать выплату зарплаты |
+
+## Staff Service — Salary Fields (port 8122)
+
+Добавлены поля для расчёта зарплаты (V12, через gRPC связь с finance-service):
+- `salaryType` (Enum: FIXED / PER_STUDENT_PERCENTAGE)
+- `salaryPercentage` (Decimal — процент для PER_STUDENT_PERCENTAGE модели)
+- `customStatus` (String — тенант-специфичный статус сотрудника из `staff_status_configs`)
+
+gRPC proto обновлён: `staff.proto` включает salary-поля в `StaffResponse`.
+
+## Schedule Service — Auto-Lesson & Student Sync (port 8108)
+
+### Автосоздание занятий из расписания
+При создании расписания автоматически генерируются занятия (lessons) для каждого дня в диапазоне дат. При обновлении расписания — синхронизируются изменения. При удалении — занятия помечаются удалёнными.
+
+**Компоненты:**
+- `LessonGrpcClient` — gRPC-клиент для lesson-service (порт 9126)
+- `ScheduleService.synchronizeLessonsOnCreate()` — генерация занятий по дням недели
+- `ScheduleService.synchronizeLessonsOnUpdate()` — синхронизация при изменениях
+- `ScheduleService.synchronizeLessonsOnDelete()` — мягкое удаление занятий
+
+### Синхронизация студентов курса в группы расписания
+При привязке расписания к курсу студенты курса автоматически записываются в группу расписания.
+
+**Новые сущности (V10):**
+- `CourseStudentLink` — связь студентов с курсами (`course_id`, `student_id`)
+- `ScheduleStudentEnrollment` — запись студента в группу расписания (`student_id`, `group_id`, `status`, `enrolled_at`, `completed_at`, `notes`)
+
+**Таблицы (V10):**
+- `course_students` — backfilled при миграции
+- `student_groups` — backfilled при миграции
+- Индексы по `course_id`, `student_id`, `group_id`
+
+## Course Service — Auto-Subscription (port 8106)
+
+При добавлении студента на курс автоматически создаётся подписка (subscription) через gRPC.
+
+**Компоненты:**
+- `PaymentGrpcClient` — gRPC-клиент для payment-service (порт 9110)
+- `PaymentGrpcService.createSubscriptionForCourse()` — новый RPC-метод в payment-service
+- `payment.proto` обновлён с новыми message-типами для auto-subscription
+
+Логика: подписка создаётся с `end_date` = `start_date` + длительность курса; цена берётся из payment-service.
+
+## Notification Service — Broadcast & Assignment (port 8116)
+
+### Broadcast уведомления
+Рассылка по всем тенантам или конкретному тенанту (только SUPER_ADMIN).
+
+| Эндпоинт | Доступ | Описание |
+|---|---|---|
+| `POST /api/v1/notifications/broadcast` | SUPER_ADMIN | Отправить broadcast (email/push) по тенантам |
+
+**`BroadcastNotificationRequest`**: `tenantId` (null = все тенанты), `subject`, `body`, `type`.
+
+### Assignment уведомления
+При назначении лида или задачи сотруднику отправляется уведомление через RabbitMQ (fire-and-forget).
+
+**Новые компоненты:**
+- `AssignmentNotificationEvent` — событие назначения (в common-модуле, extends `BaseEntity`)
+- `LeadAssignmentNotificationService` — публикует событие при назначении лида
+- `TaskAssignmentNotificationService` — публикует событие при назначении задачи
+- `StaffGrpcClient` — резолвит данные сотрудника в lead/task сервисах
+
+**RabbitMQ (новые):**
+- Routing key: `notification.assignment`
+- Queue: `notification.assignment.queue`
+
+### Обновление `notification_logs` (V14)
+Добавлены колонки для трекинга событий: `event_type`, `reference_type`, `reference_id` — позволяет связать уведомление с конкретной сущностью (лид, задача, назначение).
+
+### Важно: memory budget
+Notification-service требует увеличенного memory budget в docker-compose — настроено в `docker-compose.prod.yml`.

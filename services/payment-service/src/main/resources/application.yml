@@ -35,6 +35,11 @@ spring:
     username: ondeedu
     password: ondeedu_rabbit
     virtual-host: ondeedu
+    listener:
+      simple:
+        concurrency: 5
+        max-concurrency: 10
+        prefetch: 20
   security:
     oauth2:
       resourceserver:
@@ -65,7 +70,7 @@ management:
       show-details: always
   tracing:
     sampling:
-      probability: 1.0
+      probability: 0.1
 
 springdoc:
   api-docs:
@@ -75,5 +80,5 @@ springdoc:
 
 logging:
   level:
-    com.ondeedu: DEBUG
-    org.hibernate.SQL: DEBUG
+    com.ondeedu: INFO
+    org.hibernate.SQL: WARN

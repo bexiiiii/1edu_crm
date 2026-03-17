@@ -9,8 +9,8 @@ spring:
     username: ondeedu
     password: ondeedu_secret
     hikari:
-      maximum-pool-size: 5
-      minimum-idle: 2
+      maximum-pool-size: 15
+      minimum-idle: 5
   jpa:
     hibernate:
       ddl-auto: validate
@@ -30,6 +30,11 @@ spring:
     username: ondeedu
     password: ondeedu_rabbit
     virtual-host: ondeedu
+    listener:
+      simple:
+        concurrency: 10
+        max-concurrency: 20
+        prefetch: 30
   mail:
     host: smtp.gmail.com
     port: 587
@@ -65,7 +70,7 @@ management:
       enabled: false
   tracing:
     sampling:
-      probability: 1.0
+      probability: 0.1
 
 springdoc:
   api-docs:
@@ -75,4 +80,4 @@ springdoc:
 
 logging:
   level:
-    com.ondeedu: DEBUG
+    com.ondeedu: INFO

@@ -13,6 +13,7 @@ import com.ondeedu.tenant.entity.TenantStatus;
 import com.ondeedu.tenant.repository.TenantRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -37,6 +38,7 @@ public class AdminDashboardService {
     // ---- Dashboard ----
 
     @Transactional(readOnly = true)
+    @Cacheable(value = "admin:dashboard", keyGenerator = "tenantCacheKeyGenerator")
     public AdminDashboardResponse getDashboard() {
         List<Tenant> allTenants = tenantRepository.findAll();
 
@@ -68,7 +70,7 @@ public class AdminDashboardService {
              totalSubs = 0, totalLessons = 0;
         double totalRevMonth = 0, totalRevAll = 0;
 
-        List<TenantStatsDto> allStats = allTenants.stream()
+        List<TenantStatsDto> allStats = allTenants.parallelStream()
                 .filter(t -> t.getStatus() != TenantStatus.INACTIVE)
                 .map(this::buildStatsWithDb)
                 .collect(Collectors.toList());

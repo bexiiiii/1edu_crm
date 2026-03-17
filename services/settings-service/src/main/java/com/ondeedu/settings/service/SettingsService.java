@@ -59,7 +59,7 @@ public class SettingsService {
     }
 
     private TenantSettings getOrCreateSettings() {
-        return settingsRepository.findAll().stream().findFirst()
+        return settingsRepository.findFirstBy()
                 .orElseGet(() -> settingsRepository.save(TenantSettings.builder().build()));
     }
 }

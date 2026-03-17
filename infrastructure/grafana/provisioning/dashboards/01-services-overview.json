@@ -1,0 +1,186 @@
+{
+  "title": "1edu CRM — Services Overview",
+  "uid": "1edu-services",
+  "schemaVersion": 38,
+  "version": 1,
+  "refresh": "30s",
+  "time": { "from": "now-1h", "to": "now" },
+  "tags": ["1edu", "spring-boot"],
+  "templating": {
+    "list": [
+      {
+        "name": "service",
+        "type": "query",
+        "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+        "query": "label_values(http_server_requests_seconds_count, job)",
+        "multi": true,
+        "includeAll": true,
+        "current": { "text": "All", "value": "$__all" }
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "title": "Services Up",
+      "type": "stat",
+      "gridPos": { "x": 0, "y": 0, "w": 4, "h": 4 },
+      "options": { "colorMode": "background", "graphMode": "none", "textMode": "auto" },
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "red", "value": 0 }, { "color": "green", "value": 1 }] },
+          "mappings": []
+        }
+      },
+      "targets": [
+        {
+          "expr": "count(up{job=~\"$service\"} == 1)",
+          "legendFormat": "Up",
+          "datasource": { "type": "prometheus" }
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "Services Down",
+      "type": "stat",
+      "gridPos": { "x": 4, "y": 0, "w": 4, "h": 4 },
+      "options": { "colorMode": "background", "graphMode": "none" },
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": 0 }, { "color": "red", "value": 1 }] }
+        }
+      },
+      "targets": [
+        {
+          "expr": "count(up{job=~\"$service\"} == 0) OR vector(0)",
+          "legendFormat": "Down",
+          "datasource": { "type": "prometheus" }
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "Total HTTP Requests/sec",
+      "type": "stat",
+      "gridPos": { "x": 8, "y": 0, "w": 4, "h": 4 },
+      "options": { "colorMode": "value", "graphMode": "area" },
+      "fieldConfig": { "defaults": { "unit": "reqps", "decimals": 1 } },
+      "targets": [
+        {
+          "expr": "sum(rate(http_server_requests_seconds_count{job=~\"$service\"}[1m]))",
+          "legendFormat": "req/s",
+          "datasource": { "type": "prometheus" }
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "title": "HTTP Error Rate",
+      "type": "stat",
+      "gridPos": { "x": 12, "y": 0, "w": 4, "h": 4 },
+      "options": { "colorMode": "background" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": 0 }, { "color": "yellow", "value": 0.01 }, { "color": "red", "value": 0.05 }] }
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum(rate(http_server_requests_seconds_count{job=~\"$service\",status=~\"5..\"}[1m])) / sum(rate(http_server_requests_seconds_count{job=~\"$service\"}[1m]))",
+          "legendFormat": "Error %",
+          "datasource": { "type": "prometheus" }
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "title": "P99 Latency",
+      "type": "stat",
+      "gridPos": { "x": 16, "y": 0, "w": 4, "h": 4 },
+      "options": { "colorMode": "background" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": 0 }, { "color": "yellow", "value": 0.5 }, { "color": "red", "value": 2 }] }
+        }
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.99, sum(rate(http_server_requests_seconds_bucket{job=~\"$service\"}[1m])) by (le))",
+          "legendFormat": "p99",
+          "datasource": { "type": "prometheus" }
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "title": "HTTP Requests per Service (req/s)",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 4, "w": 12, "h": 8 },
+      "fieldConfig": { "defaults": { "unit": "reqps" } },
+      "options": { "legend": { "displayMode": "table", "placement": "bottom" } },
+      "targets": [
+        {
+          "expr": "sum by (job) (rate(http_server_requests_seconds_count{job=~\"$service\"}[1m]))",
+          "legendFormat": "{{job}}",
+          "datasource": { "type": "prometheus" }
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "title": "HTTP Latency P50 / P95 / P99",
+      "type": "timeseries",
+      "gridPos": { "x": 12, "y": 4, "w": 12, "h": 8 },
+      "fieldConfig": { "defaults": { "unit": "s" } },
+      "options": { "legend": { "displayMode": "table", "placement": "bottom" } },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, sum(rate(http_server_requests_seconds_bucket{job=~\"$service\"}[1m])) by (le, job))",
+          "legendFormat": "p50 {{job}}",
+          "datasource": { "type": "prometheus" }
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(http_server_requests_seconds_bucket{job=~\"$service\"}[1m])) by (le, job))",
+          "legendFormat": "p95 {{job}}",
+          "datasource": { "type": "prometheus" }
+        },
+        {
+          "expr": "histogram_quantile(0.99, sum(rate(http_server_requests_seconds_bucket{job=~\"$service\"}[1m])) by (le, job))",
+          "legendFormat": "p99 {{job}}",
+          "datasource": { "type": "prometheus" }
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "title": "HTTP Error Rate per Service",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 12, "w": 12, "h": 7 },
+      "fieldConfig": { "defaults": { "unit": "percentunit", "min": 0, "max": 1 } },
+      "targets": [
+        {
+          "expr": "sum by (job) (rate(http_server_requests_seconds_count{job=~\"$service\",status=~\"5..\"}[1m])) / sum by (job) (rate(http_server_requests_seconds_count{job=~\"$service\"}[1m]))",
+          "legendFormat": "{{job}}",
+          "datasource": { "type": "prometheus" }
+        }
+      ]
+    },
+    {
+      "id": 9,
+      "title": "Active HTTP Connections",
+      "type": "timeseries",
+      "gridPos": { "x": 12, "y": 12, "w": 12, "h": 7 },
+      "fieldConfig": { "defaults": { "unit": "short" } },
+      "targets": [
+        {
+          "expr": "tomcat_connections_current_connections{job=~\"$service\"}",
+          "legendFormat": "{{job}}",
+          "datasource": { "type": "prometheus" }
+        }
+      ]
+    }
+  ]
+}

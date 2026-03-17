@@ -13,8 +13,8 @@ spring:
     username: ondeedu
     password: ondeedu_secret
     hikari:
-      maximum-pool-size: 5
-      minimum-idle: 2
+      maximum-pool-size: 10
+      minimum-idle: 3
   jpa:
     hibernate:
       ddl-auto: validate
@@ -62,7 +62,7 @@ management:
       show-details: always
   tracing:
     sampling:
-      probability: 1.0
+      probability: 0.1
 
 springdoc:
   api-docs:
@@ -72,7 +72,7 @@ springdoc:
 
 logging:
   level:
-    com.ondeedu: DEBUG
+    com.ondeedu: INFO
 
 services:
   file-service:

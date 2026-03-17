@@ -7,6 +7,7 @@ import com.ondeedu.tenant.entity.TenantStatus;
 import com.ondeedu.tenant.repository.TenantRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.jdbc.core.RowCallbackHandler;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Service;
@@ -16,6 +17,8 @@ import java.time.Instant;
 import java.time.YearMonth;
 import java.time.temporal.ChronoUnit;
 import java.util.*;
+import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.DoubleAdder;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -29,6 +32,7 @@ public class SuperAdminAnalyticsService {
     // ── Platform KPIs ──────────────────────────────────────────────────────────
 
     @Transactional(readOnly = true)
+    @Cacheable(value = "admin:platform-kpis", keyGenerator = "tenantCacheKeyGenerator")
     public PlatformKpiResponse getPlatformKpis() {
         List<Tenant> all = tenantRepository.findAll();
 
@@ -45,28 +49,38 @@ public class SuperAdminAnalyticsService {
         double activeRate           = total > 0 ? round2((double) active / total) : 0.0;
         double trialConversionRate  = (active + trial) > 0 ? round2((double) active / (active + trial)) : 0.0;
 
-        // Aggregate across all non-inactive tenant schemas
-        double mrrEstimate = 0, allTimeRevenue = 0;
-        long totalStudents = 0, totalStaff = 0, totalSubs = 0;
-        int tenantsWithData = 0;
+        // Aggregate across all non-inactive tenant schemas (parallel to minimize latency)
+        DoubleAdder mrrAdder = new DoubleAdder();
+        DoubleAdder allTimeAdder = new DoubleAdder();
+        AtomicLong studentsAdder = new AtomicLong();
+        AtomicLong staffAdder = new AtomicLong();
+        AtomicLong subsAdder = new AtomicLong();
+        AtomicLong tenantsWithDataAdder = new AtomicLong();
 
-        for (Tenant t : all) {
-            if (t.getStatus() == TenantStatus.INACTIVE) continue;
-            String schema = t.getSchemaName();
-            if (!isValidSchemaName(schema)) continue;
-            try {
-                mrrEstimate   += sumWhere(schema, "transactions", "amount",
-                        "type = 'INCOME' AND status = 'COMPLETED' AND date >= date_trunc('month', current_date)");
-                allTimeRevenue += sumWhere(schema, "transactions", "amount",
-                        "type = 'INCOME' AND status = 'COMPLETED'");
-                totalStudents += countAll(schema, "students");
-                totalStaff    += countAll(schema, "staff");
-                totalSubs     += countWhere(schema, "subscriptions", "status = 'ACTIVE'");
-                tenantsWithData++;
-            } catch (Exception e) {
-                log.warn("KPI query failed for schema {}: {}", schema, e.getMessage());
-            }
-        }
+        all.parallelStream()
+            .filter(t -> t.getStatus() != TenantStatus.INACTIVE && isValidSchemaName(t.getSchemaName()))
+            .forEach(t -> {
+                String schema = t.getSchemaName();
+                try {
+                    mrrAdder.add(sumWhere(schema, "transactions", "amount",
+                            "type = 'INCOME' AND status = 'COMPLETED' AND date >= date_trunc('month', current_date)"));
+                    allTimeAdder.add(sumWhere(schema, "transactions", "amount",
+                            "type = 'INCOME' AND status = 'COMPLETED'"));
+                    studentsAdder.addAndGet(countAll(schema, "students"));
+                    staffAdder.addAndGet(countAll(schema, "staff"));
+                    subsAdder.addAndGet(countWhere(schema, "subscriptions", "status = 'ACTIVE'"));
+                    tenantsWithDataAdder.incrementAndGet();
+                } catch (Exception e) {
+                    log.warn("KPI query failed for schema {}: {}", schema, e.getMessage());
+                }
+            });
+
+        double mrrEstimate = mrrAdder.sum();
+        double allTimeRevenue = allTimeAdder.sum();
+        long totalStudents = studentsAdder.get();
+        long totalStaff = staffAdder.get();
+        long totalSubs = subsAdder.get();
+        long tenantsWithData = tenantsWithDataAdder.get();
 
         double arpu = active > 0 ? round2(mrrEstimate / active) : 0.0;
         double avgStudents = tenantsWithData > 0 ? round2((double) totalStudents / tenantsWithData) : 0.0;
@@ -96,6 +110,7 @@ public class SuperAdminAnalyticsService {
     // ── Revenue trend by month ─────────────────────────────────────────────────
 
     @Transactional(readOnly = true)
+    @Cacheable(value = "admin:revenue-trend", keyGenerator = "tenantCacheKeyGenerator")
     public List<RevenueTrendDto> getRevenueTrend(int months) {
         // Initialize map with all months in window (sorted)
         Map<String, double[]> monthData = new LinkedHashMap<>(); // [revenue, tenantCount]
@@ -108,7 +123,7 @@ public class SuperAdminAnalyticsService {
                 .filter(t -> isValidSchemaName(t.getSchemaName()))
                 .collect(Collectors.toList());
 
-        for (Tenant t : tenants) {
+        tenants.parallelStream().forEach(t -> {
             try {
                 String sql = "SELECT TO_CHAR(date, 'YYYY-MM') AS month, COALESCE(SUM(amount), 0) AS revenue" +
                         " FROM " + t.getSchemaName() + ".transactions" +
@@ -119,14 +134,16 @@ public class SuperAdminAnalyticsService {
                     String month = rs.getString("month");
                     double rev   = rs.getDouble("revenue");
                     if (monthData.containsKey(month)) {
-                        monthData.get(month)[0] += rev;
-                        if (rev > 0) monthData.get(month)[1] += 1;
+                        synchronized (monthData.get(month)) {
+                            monthData.get(month)[0] += rev;
+                            if (rev > 0) monthData.get(month)[1] += 1;
+                        }
                     }
                 });
             } catch (Exception e) {
                 log.warn("Revenue trend query failed for schema {}: {}", t.getSchemaName(), e.getMessage());
             }
-        }
+        });
 
         return monthData.entrySet().stream()
                 .map(e -> RevenueTrendDto.builder()

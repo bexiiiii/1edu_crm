@@ -1,63 +1,138 @@
 global:
   scrape_interval: 15s
   evaluation_interval: 15s
+  external_labels:
+    project: '1edu-crm'
 
 scrape_configs:
+
+  # ── Prometheus itself ────────────────────────────────────────
   - job_name: 'prometheus'
     static_configs:
       - targets: ['localhost:9090']
 
+  # ── Spring Boot services (Docker container names) ────────────
   - job_name: 'api-gateway'
     metrics_path: '/actuator/prometheus'
     static_configs:
-      - targets: ['host.docker.internal:8090']
+      - targets: ['api-gateway:8090']
+        labels: { service: 'api-gateway' }
 
   - job_name: 'tenant-service'
     metrics_path: '/actuator/prometheus'
     static_configs:
-      - targets: ['host.docker.internal:8101']
+      - targets: ['tenant-service:8100']
+        labels: { service: 'tenant-service' }
+
+  - job_name: 'auth-service'
+    metrics_path: '/actuator/prometheus'
+    static_configs:
+      - targets: ['auth-service:8101']
+        labels: { service: 'auth-service' }
 
   - job_name: 'student-service'
     metrics_path: '/actuator/prometheus'
     static_configs:
-      - targets: ['host.docker.internal:8102']
-
-  - job_name: 'course-service'
-    metrics_path: '/actuator/prometheus'
-    static_configs:
-      - targets: ['host.docker.internal:8103']
+      - targets: ['student-service:8102']
+        labels: { service: 'student-service' }
 
   - job_name: 'lead-service'
     metrics_path: '/actuator/prometheus'
     static_configs:
-      - targets: ['host.docker.internal:8104']
+      - targets: ['lead-service:8104']
+        labels: { service: 'lead-service' }
 
-  - job_name: 'payment-service'
+  - job_name: 'course-service'
     metrics_path: '/actuator/prometheus'
     static_configs:
-      - targets: ['host.docker.internal:8105']
+      - targets: ['course-service:8106']
+        labels: { service: 'course-service' }
 
   - job_name: 'schedule-service'
     metrics_path: '/actuator/prometheus'
     static_configs:
-      - targets: ['host.docker.internal:8106']
+      - targets: ['schedule-service:8108']
+        labels: { service: 'schedule-service' }
+
+  - job_name: 'payment-service'
+    metrics_path: '/actuator/prometheus'
+    static_configs:
+      - targets: ['payment-service:8110']
+        labels: { service: 'payment-service' }
+
+  - job_name: 'finance-service'
+    metrics_path: '/actuator/prometheus'
+    static_configs:
+      - targets: ['finance-service:8112']
+        labels: { service: 'finance-service' }
+
+  - job_name: 'analytics-service'
+    metrics_path: '/actuator/prometheus'
+    static_configs:
+      - targets: ['analytics-service:8114']
+        labels: { service: 'analytics-service' }
 
   - job_name: 'notification-service'
     metrics_path: '/actuator/prometheus'
     static_configs:
-      - targets: ['host.docker.internal:8107']
-
-  - job_name: 'staff-service'
-    metrics_path: '/actuator/prometheus'
-    static_configs:
-      - targets: ['host.docker.internal:8108']
-
-  - job_name: 'task-service'
-    metrics_path: '/actuator/prometheus'
-    static_configs:
-      - targets: ['host.docker.internal:8109']
+      - targets: ['notification-service:8116']
+        labels: { service: 'notification-service' }
 
   - job_name: 'file-service'
     metrics_path: '/actuator/prometheus'
     static_configs:
-      - targets: ['host.docker.internal:8110']
+      - targets: ['file-service:8118']
+        labels: { service: 'file-service' }
+
+  - job_name: 'report-service'
+    metrics_path: '/actuator/prometheus'
+    static_configs:
+      - targets: ['report-service:8120']
+        labels: { service: 'report-service' }
+
+  - job_name: 'staff-service'
+    metrics_path: '/actuator/prometheus'
+    static_configs:
+      - targets: ['staff-service:8122']
+        labels: { service: 'staff-service' }
+
+  - job_name: 'task-service'
+    metrics_path: '/actuator/prometheus'
+    static_configs:
+      - targets: ['task-service:8124']
+        labels: { service: 'task-service' }
+
+  - job_name: 'lesson-service'
+    metrics_path: '/actuator/prometheus'
+    static_configs:
+      - targets: ['lesson-service:8126']
+        labels: { service: 'lesson-service' }
+
+  - job_name: 'settings-service'
+    metrics_path: '/actuator/prometheus'
+    static_configs:
+      - targets: ['settings-service:8128']
+        labels: { service: 'settings-service' }
+
+  - job_name: 'audit-service'
+    metrics_path: '/actuator/prometheus'
+    static_configs:
+      - targets: ['audit-service:8130']
+        labels: { service: 'audit-service' }
+
+  # ── Infrastructure exporters ─────────────────────────────────
+  - job_name: 'postgres'
+    static_configs:
+      - targets: ['postgres-exporter:9187']
+        labels: { service: 'postgresql' }
+
+  - job_name: 'redis'
+    static_configs:
+      - targets: ['redis-exporter:9121']
+        labels: { service: 'redis' }
+
+  - job_name: 'rabbitmq'
+    metrics_path: '/metrics'
+    static_configs:
+      - targets: ['rabbitmq:15692']
+        labels: { service: 'rabbitmq' }

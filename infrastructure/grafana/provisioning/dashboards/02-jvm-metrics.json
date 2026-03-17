@@ -1,0 +1,162 @@
+{
+  "title": "1edu CRM — JVM Metrics",
+  "uid": "1edu-jvm",
+  "schemaVersion": 38,
+  "version": 1,
+  "refresh": "30s",
+  "time": { "from": "now-1h", "to": "now" },
+  "tags": ["1edu", "jvm"],
+  "templating": {
+    "list": [
+      {
+        "name": "service",
+        "type": "query",
+        "datasource": { "type": "prometheus" },
+        "query": "label_values(jvm_memory_used_bytes, job)",
+        "multi": false,
+        "includeAll": false
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "title": "JVM Heap Used",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 0, "w": 12, "h": 7 },
+      "fieldConfig": { "defaults": { "unit": "bytes" } },
+      "options": { "legend": { "displayMode": "table" } },
+      "targets": [
+        {
+          "expr": "jvm_memory_used_bytes{job=\"$service\",area=\"heap\"}",
+          "legendFormat": "{{id}}",
+          "datasource": { "type": "prometheus" }
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "JVM Heap Max",
+      "type": "timeseries",
+      "gridPos": { "x": 12, "y": 0, "w": 12, "h": 7 },
+      "fieldConfig": { "defaults": { "unit": "bytes" } },
+      "targets": [
+        {
+          "expr": "jvm_memory_max_bytes{job=\"$service\",area=\"heap\"}",
+          "legendFormat": "Max {{id}}",
+          "datasource": { "type": "prometheus" }
+        },
+        {
+          "expr": "jvm_memory_used_bytes{job=\"$service\",area=\"heap\"}",
+          "legendFormat": "Used {{id}}",
+          "datasource": { "type": "prometheus" }
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "JVM Threads",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 7, "w": 8, "h": 7 },
+      "fieldConfig": { "defaults": { "unit": "short" } },
+      "targets": [
+        {
+          "expr": "jvm_threads_live_threads{job=\"$service\"}",
+          "legendFormat": "Live",
+          "datasource": { "type": "prometheus" }
+        },
+        {
+          "expr": "jvm_threads_daemon_threads{job=\"$service\"}",
+          "legendFormat": "Daemon",
+          "datasource": { "type": "prometheus" }
+        },
+        {
+          "expr": "jvm_threads_peak_threads{job=\"$service\"}",
+          "legendFormat": "Peak",
+          "datasource": { "type": "prometheus" }
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "title": "GC Pause Time",
+      "type": "timeseries",
+      "gridPos": { "x": 8, "y": 7, "w": 8, "h": 7 },
+      "fieldConfig": { "defaults": { "unit": "s" } },
+      "targets": [
+        {
+          "expr": "rate(jvm_gc_pause_seconds_sum{job=\"$service\"}[1m])",
+          "legendFormat": "{{action}} {{cause}}",
+          "datasource": { "type": "prometheus" }
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "title": "CPU Usage",
+      "type": "timeseries",
+      "gridPos": { "x": 16, "y": 7, "w": 8, "h": 7 },
+      "fieldConfig": { "defaults": { "unit": "percentunit", "min": 0, "max": 1 } },
+      "targets": [
+        {
+          "expr": "process_cpu_usage{job=\"$service\"}",
+          "legendFormat": "Process CPU",
+          "datasource": { "type": "prometheus" }
+        },
+        {
+          "expr": "system_cpu_usage{job=\"$service\"}",
+          "legendFormat": "System CPU",
+          "datasource": { "type": "prometheus" }
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "title": "HikariCP — DB Connection Pool",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 14, "w": 12, "h": 7 },
+      "fieldConfig": { "defaults": { "unit": "short" } },
+      "targets": [
+        {
+          "expr": "hikaricp_connections_active{job=\"$service\"}",
+          "legendFormat": "Active",
+          "datasource": { "type": "prometheus" }
+        },
+        {
+          "expr": "hikaricp_connections_idle{job=\"$service\"}",
+          "legendFormat": "Idle",
+          "datasource": { "type": "prometheus" }
+        },
+        {
+          "expr": "hikaricp_connections_max{job=\"$service\"}",
+          "legendFormat": "Max",
+          "datasource": { "type": "prometheus" }
+        },
+        {
+          "expr": "hikaricp_connections_pending{job=\"$service\"}",
+          "legendFormat": "Pending",
+          "datasource": { "type": "prometheus" }
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "title": "HikariCP — Connection Acquire Time",
+      "type": "timeseries",
+      "gridPos": { "x": 12, "y": 14, "w": 12, "h": 7 },
+      "fieldConfig": { "defaults": { "unit": "ms" } },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, rate(hikaricp_connections_acquire_seconds_bucket{job=\"$service\"}[1m]))",
+          "legendFormat": "p95 acquire",
+          "datasource": { "type": "prometheus" }
+        },
+        {
+          "expr": "histogram_quantile(0.99, rate(hikaricp_connections_acquire_seconds_bucket{job=\"$service\"}[1m]))",
+          "legendFormat": "p99 acquire",
+          "datasource": { "type": "prometheus" }
+        }
+      ]
+    }
+  ]
+}

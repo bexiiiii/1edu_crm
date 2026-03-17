@@ -47,9 +47,19 @@ public class RedisConfig {
 
         return RedisCacheManager.builder(connectionFactory)
             .cacheDefaults(config)
-            .withCacheConfiguration("tenants", config.entryTtl(Duration.ofHours(1)))
-            .withCacheConfiguration("students", config.entryTtl(Duration.ofMinutes(15)))
-            .withCacheConfiguration("courses", config.entryTtl(Duration.ofHours(2)))
+            // Entity caches
+            .withCacheConfiguration("tenants",       config.entryTtl(Duration.ofHours(1)))
+            .withCacheConfiguration("students",      config.entryTtl(Duration.ofMinutes(15)))
+            .withCacheConfiguration("courses",       config.entryTtl(Duration.ofHours(2)))
+            .withCacheConfiguration("staff",         config.entryTtl(Duration.ofMinutes(30)))
+            .withCacheConfiguration("leads",         config.entryTtl(Duration.ofMinutes(5)))
+            .withCacheConfiguration("subscriptions", config.entryTtl(Duration.ofMinutes(10)))
+            .withCacheConfiguration("price_lists",   config.entryTtl(Duration.ofHours(1)))
+            .withCacheConfiguration("settings",      config.entryTtl(Duration.ofMinutes(30)))
+            // Admin dashboard caches (SUPER_ADMIN only, high-cost queries)
+            .withCacheConfiguration("admin:dashboard",      config.entryTtl(Duration.ofMinutes(5)))
+            .withCacheConfiguration("admin:platform-kpis",  config.entryTtl(Duration.ofMinutes(10)))
+            .withCacheConfiguration("admin:revenue-trend",  config.entryTtl(Duration.ofMinutes(15)))
             .build();
     }
 
