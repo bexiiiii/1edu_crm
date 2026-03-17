@@ -28,8 +28,6 @@ x-spring-env: &spring-env
   SPRING_FLYWAY_VALIDATE_ON_MIGRATE: "false"
   SPRING_CLOUD_CONFIG_ENABLED: "false"
   SPRING_CLOUD_CONFIG_IMPORT_CHECK_ENABLED: "false"
-  SPRING_CLOUD_CONFIG_ENABLED: "false"
-  SPRING_CLOUD_CONFIG_IMPORT_CHECK_ENABLED: "false"
   SPRING_DATA_REDIS_HOST: ${REDIS_HOST}
   SPRING_DATA_REDIS_PORT: ${REDIS_PORT}
   SPRING_DATA_REDIS_PASSWORD: ${REDIS_PASSWORD}
@@ -416,8 +414,6 @@ services:
       KEYCLOAK_CLIENT_SECRET: ${KEYCLOAK_CLIENT_SECRET}
       KEYCLOAK_FRONTEND_CLIENT_ID: ${KEYCLOAK_FRONTEND_CLIENT_ID:-1edu-web-app}
       MANAGEMENT_ZIPKIN_TRACING_ENDPOINT: ${ZIPKIN_ENDPOINT}
-      SPRING_CLOUD_CONFIG_ENABLED: "false"
-      SPRING_CLOUD_CONFIG_IMPORT_CHECK_ENABLED: "false"
     depends_on:
       keycloak:
         condition: service_healthy
@@ -444,8 +440,6 @@ services:
       GRPC_SERVER_PORT: "9102"
       GRPC_CLIENT_COURSE_SERVICE_ADDRESS: discovery:///course-service
       GRPC_CLIENT_PAYMENT_SERVICE_ADDRESS: discovery:///payment-service
-      SPRING_CLOUD_CONFIG_ENABLED: "false"
-      SPRING_CLOUD_CONFIG_IMPORT_CHECK_ENABLED: "false"
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://localhost:8102/actuator/health | grep -q UP"]
       <<: *healthcheck-spring
@@ -466,8 +460,6 @@ services:
       SERVER_PORT: "8104"
       GRPC_SERVER_PORT: "9104"
       GRPC_CLIENT_STAFF_SERVICE_ADDRESS: discovery:///staff-service
-      SPRING_CLOUD_CONFIG_ENABLED: "false"
-      SPRING_CLOUD_CONFIG_IMPORT_CHECK_ENABLED: "false"
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://localhost:8104/actuator/health | grep -q UP"]
       <<: *healthcheck-spring
@@ -588,9 +580,6 @@ services:
       SERVER_PORT: "8116"
       GRPC_SERVER_PORT: "-1"
       JAVA_OPTS: "-Xms${JVM_XMS_MEDIUM:-192m} -Xmx${JVM_XMX_MEDIUM:-384m}"
-      SPRING_CLOUD_CONFIG_ENABLED: "false"
-      SPRING_CLOUD_CONFIG_IMPORT_CHECK_ENABLED: "false"
-      SPRING_FLYWAY_VALIDATE_ON_MIGRATE: "false"
     depends_on:
       rabbitmq:
         condition: service_healthy
@@ -623,8 +612,6 @@ services:
       MINIO_SECRET_KEY: ${MINIO_SECRET_KEY}
       MINIO_BUCKET: ${MINIO_BUCKET}
       MANAGEMENT_ZIPKIN_TRACING_ENDPOINT: ${ZIPKIN_ENDPOINT}
-      SPRING_CLOUD_CONFIG_ENABLED: "false"
-      SPRING_CLOUD_CONFIG_IMPORT_CHECK_ENABLED: "false"
     depends_on:
       minio:
         condition: service_healthy
@@ -733,8 +720,6 @@ services:
       GRPC_CLIENT_GLOBAL_NEGOTIATION_TYPE: plaintext
       GRPC_CLIENT_ANALYTICS_SERVICE_ADDRESS: discovery:///analytics-service
       MANAGEMENT_ZIPKIN_TRACING_ENDPOINT: ${ZIPKIN_ENDPOINT}
-      SPRING_CLOUD_CONFIG_ENABLED: "false"
-      SPRING_CLOUD_CONFIG_IMPORT_CHECK_ENABLED: "false"
     depends_on:
       analytics-service:
         condition: service_healthy
@@ -770,8 +755,6 @@ services:
       RABBITMQ_VHOST: ${RABBITMQ_VHOST}
       KEYCLOAK_ISSUER_URI: ${KEYCLOAK_URL}/realms/${KEYCLOAK_REALM}
       MANAGEMENT_ZIPKIN_TRACING_ENDPOINT: ${ZIPKIN_ENDPOINT}
-      SPRING_CLOUD_CONFIG_ENABLED: "false"
-      SPRING_CLOUD_CONFIG_IMPORT_CHECK_ENABLED: "false"
     depends_on:
       mongodb:
         condition: service_healthy
