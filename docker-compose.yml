@@ -16,12 +16,16 @@ x-service-defaults: &service-defaults
   env_file: .env
   networks: [1edu-network]
   restart: unless-stopped
+  mem_limit: 384m
+  memswap_limit: 384m
 
 x-spring-env: &spring-env
   SPRING_DATASOURCE_URL: jdbc:postgresql://${DB_HOST}:${DB_PORT}/${DB_NAME}
   SPRING_DATASOURCE_USERNAME: ${DB_USERNAME}
   SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD}
   SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE: "5"
+  SPRING_CLOUD_CONFIG_ENABLED: "false"
+  SPRING_CLOUD_CONFIG_IMPORT_CHECK_ENABLED: "false"
   SPRING_DATA_REDIS_HOST: ${REDIS_HOST}
   SPRING_DATA_REDIS_PORT: ${REDIS_PORT}
   SPRING_DATA_REDIS_PASSWORD: ${REDIS_PASSWORD}
@@ -340,6 +344,8 @@ services:
       args:
         SERVICE_NAME: api-gateway
     container_name: 1edu-api-gateway
+    mem_limit: 512m
+    memswap_limit: 512m
     ports:
       - "8090:8090"
     environment:
@@ -365,6 +371,8 @@ services:
       args:
         SERVICE_NAME: tenant-service
     container_name: 1edu-tenant
+    mem_limit: 512m
+    memswap_limit: 512m
     ports:
       - "8100:8100"
       - "9100:9100"
@@ -546,6 +554,8 @@ services:
       args:
         SERVICE_NAME: analytics-service
     container_name: 1edu-analytics
+    mem_limit: 512m
+    memswap_limit: 512m
     ports:
       - "8114:8114"
       - "9114:9114"
@@ -565,6 +575,8 @@ services:
       args:
         SERVICE_NAME: notification-service
     container_name: 1edu-notification
+    mem_limit: 512m
+    memswap_limit: 512m
     ports:
       - "8116:8116"
     environment:
