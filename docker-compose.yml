@@ -124,7 +124,7 @@ services:
     networks: [1edu-network]
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      test: ["CMD-SHELL", "nc -z localhost 5672 || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -163,7 +163,7 @@ services:
     networks: [1edu-network]
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping')"]
+      test: ["CMD-SHELL", "nc -z localhost 27017 || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 5
