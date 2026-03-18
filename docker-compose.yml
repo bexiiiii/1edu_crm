@@ -201,6 +201,8 @@ services:
       KEYCLOAK_ADMIN: admin
       KEYCLOAK_ADMIN_PASSWORD: admin
       KC_HEALTH_ENABLED: "true"
+      KC_HOSTNAME_URL: https://beta.1edu.kz/auth
+      KC_PROXY_HEADERS: xforwarded
     ports:
       - "8080:8080"
     volumes:
