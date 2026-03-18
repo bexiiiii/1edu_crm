@@ -512,6 +512,8 @@ services:
       args:
         SERVICE_NAME: payment-service
     container_name: 1edu-payment
+    mem_limit: 512m
+    memswap_limit: 512m
     ports:
       - "8110:8110"
       - "9110:9110"
