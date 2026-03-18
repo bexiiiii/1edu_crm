@@ -1,22 +1,41 @@
-.PHONY: help build clean test infra-up infra-down proto all services-up services-down services-logs deploy deploy-service
+.PHONY: help build clean test infra-up infra-down proto all \
+        services-up services-down services-logs \
+        deploy deploy-service \
+        backup setup-cron restore \
+        logs ps
 
 help:
-	@echo "1edu CRM - Available commands:"
 	@echo ""
-	@echo "  make build              - Build all service JARs (skip tests)"
-	@echo "  make clean              - Clean build artifacts"
-	@echo "  make test               - Run all tests"
-	@echo "  make proto              - Generate gRPC code from proto files"
-	@echo "  make infra-up           - Start infrastructure (Docker Compose)"
-	@echo "  make infra-down         - Stop infrastructure"
-	@echo "  make infra-logs         - Show infrastructure logs"
-	@echo "  make deploy             - Build JARs + rebuild Docker images + restart all"
-	@echo "  make deploy-service s=X - Rebuild and restart a single service (e.g. s=notification-service)"
-	@echo "  make all                - Build and start everything"
+	@echo "  1edu CRM — Available commands"
+	@echo "  ──────────────────────────────────────────────────────"
+	@echo "  Development"
+	@echo "    make build              Build all service JARs (skip tests)"
+	@echo "    make clean              Clean build artifacts"
+	@echo "    make test               Run all tests"
+	@echo "    make proto              Generate gRPC code from proto files"
+	@echo ""
+	@echo "  Production Deploy"
+	@echo "    make deploy             Full deploy: build JARs → Docker → ordered startup"
+	@echo "    make deploy-service s=X Rebuild & restart one service (e.g. s=notification-service)"
+	@echo "    make ps                 Show running containers and status"
+	@echo "    make logs s=X           Tail logs of a service (e.g. s=tenant-service)"
+	@echo ""
+	@echo "  Backup & Recovery"
+	@echo "    make backup             Run backup now (PostgreSQL + MongoDB)"
+	@echo "    make setup-cron         Install auto-backup cron job (run once on server)"
+	@echo "    make restore-pg         Restore PostgreSQL from latest backup"
+	@echo "    make restore-mongo      Restore MongoDB from latest backup"
+	@echo ""
+	@echo "  Infrastructure"
+	@echo "    make infra-up           Start infrastructure only (Docker Compose)"
+	@echo "    make infra-down         Stop infrastructure"
+	@echo "    make infra-reset        Wipe volumes + restart infrastructure"
+	@echo "    make infra-logs         Stream infrastructure logs"
 	@echo ""
 
+# ─── Build ────────────────────────────────────────────────────────────────────
 build:
-	./gradlew build -x test
+	./gradlew build -x test --no-daemon
 
 clean:
 	./gradlew clean
@@ -27,19 +46,80 @@ test:
 proto:
 	./gradlew :services:common-proto:generateProto
 
+all: proto build
+	@echo "Build complete. Run 'make deploy' to package and start all services."
+
+# ─── Deploy (production — ordered startup with healthchecks) ─────────────────
+# Full deploy: build JARs → build images → ordered container startup
+deploy:
+	@bash scripts/deploy.sh
+
+# Deploy single service without rebuilding others:
+#   make deploy-service s=notification-service
+deploy-service:
+	@test -n "$(s)" || (echo "Usage: make deploy-service s=<service-name>" && exit 1)
+	@bash scripts/deploy.sh --service $(s)
+
+# Container status
+ps:
+	@docker compose ps --format "table {{.Name}}\t{{.Status}}\t{{.Ports}}"
+
+# Tail logs: make logs s=tenant-service
+logs:
+	@test -n "$(s)" || (echo "Usage: make logs s=<service-name>" && exit 1)
+	@docker compose logs -f $(s)
+
+# ─── Backup & Recovery ────────────────────────────────────────────────────────
+backup:
+	@bash scripts/backup.sh
+
+setup-cron:
+	@bash scripts/cron-setup.sh
+
+# Restore PostgreSQL from latest backup (DESTRUCTIVE — stops services first)
+restore-pg:
+	@echo "WARNING: This will restore PostgreSQL from the latest backup."
+	@echo "All current data will be REPLACED."
+	@read -p "Type 'yes' to confirm: " confirm && [ "$$confirm" = "yes" ] || exit 1
+	@docker compose stop
+	@echo "Restoring PostgreSQL from /backups/1edu_crm/postgres_latest.sql.gz ..."
+	@zcat /backups/1edu_crm/postgres_latest.sql.gz | docker exec -i 1edu-postgres \
+		env PGPASSWORD=$${POSTGRES_PASSWORD:-postgres} psql -U $${POSTGRES_USER:-postgres}
+	@echo "Restore complete. Run 'make deploy' to restart services."
+
+# Restore MongoDB from latest backup (DESTRUCTIVE)
+restore-mongo:
+	@echo "WARNING: This will restore MongoDB from the latest backup."
+	@read -p "Type 'yes' to confirm: " confirm && [ "$$confirm" = "yes" ] || exit 1
+	@docker cp /backups/1edu_crm/mongodb_latest.tar.gz 1edu-mongodb:/tmp/
+	@docker exec 1edu-mongodb bash -c "cd /tmp && tar -xzf mongodb_latest.tar.gz && mongorestore /tmp/mongodb_latest/ --drop"
+	@echo "Restore complete."
+
+# ─── Infrastructure ───────────────────────────────────────────────────────────
 infra-up:
-	cd infrastructure && docker compose up -d
+	docker compose up -d postgres redis rabbitmq mongodb elasticsearch minio keycloak
 
 infra-down:
-	cd infrastructure && docker compose down
-
-infra-logs:
-	cd infrastructure && docker compose logs -f
+	docker compose down
 
 infra-reset:
-	cd infrastructure && docker compose down -v && docker compose up -d
+	docker compose down -v
+	docker compose up -d postgres redis rabbitmq mongodb elasticsearch minio keycloak
 
-# Start individual services
+infra-logs:
+	docker compose logs -f postgres redis rabbitmq
+
+# ─── Local dev: run services via Gradle (not Docker) ─────────────────────────
+services-up:
+	@bash scripts/start-services.sh
+
+services-down:
+	@bash scripts/stop-services.sh
+
+services-logs:
+	@test -n "$(s)" || (echo "Usage: make services-logs s=<service-name>" && exit 1)
+	@tail -f logs/$(s).log
+
 registry:
 	./gradlew :services:service-registry:bootRun
 
@@ -51,37 +131,3 @@ student:
 
 tenant:
 	./gradlew :services:tenant-service:bootRun
-
-# Start all services in background (run after infra-up)
-services-up:
-	@bash scripts/start-services.sh
-
-# Stop all running services
-services-down:
-	@bash scripts/stop-services.sh
-
-# Tail logs of a specific service: make services-logs s=student-service
-services-logs:
-	@tail -f logs/$(s).log
-
-all: proto build
-	@echo "Build complete. Start infrastructure with 'make infra-up'"
-	@echo "Then run 'make services-up' to start all services."
-
-# ─── Deploy (server-side build, then Docker package) ─────────
-# Builds JARs with Gradle (uses server's Gradle cache — fast after first run),
-# then packages into Docker images via Dockerfile.prebuilt (~10 sec per service).
-deploy:
-	docker compose down
-	./gradlew build -x test --no-daemon
-	docker compose build
-	docker compose up -d
-
-# Rebuild and restart a single service only:
-#   make deploy-service s=notification-service
-deploy-service:
-	@test -n "$(s)" || (echo "Usage: make deploy-service s=<service-name>" && exit 1)
-	docker compose stop $(s)
-	./gradlew :services:$(s):bootJar -x test --no-daemon
-	docker compose build --no-deps $(s)
-	docker compose up -d --no-deps $(s)

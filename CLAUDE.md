@@ -34,14 +34,37 @@ make deploy-service s=notification-service
 make deploy-service s=tenant-service
 ```
 
-**Как это работает:**
-1. `./gradlew build -x test` — компилирует JAR'ы на сервере (кэш в `~/.gradle`)
-2. `docker compose build` — Docker читает готовые JAR'ы из `services/<name>/build/libs/` и упаковывает в образ (~10 сек каждый)
-3. `docker compose up -d` — перезапускает контейнеры
+`make deploy` вызывает `scripts/deploy.sh` — умный скрипт с **поочерёдным запуском** и проверкой healthcheck на каждом шаге:
+1. `./gradlew build -x test --no-daemon` — компилирует JAR'ы (кэш в `~/.gradle`)
+2. `docker compose down` — останавливает старые контейнеры
+3. `docker compose build` — Docker читает JAR'ы из `services/<name>/build/libs/` (~10 сек каждый)
+4. Запуск по группам: infra → service-registry → api-gateway + auth → tenant + notification → all business
 
 **Dockerfile.prebuilt** (используется по умолчанию): `FROM eclipse-temurin:21-jre` + копирует JAR + запускает с флагами `-XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0 -Xss512k`.
 
 **Полный Docker-build** (`Dockerfile`) нужен только в CI/CD где нет Gradle на хосте — занимает ~18 мин первый раз.
+
+### Backup & Recovery
+
+```bash
+# Запустить резервное копирование вручную (PostgreSQL + MongoDB)
+make backup
+
+# Установить автоматическое резервное копирование (один раз на сервере)
+make setup-cron    # устанавливает cron: ежедневно в 03:00
+
+# Восстановить PostgreSQL из последнего бэкапа (ОСТОРОЖНО — перезаписывает данные)
+make restore-pg
+
+# Восстановить MongoDB
+make restore-mongo
+```
+
+Бэкапы хранятся в `/backups/1edu_crm/` с retention 7 дней. Логи: `/var/log/1edu_cron.log`.
+
+Cron jobs после `make setup-cron`:
+- **03:00 ежедневно** — `scripts/backup.sh` (PostgreSQL `pg_dumpall` + MongoDB `mongodump`)
+- **04:00 по воскресеньям** — `docker system prune` (чистка неиспользуемых образов/контейнеров)
 
 ### Run individual services
 ```bash
