@@ -34,10 +34,10 @@
 
 | Среда | API Base URL | Keycloak |
 |-------|-------------|----------|
-| **Production (сервер)** | `https://beta.1edu.kz` | `https://beta.1edu.kz/auth/` |
+| **Production (сервер)** | `https://api.1edu.kz` | `https://api.1edu.kz/auth/` |
 | **Local (локальный бекенд)** | `http://localhost:8090` | `http://localhost:8080/auth/` |
 
-> Для локальной разработки фронта с сервером — используй **`https://beta.1edu.kz`**.
+> Для локальной разработки фронта с сервером — используй **`https://api.1edu.kz`**.
 
 Все эндпоинты имеют префикс `/api/v1/`.
 
@@ -114,7 +114,7 @@ Content-Type: application/json
 
 **Production (сервер):**
 ```http
-POST https://beta.1edu.kz/auth/realms/ondeedu/protocol/openid-connect/token
+POST https://api.1edu.kz/auth/realms/ondeedu/protocol/openid-connect/token
 Content-Type: application/x-www-form-urlencoded
 
 grant_type=password&client_id=1edu-web-app&username=<login>&password=<pass>
@@ -317,7 +317,7 @@ grant_type=password&client_id=1edu-web-app&username=<login>&password=<pass>
 
 **После регистрации** пользователь логинится через Keycloak:
 ```http
-POST https://beta.1edu.kz/auth/realms/ondeedu/protocol/openid-connect/token
+POST https://api.1edu.kz/auth/realms/ondeedu/protocol/openid-connect/token
 
 grant_type=password&client_id=1edu-web-app&username=ivan@abc.edu&password=password123
 ```
@@ -3652,8 +3652,8 @@ enum TenantPlan { BASIC, PROFESSIONAL, ENTERPRISE }
 
 **.env (локальная разработка → сервер):**
 ```env
-VITE_API_BASE_URL=https://beta.1edu.kz
-VITE_KEYCLOAK_URL=https://beta.1edu.kz/auth
+VITE_API_BASE_URL=https://api.1edu.kz
+VITE_KEYCLOAK_URL=https://api.1edu.kz/auth
 VITE_KEYCLOAK_REALM=ondeedu
 VITE_KEYCLOAK_CLIENT_ID=1edu-web-app
 ```

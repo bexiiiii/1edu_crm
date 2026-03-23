@@ -61,7 +61,7 @@
       "clientId": "crm-admin",
       "enabled": true,
       "clientAuthenticatorType": "client-secret",
-      "secret": "change-me",
+      "secret": "__CRM_ADMIN_CLIENT_SECRET__",
       "publicClient": false,
       "protocol": "openid-connect",
       "serviceAccountsEnabled": true,

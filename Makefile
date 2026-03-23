@@ -4,6 +4,8 @@
         backup setup-cron restore \
         logs ps
 
+COMPOSE_PROD=docker compose -f docker-compose.prod.yml -p 1edu
+
 help:
 	@echo ""
 	@echo "  1edu CRM — Available commands"
@@ -52,26 +54,26 @@ all: proto build
 # ─── Deploy (production — ordered startup with healthchecks) ─────────────────
 # Full deploy: build JARs → build images → ordered container startup
 deploy:
-	@bash scripts/deploy.sh
+	@./deploy.sh full
 
 # Deploy single service without rebuilding others:
 #   make deploy-service s=notification-service
 deploy-service:
 	@test -n "$(s)" || (echo "Usage: make deploy-service s=<service-name>" && exit 1)
-	@bash scripts/deploy.sh --service $(s)
+	@./deploy.sh restart $(s)
 
 # Container status
 ps:
-	@docker compose ps --format "table {{.Name}}\t{{.Status}}\t{{.Ports}}"
+	@./deploy.sh status
 
 # Tail logs: make logs s=tenant-service
 logs:
 	@test -n "$(s)" || (echo "Usage: make logs s=<service-name>" && exit 1)
-	@docker compose logs -f $(s)
+	@./deploy.sh logs $(s)
 
 # ─── Backup & Recovery ────────────────────────────────────────────────────────
 backup:
-	@bash scripts/backup.sh
+	@./deploy.sh backup
 
 setup-cron:
 	@bash scripts/cron-setup.sh
@@ -81,10 +83,11 @@ restore-pg:
 	@echo "WARNING: This will restore PostgreSQL from the latest backup."
 	@echo "All current data will be REPLACED."
 	@read -p "Type 'yes' to confirm: " confirm && [ "$$confirm" = "yes" ] || exit 1
-	@docker compose stop
+	@$(COMPOSE_PROD) stop
 	@echo "Restoring PostgreSQL from /backups/1edu_crm/postgres_latest.sql.gz ..."
-	@zcat /backups/1edu_crm/postgres_latest.sql.gz | docker exec -i 1edu-postgres \
-		env PGPASSWORD=$${POSTGRES_PASSWORD:-postgres} psql -U $${POSTGRES_USER:-postgres}
+	@bash -lc 'set -a; source .env; set +a; \
+		zcat /backups/1edu_crm/postgres_latest.sql.gz | docker exec -i 1edu-postgres \
+		env PGPASSWORD="$$DB_PASSWORD" psql -U "$$DB_USERNAME" -d "$$DB_NAME"'
 	@echo "Restore complete. Run 'make deploy' to restart services."
 
 # Restore MongoDB from latest backup (DESTRUCTIVE)
@@ -97,17 +100,17 @@ restore-mongo:
 
 # ─── Infrastructure ───────────────────────────────────────────────────────────
 infra-up:
-	docker compose up -d postgres redis rabbitmq mongodb elasticsearch minio keycloak
+	./deploy.sh infra
 
 infra-down:
-	docker compose down
+	$(COMPOSE_PROD) down
 
 infra-reset:
-	docker compose down -v
-	docker compose up -d postgres redis rabbitmq mongodb elasticsearch minio keycloak
+	$(COMPOSE_PROD) down -v
+	./deploy.sh infra
 
 infra-logs:
-	docker compose logs -f postgres redis rabbitmq
+	$(COMPOSE_PROD) logs -f postgres redis rabbitmq
 
 # ─── Local dev: run services via Gradle (not Docker) ─────────────────────────
 services-up:

@@ -1,0 +1,27 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(ssh -o StrictHostKeyChecking=no root@46.101.130.5 \"cd ~/1edu_crm && docker compose up -d course-service 2>&1\")",
+      "Bash(ssh -o StrictHostKeyChecking=no root@46.101.130.5 \"cd ~/1edu_crm && docker compose up -d course-service && sleep 15 && docker compose up -d finance-service && sleep 15 && docker compose up -d lead-service 2>&1\")",
+      "Bash(ssh -o StrictHostKeyChecking=no root@46.101.130.5 \"docker logs 1edu-rabbitmq --tail 20 2>&1\")",
+      "Bash(ssh -o StrictHostKeyChecking=no root@46.101.130.5 \"docker inspect 1edu-rabbitmq --format ''{{json .State.Health}}'' 2>&1 | python3 -m json.tool\")",
+      "Bash(ssh -o StrictHostKeyChecking=no root@46.101.130.5 \"docker ps --format ''{{.Names}}: {{.Status}}'' | grep course 2>&1\")",
+      "Bash(ssh -o StrictHostKeyChecking=no root@46.101.130.5 \"docker ps -a --format ''{{.Names}}: {{.Status}}'' | grep course 2>&1\")",
+      "Bash(ssh -o StrictHostKeyChecking=no root@46.101.130.5 \"cd ~/1edu_crm && docker compose up -d finance-service && sleep 5 && docker compose up -d lead-service && sleep 5 && docker compose up -d staff-service && sleep 5 && docker compose up -d student-service && sleep 5 && docker compose up -d schedule-service 2>&1\")",
+      "Bash(ssh -o StrictHostKeyChecking=no root@46.101.130.5 \"docker ps -a --format ''{{.Names}}: {{.Status}}'' | sort 2>&1\")",
+      "Bash(ssh -o StrictHostKeyChecking=no root@46.101.130.5 \"docker logs 1edu-course --tail 15 2>&1\")",
+      "Bash(ssh -o StrictHostKeyChecking=no root@46.101.130.5 \"cd ~/1edu_crm && docker compose up -d report-service 2>&1\")",
+      "Bash(ssh -o StrictHostKeyChecking=no root@46.101.130.5 \"cat /root/1edu_crm/infrastructure/docker-compose.yml | grep -A5 keycloak\")",
+      "Bash(ssh -o StrictHostKeyChecking=no root@46.101.130.5 \"find /root/1edu_crm/infrastructure -name ''nginx.conf'' -o -name ''*.conf'' 2>/dev/null | head -5\")",
+      "Bash(ssh -o StrictHostKeyChecking=no root@46.101.130.5 \"cat /root/1edu_crm/infrastructure/nginx/conf.d/default.conf\")",
+      "Bash(ssh -o StrictHostKeyChecking=no root@46.101.130.5 \"grep -E ''KEYCLOAK_URL|KEYCLOAK_REALM'' /root/1edu_crm/.env\")",
+      "Bash(ssh -o StrictHostKeyChecking=no root@46.101.130.5 \"cd ~/1edu_crm && git pull && docker compose up -d keycloak 2>&1\")",
+      "Bash(ssh -o StrictHostKeyChecking=no root@46.101.130.5 \"curl -s -o /dev/null -w ''%{http_code}'' http://localhost:8080/auth/realms/ondeedu/.well-known/openid-configuration 2>&1\")",
+      "Bash(ssh -o StrictHostKeyChecking=no root@46.101.130.5 \"docker ps --filter name=1edu-keycloak --format ''{{.Status}}'' 2>&1\")",
+      "Bash(ssh -o StrictHostKeyChecking=no root@46.101.130.5 \"docker logs 1edu-keycloak --tail 5 2>&1\")",
+      "Bash(ssh -o StrictHostKeyChecking=no root@46.101.130.5 \"docker logs 1edu-keycloak --tail 5 2>&1 && echo --- && curl -s -o /dev/null -w ''HTTP %{http_code}'' http://localhost:8080/auth/realms/ondeedu/.well-known/openid-configuration 2>&1\")",
+      "Bash(ssh -o StrictHostKeyChecking=no root@46.101.130.5 \"docker logs 1edu-keycloak --tail 8 2>&1\")",
+      "Bash(ssh -o StrictHostKeyChecking=no root@46.101.130.5 \"curl -s -o /dev/null -w ''HTTP %{http_code}'' http://localhost:8080/auth/realms/ondeedu/.well-known/openid-configuration 2>&1\")"
+    ]
+  }
+}

@@ -51,13 +51,13 @@ fi
 # Defaults (override in .env)
 POSTGRES_HOST="${POSTGRES_HOST:-localhost}"
 POSTGRES_PORT="${POSTGRES_PORT:-5432}"
-POSTGRES_USER="${POSTGRES_USER:-postgres}"
-POSTGRES_PASSWORD="${POSTGRES_PASSWORD:-postgres}"
+POSTGRES_USER="${POSTGRES_USER:-${DB_USERNAME:-postgres}}"
+POSTGRES_PASSWORD="${POSTGRES_PASSWORD:-${DB_PASSWORD:-postgres}}"
 POSTGRES_CONTAINER="${POSTGRES_CONTAINER:-1edu-postgres}"
 
 MONGO_CONTAINER="${MONGO_CONTAINER:-1edu-mongodb}"
-MONGO_USER="${MONGO_USER:-}"
-MONGO_PASSWORD="${MONGO_PASSWORD:-}"
+MONGO_DUMP_USER="${MONGO_USER:-${MONGO_USERNAME:-}}"
+MONGO_DUMP_PASSWORD="${MONGO_PASS:-${MONGO_PASSWORD:-}}"
 
 ERRORS=0
 
@@ -93,8 +93,8 @@ log "Backing up MongoDB..."
 if docker ps --format '{{.Names}}' | grep -q "^${MONGO_CONTAINER}$"; then
     # Run mongodump inside container
     MONGO_URI="mongodb://localhost:27017"
-    if [[ -n "${MONGO_USER:-}" ]]; then
-        MONGO_URI="mongodb://${MONGO_USER}:${MONGO_PASSWORD}@localhost:27017"
+    if [[ -n "${MONGO_DUMP_USER:-}" ]]; then
+        MONGO_URI="mongodb://${MONGO_DUMP_USER}:${MONGO_DUMP_PASSWORD}@localhost:27017/?authSource=admin"
     fi
 
     if docker exec "$MONGO_CONTAINER" \

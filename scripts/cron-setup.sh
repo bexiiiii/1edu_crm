@@ -3,6 +3,7 @@
 # 1edu CRM — Cron Setup Script
 # Installs automated cron jobs on the server:
 #   - Daily backup at 03:00
+#   - Weekly certificate renewal check on Monday at 05:00
 #   - Weekly Docker image/container cleanup on Sunday at 04:00
 #
 # Run once on the server after first deploy:
@@ -14,6 +15,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 BACKUP_SCRIPT="$ROOT/scripts/backup.sh"
+RENEW_CERTS_SCRIPT="$ROOT/scripts/renew-certs.sh"
 CRON_LOG="/var/log/1edu_cron.log"
 
 RED='\033[0;31m'; GREEN='\033[0;32m'; CYAN='\033[0;36m'; NC='\033[0m'
@@ -23,6 +25,7 @@ fail() { echo -e "${RED}[setup] ✗${NC} $*"; exit 1; }
 
 # ─── Sanity checks ────────────────────────────────────────────────────────────
 [[ -f "$BACKUP_SCRIPT" ]] || fail "backup.sh not found at $BACKUP_SCRIPT"
+[[ -f "$RENEW_CERTS_SCRIPT" ]] || fail "renew-certs.sh not found at $RENEW_CERTS_SCRIPT"
 
 # Make scripts executable
 chmod +x "$ROOT/scripts/"*.sh
@@ -41,6 +44,8 @@ CRON_MARKER="# 1edu CRM automated jobs"
 NEW_CRONS="$CRON_MARKER
 # Daily backup at 03:00
 0 3 * * * $BACKUP_SCRIPT >> $CRON_LOG 2>&1
+# Weekly certificate renewal check - Monday 05:00
+0 5 * * 1 $RENEW_CERTS_SCRIPT >> $CRON_LOG 2>&1
 # Weekly Docker cleanup (unused images/containers) — Sunday 04:00
 0 4 * * 0 docker system prune -f --filter 'until=168h' >> $CRON_LOG 2>&1
 # Weekly log rotation — Saturday 02:00
@@ -70,15 +75,19 @@ crontab -l | grep -A 10 "$CRON_MARKER" | sed 's/^/  /'
 echo ""
 
 # ─── Test backup immediately (optional) ──────────────────────────────────────
-echo ""
-read -p "$(echo -e ${CYAN}[setup]${NC}) Run a test backup now? [y/N] " -n 1 -r RUN_TEST
-echo ""
-if [[ "$RUN_TEST" =~ ^[Yy]$ ]]; then
-    log "Running test backup..."
-    "$BACKUP_SCRIPT"
+if [[ "${1:-}" == "--no-prompt" ]]; then
+    log "Skipping interactive backup test (--no-prompt)."
 else
-    log "Skipping test backup."
-    log "To run manually: ./scripts/backup.sh"
+    echo ""
+    read -p "$(echo -e ${CYAN}[setup]${NC}) Run a test backup now? [y/N] " -n 1 -r RUN_TEST
+    echo ""
+    if [[ "$RUN_TEST" =~ ^[Yy]$ ]]; then
+        log "Running test backup..."
+        "$BACKUP_SCRIPT"
+    else
+        log "Skipping test backup."
+        log "To run manually: ./scripts/backup.sh"
+    fi
 fi
 
 echo ""
