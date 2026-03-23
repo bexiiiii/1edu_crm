@@ -112,6 +112,8 @@ Content-Type: application/json
 
 Через Keycloak (realm: `ondeedu`):
 
+> В production нет backend-эндпоинта вида `/api/v1/auth/login`. Логин и выдача токенов идут напрямую через Keycloak под `/auth/*`.
+
 **Production (сервер):**
 ```http
 POST https://api.1edu.kz/auth/realms/ondeedu/protocol/openid-connect/token
@@ -130,6 +132,13 @@ grant_type=password&client_id=1edu-web-app&username=<login>&password=<pass>
 
 > **Важно**: Keycloak развёрнут с context path `/auth`. URL токена всегда включает `/auth/realms/...`.
 > **Важно**: для этого сценария у клиента `1edu-web-app` должен быть включён `Direct Access Grants`.
+
+### Browser login / OIDC flow
+
+- Browser login entrypoint: `https://api.1edu.kz/auth/realms/ondeedu/protocol/openid-connect/auth`
+- Keycloak base URL for SPA/mobile config: `https://api.1edu.kz/auth`
+- Account console: `https://api.1edu.kz/auth/realms/ondeedu/account`
+- Self-registration in Keycloak UI is disabled (`registrationAllowed=false`), so `Keycloak register/sign-up` routes are not part of the supported public flow
 
 ### Структура JWT (полезные claims)
 
@@ -257,6 +266,7 @@ grant_type=password&client_id=1edu-web-app&username=<login>&password=<pass>
 ## 5. Регистрация УЦ (публичный)
 
 > Эндпоинт **не требует авторизации** — доступен без JWT токена.
+> Это единственный поддерживаемый публичный signup flow. Регистрация через Keycloak UI под `/auth/*` отключена на уровне realm.
 
 ### `POST /api/v1/register` — Зарегистрировать новый учебный центр
 
@@ -321,6 +331,8 @@ POST https://api.1edu.kz/auth/realms/ondeedu/protocol/openid-connect/token
 
 grant_type=password&client_id=1edu-web-app&username=ivan@abc.edu&password=password123
 ```
+
+Для browser-based frontend вместо прямого `password` grant используй обычный OIDC redirect flow через `keycloak-js` / Authorization Code flow. Публичный signup при этом всё равно остаётся отдельным вызовом `POST /api/v1/register`.
 
 ---
 
@@ -3700,6 +3712,9 @@ const keycloak = new Keycloak({
 
 export default keycloak;
 ```
+
+> `keycloak.login()` и обычный browser redirect flow поддерживаются.
+> `keycloak.register()` / прямой переход на Keycloak self-registration UI не должны использоваться, потому что self-registration в realm выключен.
 
 ### Получение списка студентов
 

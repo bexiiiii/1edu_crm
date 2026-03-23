@@ -197,6 +197,26 @@ API_DOMAIN=api.1edu.kz
 ```
 `KEYCLOAK_INTERNAL_URL` нужен для Admin Client и внутреннего `jwk-set-uri`, `KEYCLOAK_PUBLIC_URL` — для public issuer (`iss`) в JWT. Обе ссылки обязательно должны содержать суффикс `/auth`, иначе Admin Client получает HTTP 404 при `grantToken`, а resource servers валят валидацию токенов.
 
+#### Public auth / registration flow
+- Единственный публичный signup path: `POST /api/v1/register`
+- Маршрут signup: `nginx /api/* -> api-gateway -> tenant-service`
+- Публичные Keycloak/OIDC пути живут под `https://api.1edu.kz/auth/*`
+- Browser login начинается с `/auth/realms/ondeedu/protocol/openid-connect/auth`
+- Token endpoint: `/auth/realms/ondeedu/protocol/openid-connect/token`
+- Отдельного backend login endpoint (`/api/v1/auth/login`) нет
+- Realm импортируется с `"registrationAllowed": false`, поэтому Keycloak self-registration UI не используется
+
+#### Monitoring stack
+- Grafana, Prometheus, Zipkin, RabbitMQ UI, Eureka, MinIO Console и Keycloak Admin слушают только `127.0.0.1`
+- Доступ извне — только через SSH tunnel
+- Grafana provisioning использует стабильные datasource UID: `prometheus`, `zipkin`, `elasticsearch`
+- Основные dashboards: `1edu CRM — Services Overview`, `1edu CRM — JVM Metrics`, `1edu CRM — Infrastructure`
+- Alerting provisioned из файлов:
+  - templates: `1edu-crm-templates`
+  - rule groups: `1edu-crm-service-health`, `1edu-crm-performance`
+- Для инфраструктурных метрик используются `postgres-exporter` и `redis-exporter`
+- В deploy script добавлена очистка macOS metadata (`._*`, `.DS_Store`) в Grafana provisioning перед рестартом infra
+
 #### Docker — сеть при пересборке контейнера
 При пересборке отдельного контейнера (`docker compose up -d --build auth-service`) новый контейнер подключается к **текущей** сети проекта (`1edu_crm_1edu-network`). Если старые сервисы работают на другой сети (например, `1edu_1edu-network` от предыдущего запуска), нужно явно подключить контейнер:
 ```bash

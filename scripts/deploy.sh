@@ -73,6 +73,14 @@ ensure_directories() {
     mkdir -p infrastructure/certbot/conf infrastructure/certbot/www infrastructure/nginx/tenants
 }
 
+cleanup_macos_metadata() {
+    local target="$1"
+
+    [[ -d "$target" ]] || return 0
+
+    find "$target" -type f \( -name '._*' -o -name '.DS_Store' \) -delete
+}
+
 ensure_network() {
     if ! docker network inspect "$NETWORK_NAME" >/dev/null 2>&1; then
         log "Creating Docker network $NETWORK_NAME"
@@ -194,8 +202,11 @@ ensure_rabbitmq_topology() {
 
 deploy_infra() {
     prepare_keycloak_realm
+    cleanup_macos_metadata "$ROOT/infrastructure/grafana/provisioning"
     log "Starting infrastructure"
-    compose up -d postgres redis rabbitmq elasticsearch mongodb minio keycloak zipkin prometheus grafana
+    compose up -d \
+        postgres redis postgres-exporter redis-exporter \
+        rabbitmq elasticsearch mongodb minio keycloak zipkin prometheus grafana
 
     wait_healthy postgres 180
     wait_healthy redis 90

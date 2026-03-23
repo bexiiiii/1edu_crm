@@ -9,6 +9,17 @@ This repository is prepared for a production deployment on `api.1edu.kz` with te
 - `KEYCLOAK_INTERNAL_URL=http://keycloak:8080/auth` is used inside Docker.
 - `KEYCLOAK_PUBLIC_URL=https://api.1edu.kz/auth` is used as the public issuer (`iss`) in JWTs.
 
+## Public auth and registration flow
+
+- Public tenant signup is exposed only via `POST https://api.1edu.kz/api/v1/register`.
+- Request path for signup: `nginx /api/* -> api-gateway -> tenant-service`.
+- Keycloak is exposed publicly only under `https://api.1edu.kz/auth/*`.
+- Browser/OIDC login starts at `https://api.1edu.kz/auth/realms/ondeedu/protocol/openid-connect/auth`.
+- Password-grant token exchange uses `https://api.1edu.kz/auth/realms/ondeedu/protocol/openid-connect/token`.
+- Keycloak account console is available at `https://api.1edu.kz/auth/realms/ondeedu/account`.
+- Keycloak self-registration UI is disabled in the realm (`registrationAllowed=false`), so there is no supported public signup path under `/auth/*`.
+- There is no backend login endpoint such as `/api/v1/auth/login`; authentication is handled directly by Keycloak.
+
 ## Clean server bootstrap
 
 Run this once on a fresh Ubuntu host:
@@ -58,6 +69,7 @@ Then deploy:
 - issue the first Let's Encrypt certificate for `api.1edu.kz`
 - start infrastructure in the correct order
 - start application services and nginx
+- clean macOS metadata files from Grafana provisioning before restarting infra
 - verify `https://api.1edu.kz/health`
 
 ## Ongoing operations
@@ -92,10 +104,45 @@ Certificate renewal:
 ./scripts/renew-certs.sh
 ```
 
+## Monitoring and observability
+
+Monitoring UIs stay private on `127.0.0.1` and are not exposed on the public Internet. Use an SSH tunnel:
+
+```bash
+ssh root@164.90.218.36 \
+  -L 3000:127.0.0.1:3000 \
+  -L 9090:127.0.0.1:9090 \
+  -L 9411:127.0.0.1:9411 \
+  -L 15672:127.0.0.1:15672 \
+  -L 8761:127.0.0.1:8761 \
+  -L 9001:127.0.0.1:9001 \
+  -L 8080:127.0.0.1:8080
+```
+
+After that:
+
+- Grafana: `http://localhost:3000`
+- Prometheus: `http://localhost:9090`
+- Zipkin: `http://localhost:9411`
+- RabbitMQ UI: `http://localhost:15672`
+- Eureka: `http://localhost:8761`
+- MinIO Console: `http://localhost:9001`
+- Keycloak Admin: `http://localhost:8080/auth`
+
+Provisioned Grafana state:
+
+- Datasources: `prometheus`, `zipkin`, `elasticsearch`
+- Dashboards: `1edu CRM — Services Overview`, `1edu CRM — JVM Metrics`, `1edu CRM — Infrastructure`
+- Alert template group: `1edu-crm-templates`
+- Alert rule groups: `1edu-crm-service-health`, `1edu-crm-performance`
+
+Prometheus now scrapes the full stack, including `postgres-exporter` and `redis-exporter`.
+
 ## Verification checklist
 
 ```bash
 curl -I https://api.1edu.kz/health
+curl -I https://api.1edu.kz/auth/realms/ondeedu/.well-known/openid-configuration
 ./deploy.sh status
 docker compose -f docker-compose.prod.yml -p 1edu ps
 ```
@@ -103,5 +150,6 @@ docker compose -f docker-compose.prod.yml -p 1edu ps
 Expected:
 
 - `https://api.1edu.kz/health` returns `200 OK`
+- `https://api.1edu.kz/auth/realms/ondeedu/.well-known/openid-configuration` returns `200 OK`
 - `nginx`, `api-gateway`, `auth-service`, `tenant-service`, and `keycloak` are up
 - internal ports stay bound to `127.0.0.1`, only `80/443` are public

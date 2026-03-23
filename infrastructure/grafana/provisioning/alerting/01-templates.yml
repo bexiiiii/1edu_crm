@@ -1,0 +1,17 @@
+apiVersion: 1
+
+templates:
+  - orgId: 1
+    name: 1edu-crm-templates
+    template: |
+      {{ define "1edu.crm.title" -}}
+      [{{ .Status | toUpper }}] {{ .CommonLabels.alertname }}{{ with .CommonLabels.job }} :: {{ . }}{{ end }}
+      {{- end }}
+
+      {{ define "1edu.crm.message" -}}
+      Firing: {{ len .Alerts.Firing }}, Resolved: {{ len .Alerts.Resolved }}
+      {{ range .Alerts.Firing -}}
+      - {{ .Labels.alertname }}{{ with .Labels.job }} ({{ . }}){{ end }}: {{ .Annotations.summary }}
+        {{- with .Annotations.description }} {{ . }}{{ end }}
+      {{ end -}}
+      {{- end }}

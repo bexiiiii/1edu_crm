@@ -2,7 +2,7 @@
   "title": "1edu CRM — Services Overview",
   "uid": "1edu-services",
   "schemaVersion": 38,
-  "version": 1,
+  "version": 2,
   "refresh": "30s",
   "time": { "from": "now-1h", "to": "now" },
   "tags": ["1edu", "spring-boot"],
@@ -11,11 +11,12 @@
       {
         "name": "service",
         "type": "query",
-        "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-        "query": "label_values(http_server_requests_seconds_count, job)",
+        "datasource": { "type": "prometheus", "uid": "prometheus" },
+        "query": "label_values(up{job!~\"prometheus|postgres|redis|rabbitmq\"}, job)",
         "multi": true,
         "includeAll": true,
-        "current": { "text": "All", "value": "$__all" }
+        "allValue": ".*",
+        "current": { "text": "All", "value": ".*" }
       }
     ]
   },
@@ -170,13 +171,13 @@
     },
     {
       "id": 9,
-      "title": "Active HTTP Connections",
+      "title": "Process CPU Usage",
       "type": "timeseries",
       "gridPos": { "x": 12, "y": 12, "w": 12, "h": 7 },
-      "fieldConfig": { "defaults": { "unit": "short" } },
+      "fieldConfig": { "defaults": { "unit": "percentunit", "min": 0, "max": 1 } },
       "targets": [
         {
-          "expr": "tomcat_connections_current_connections{job=~\"$service\"}",
+          "expr": "avg by (job) (process_cpu_usage{job=~\"$service\"})",
           "legendFormat": "{{job}}",
           "datasource": { "type": "prometheus" }
         }

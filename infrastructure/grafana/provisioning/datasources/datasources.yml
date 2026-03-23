@@ -1,28 +1,48 @@
 apiVersion: 1
+prune: true
+
+deleteDatasources:
+  - name: Prometheus
+    orgId: 1
+  - name: Prometheus Provisioned
+    orgId: 1
+  - name: Zipkin
+    orgId: 1
+  - name: Elasticsearch
+    orgId: 1
 
 datasources:
   - name: Prometheus
+    orgId: 1
+    uid: prometheus
     type: prometheus
     access: proxy
     url: http://prometheus:9090
     isDefault: true
     editable: false
+    version: 2
     jsonData:
       timeInterval: "15s"
       httpMethod: POST
 
   - name: Zipkin
+    orgId: 1
+    uid: zipkin
     type: zipkin
     access: proxy
     url: http://zipkin:9411
     editable: false
+    version: 2
 
   - name: Elasticsearch
+    orgId: 1
+    uid: elasticsearch
     type: elasticsearch
     access: proxy
     url: http://elasticsearch:9200
     database: "[logs-*]"
     editable: false
+    version: 2
     jsonData:
       timeField: "@timestamp"
       esVersion: "8.0.0"

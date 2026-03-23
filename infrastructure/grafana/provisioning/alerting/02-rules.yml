@@ -1,0 +1,348 @@
+apiVersion: 1
+
+groups:
+  - orgId: 1
+    name: 1edu-crm-service-health
+    folder: 1edu CRM
+    interval: 1m
+    rules:
+      - uid: 1edu-app-target-down
+        title: 1edu App Target Down
+        condition: B
+        for: 2m
+        noDataState: Alerting
+        execErrState: Alerting
+        annotations:
+          summary: Prometheus target is down for {{ $labels.job }}
+          description: Scrape target {{ $labels.instance }} has been unavailable for at least 2 minutes.
+        labels:
+          severity: critical
+          scope: services
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: prometheus
+            model:
+              editorMode: code
+              expr: 1 - up{job=~"api-gateway|tenant-service|auth-service|student-service|lead-service|course-service|schedule-service|payment-service|finance-service|analytics-service|notification-service|file-service|report-service|staff-service|task-service|lesson-service|settings-service|audit-service"}
+              instant: true
+              intervalMs: 1000
+              legendFormat: "{{job}}"
+              maxDataPoints: 43200
+              range: false
+              refId: A
+          - refId: B
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params:
+                      - 0
+                    type: gt
+                  operator:
+                    type: and
+                  query:
+                    params:
+                      - A
+                  reducer:
+                    params: []
+                    type: last
+                  type: query
+              datasource:
+                type: __expr__
+                uid: __expr__
+              expression: A
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: B
+              type: classic_conditions
+
+      - uid: 1edu-infra-target-down
+        title: 1edu Infra Target Down
+        condition: B
+        for: 2m
+        noDataState: Alerting
+        execErrState: Alerting
+        annotations:
+          summary: Infrastructure target is down for {{ $labels.job }}
+          description: Infrastructure scrape target {{ $labels.instance }} has been unavailable for at least 2 minutes.
+        labels:
+          severity: critical
+          scope: infrastructure
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: prometheus
+            model:
+              editorMode: code
+              expr: 1 - up{job=~"postgres|redis|rabbitmq"}
+              instant: true
+              intervalMs: 1000
+              legendFormat: "{{job}}"
+              maxDataPoints: 43200
+              range: false
+              refId: A
+          - refId: B
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params:
+                      - 0
+                    type: gt
+                  operator:
+                    type: and
+                  query:
+                    params:
+                      - A
+                  reducer:
+                    params: []
+                    type: last
+                  type: query
+              datasource:
+                type: __expr__
+                uid: __expr__
+              expression: A
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: B
+              type: classic_conditions
+
+  - orgId: 1
+    name: 1edu-crm-performance
+    folder: 1edu CRM
+    interval: 1m
+    rules:
+      - uid: 1edu-http-5xx-high
+        title: 1edu HTTP 5xx Rate High
+        condition: B
+        for: 10m
+        noDataState: OK
+        execErrState: Alerting
+        annotations:
+          summary: Elevated 5xx rate for {{ $labels.job }}
+          description: 5xx responses exceeded 5% over the last 10 minutes, excluding actuator endpoints.
+        labels:
+          severity: warning
+          scope: services
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: prometheus
+            model:
+              editorMode: code
+              expr: sum by (job) (rate(http_server_requests_seconds_count{job=~"api-gateway|tenant-service|auth-service|student-service|lead-service|course-service|schedule-service|payment-service|finance-service|analytics-service|notification-service|file-service|report-service|staff-service|task-service|lesson-service|settings-service|audit-service",status=~"5..",uri!~"/actuator.*"}[5m])) / clamp_min(sum by (job) (rate(http_server_requests_seconds_count{job=~"api-gateway|tenant-service|auth-service|student-service|lead-service|course-service|schedule-service|payment-service|finance-service|analytics-service|notification-service|file-service|report-service|staff-service|task-service|lesson-service|settings-service|audit-service",uri!~"/actuator.*"}[5m])), 0.001)
+              instant: true
+              intervalMs: 1000
+              legendFormat: "{{job}}"
+              maxDataPoints: 43200
+              range: false
+              refId: A
+          - refId: B
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params:
+                      - 0.05
+                    type: gt
+                  operator:
+                    type: and
+                  query:
+                    params:
+                      - A
+                  reducer:
+                    params: []
+                    type: last
+                  type: query
+              datasource:
+                type: __expr__
+                uid: __expr__
+              expression: A
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: B
+              type: classic_conditions
+
+      - uid: 1edu-http-p95-high
+        title: 1edu HTTP P95 Latency High
+        condition: B
+        for: 10m
+        noDataState: OK
+        execErrState: Alerting
+        annotations:
+          summary: P95 latency is high for {{ $labels.job }}
+          description: P95 HTTP latency exceeded 1.5s over the last 10 minutes, excluding actuator endpoints.
+        labels:
+          severity: warning
+          scope: services
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: prometheus
+            model:
+              editorMode: code
+              expr: histogram_quantile(0.95, sum by (job, le) (rate(http_server_requests_seconds_bucket{job=~"api-gateway|tenant-service|auth-service|student-service|lead-service|course-service|schedule-service|payment-service|finance-service|analytics-service|notification-service|file-service|report-service|staff-service|task-service|lesson-service|settings-service|audit-service",uri!~"/actuator.*"}[5m])))
+              instant: true
+              intervalMs: 1000
+              legendFormat: "{{job}}"
+              maxDataPoints: 43200
+              range: false
+              refId: A
+          - refId: B
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params:
+                      - 1.5
+                    type: gt
+                  operator:
+                    type: and
+                  query:
+                    params:
+                      - A
+                  reducer:
+                    params: []
+                    type: last
+                  type: query
+              datasource:
+                type: __expr__
+                uid: __expr__
+              expression: A
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: B
+              type: classic_conditions
+
+      - uid: 1edu-rabbitmq-backlog-high
+        title: 1edu RabbitMQ Backlog High
+        condition: B
+        for: 10m
+        noDataState: OK
+        execErrState: Alerting
+        annotations:
+          summary: RabbitMQ ready message backlog is elevated
+          description: Ready messages exceeded 100 for at least 10 minutes.
+        labels:
+          severity: warning
+          scope: messaging
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: prometheus
+            model:
+              editorMode: code
+              expr: rabbitmq_queue_messages_ready{job="rabbitmq"}
+              instant: true
+              intervalMs: 1000
+              legendFormat: "{{job}}"
+              maxDataPoints: 43200
+              range: false
+              refId: A
+          - refId: B
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params:
+                      - 100
+                    type: gt
+                  operator:
+                    type: and
+                  query:
+                    params:
+                      - A
+                  reducer:
+                    params: []
+                    type: last
+                  type: query
+              datasource:
+                type: __expr__
+                uid: __expr__
+              expression: A
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: B
+              type: classic_conditions
+
+      - uid: 1edu-redis-memory-high
+        title: 1edu Redis Memory High
+        condition: B
+        for: 10m
+        noDataState: OK
+        execErrState: Alerting
+        annotations:
+          summary: Redis memory usage is high
+          description: Redis memory usage exceeded 85% of maxmemory for at least 10 minutes.
+        labels:
+          severity: warning
+          scope: cache
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: prometheus
+            model:
+              editorMode: code
+              expr: redis_memory_used_bytes{job="redis"} / clamp_min(redis_memory_max_bytes{job="redis"}, 1)
+              instant: true
+              intervalMs: 1000
+              legendFormat: "{{job}}"
+              maxDataPoints: 43200
+              range: false
+              refId: A
+          - refId: B
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params:
+                      - 0.85
+                    type: gt
+                  operator:
+                    type: and
+                  query:
+                    params:
+                      - A
+                  reducer:
+                    params: []
+                    type: last
+                  type: query
+              datasource:
+                type: __expr__
+                uid: __expr__
+              expression: A
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: B
+              type: classic_conditions
