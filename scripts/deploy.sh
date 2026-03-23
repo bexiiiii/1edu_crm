@@ -182,6 +182,16 @@ ensure_api_certificate() {
     ok "TLS certificate is ready for ${API_DOMAIN}"
 }
 
+ensure_rabbitmq_topology() {
+    load_env
+    require_var RABBITMQ_USERNAME
+    require_var RABBITMQ_PASSWORD
+    require_var RABBITMQ_VHOST
+
+    log "Ensuring RabbitMQ exchanges, queues, and bindings"
+    "$ROOT/scripts/ensure-rabbitmq-topology.sh"
+}
+
 deploy_infra() {
     prepare_keycloak_realm
     log "Starting infrastructure"
@@ -190,6 +200,7 @@ deploy_infra() {
     wait_healthy postgres 180
     wait_healthy redis 90
     wait_healthy rabbitmq 180
+    ensure_rabbitmq_topology
     wait_healthy mongodb 180
     wait_healthy minio 120
     wait_healthy elasticsearch 180
@@ -197,6 +208,8 @@ deploy_infra() {
 }
 
 deploy_services() {
+    ensure_rabbitmq_topology
+
     log "Starting service-registry"
     compose up -d --build service-registry
     wait_healthy service-registry 180
