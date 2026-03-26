@@ -51,6 +51,8 @@ x-spring-env: &spring-env
   MANAGEMENT_METRICS_DISTRIBUTION_PERCENTILES-HISTOGRAM_HTTP_SERVER_REQUESTS: "true"
   # SLO buckets (ms) — tune histogram resolution for educational CRM response times
   MANAGEMENT_METRICS_DISTRIBUTION_SLO_HTTP_SERVER_REQUESTS: 50ms,100ms,200ms,500ms,1s,2s,5s
+  # HikariCP connection acquire time histogram → fixes "No data" in Grafana HikariCP panel
+  MANAGEMENT_METRICS_DISTRIBUTION_PERCENTILES-HISTOGRAM_HIKARICP_CONNECTIONS_ACQUIRE: "true"
   GRPC_CLIENT_GLOBAL_NEGOTIATION_TYPE: plaintext
   SPRING_CLOUD_CONFIG_ENABLED: "false"
   SPRING_CLOUD_CONFIG_IMPORT_CHECK_ENABLED: "false"

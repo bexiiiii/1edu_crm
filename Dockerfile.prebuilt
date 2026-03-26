@@ -27,6 +27,8 @@ ENTRYPOINT ["sh", "-c", "exec java $JAVA_OPTS \
   -XX:+UseG1GC \
   -XX:MaxGCPauseMillis=200 \
   -XX:G1HeapRegionSize=4m \
+  -XX:ReservedCodeCacheSize=256m \
+  -XX:+UseCodeCacheFlushing \
   -XX:+ExitOnOutOfMemoryError \
   -Djava.security.egd=file:/dev/./urandom \
   -jar app.jar"]

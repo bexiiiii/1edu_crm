@@ -677,8 +677,9 @@ TenantCacheKeys.id(entityId)          // → "<tenantId>::<id>"
 # В x-spring-env docker-compose.prod.yml (применяется ко всем сервисам)
 MANAGEMENT_METRICS_DISTRIBUTION_PERCENTILES-HISTOGRAM_HTTP_SERVER_REQUESTS: "true"
 MANAGEMENT_METRICS_DISTRIBUTION_SLO_HTTP_SERVER_REQUESTS: 50ms,100ms,200ms,500ms,1s,2s,5s
+MANAGEMENT_METRICS_DISTRIBUTION_PERCENTILES-HISTOGRAM_HIKARICP_CONNECTIONS_ACQUIRE: "true"
 ```
-Без этого Prometheus не экспортирует `http_server_requests_seconds_bucket` → P99 панель в Grafana показывает "No data".
+Без этого Prometheus не экспортирует `http_server_requests_seconds_bucket` → P99 панель и HikariCP Acquire Time в Grafana показывают "No data".
 
 ### Prometheus Scrape Strategy
 - **api-gateway**: 15s (точная видимость латентности и ошибок)
@@ -691,6 +692,8 @@ MANAGEMENT_METRICS_DISTRIBUTION_SLO_HTTP_SERVER_REQUESTS: 50ms,100ms,200ms,500ms
 - `-XX:+UseG1GC` — явно включить G1 (auto в Java 21, но явно = предсказуемо)
 - `-XX:MaxGCPauseMillis=200` — цель паузы ≤200ms
 - `-XX:G1HeapRegionSize=4m` — регион 4MB для heap <4GB (оптимально)
+- `-XX:ReservedCodeCacheSize=256m` — **критично для api-gateway**: без этого JIT компилятор переполняет CodeCache → major GC 5-6ms спайк (наблюдался на графиках Grafana)
+- `-XX:+UseCodeCacheFlushing` — автофлаш CodeCache при заполнении
 - `-XX:+ExitOnOutOfMemoryError` — restart контейнера при OOM вместо zombie-процесса
 
 ### Nginx Load Balancer (upstream api_gateway)
