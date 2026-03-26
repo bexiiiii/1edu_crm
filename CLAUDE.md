@@ -376,8 +376,9 @@ Spring Boot 3.4.2, Spring Cloud 2024.0.0, gRPC 1.68.2, Protobuf 4.29.3, PostgreS
 ### API
 | Эндпоинт | Метод | Доступ | Описание |
 |---|---|---|---|
-| `/api/v1/settings` | GET | Все роли | Получить настройки текущего тенанта (или дефолтные если не настроены) |
-| `/api/v1/settings` | PUT | TENANT_ADMIN | Обновить (или создать) настройки тенанта (upsert) |
+| `/api/v1/settings` | GET | `TENANT_ADMIN`, `MANAGER`, `RECEPTIONIST`, `TEACHER` или `SETTINGS_VIEW` | Получить настройки текущего тенанта (или дефолтные если не настроены) |
+| `/api/v1/settings` | PUT | `TENANT_ADMIN` или `SETTINGS_EDIT` | Обновить (или создать) настройки тенанта (upsert) |
+| `/api/v1/settings/logo` | POST | `TENANT_ADMIN` или `SETTINGS_EDIT` | Загрузить логотип тенанта и обновить `logo_url` |
 
 ### Таблица `tenant_settings` (Flyway V1, расширена V13/V15)
 Одна строка на тенант-схему. Поля:
@@ -413,10 +414,12 @@ Spring Boot 3.4.2, Spring Cloud 2024.0.0, gRPC 1.68.2, Protobuf 4.29.3, PostgreS
 |---|---|---|---|
 | `/api/v1/settings` | GET | Роли + `SETTINGS_VIEW` | Получить настройки (или дефолтные) |
 | `/api/v1/settings` | PUT | TENANT_ADMIN / `SETTINGS_EDIT` | Upsert настроек (включая logo_url) |
+| `/api/v1/settings/logo` | POST | TENANT_ADMIN / `SETTINGS_EDIT` | Загрузить логотип в MinIO и обновить `logo_url` |
 | `/api/v1/settings/finance-categories` | GET/POST | TENANT_ADMIN / accountant / finance/settings permissions | Категории финансов |
 | `/api/v1/settings/finance-categories/{id}` | PUT/DELETE | TENANT_ADMIN / accountant / finance/settings permissions | Обновление/удаление категории |
-| `/api/v1/settings/staff-statuses` | GET/POST | TENANT_ADMIN / manager / `SETTINGS_VIEW|SETTINGS_EDIT|STAFF_VIEW` | Статусы сотрудников |
-| `/api/v1/settings/staff-statuses/{id}` | PUT/DELETE | TENANT_ADMIN / `SETTINGS_EDIT` | Обновление/удаление статуса |
+| `/api/v1/settings/staff-statuses` | GET | TENANT_ADMIN / manager / `SETTINGS_VIEW` / `STAFF_VIEW` | Список кастомных статусов сотрудников |
+| `/api/v1/settings/staff-statuses` | POST | TENANT_ADMIN / `SETTINGS_EDIT` / `STAFF_EDIT` | Создание кастомного статуса сотрудника |
+| `/api/v1/settings/staff-statuses/{id}` | PUT/DELETE | TENANT_ADMIN / `SETTINGS_EDIT` / `STAFF_EDIT` | Обновление/удаление кастомного статуса |
 
 ### Logo Upload
 `FileServiceClient` в settings-service — REST-клиент для загрузки логотипа в MinIO через `/api/v1/files/upload`. `upsertSettings()` обрабатывает файл и сохраняет URL в `logo_url`.

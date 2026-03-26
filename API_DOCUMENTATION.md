@@ -3501,7 +3501,7 @@ interface StaffStatusConfigDto {
 ```
 
 #### `POST /api/v1/settings/staff-statuses` — Создать кастомный статус сотрудника
-**Доступ:** `TENANT_ADMIN` или permission `SETTINGS_EDIT`
+**Доступ:** `TENANT_ADMIN` или permission `SETTINGS_EDIT` / `STAFF_EDIT`
 
 **Request Body:**
 ```json
@@ -3516,12 +3516,12 @@ interface StaffStatusConfigDto {
 **Response:** `ApiResponse<StaffStatusConfigDto>`
 
 #### `PUT /api/v1/settings/staff-statuses/{id}` — Обновить кастомный статус сотрудника
-**Доступ:** `TENANT_ADMIN` или permission `SETTINGS_EDIT`
+**Доступ:** `TENANT_ADMIN` или permission `SETTINGS_EDIT` / `STAFF_EDIT`
 
 **Response:** `ApiResponse<StaffStatusConfigDto>`
 
 #### `DELETE /api/v1/settings/staff-statuses/{id}` — Удалить кастомный статус сотрудника
-**Доступ:** `TENANT_ADMIN` или permission `SETTINGS_EDIT`
+**Доступ:** `TENANT_ADMIN` или permission `SETTINGS_EDIT` / `STAFF_EDIT`
 
 **Response:** `ApiResponse<Void>`
 
