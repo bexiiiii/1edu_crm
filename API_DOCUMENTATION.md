@@ -2089,7 +2089,9 @@ interface SalaryPaymentDto {
 
 ## 14. Analytics Service (8114)
 
-Все эндпоинты аналитики доступны для `TENANT_ADMIN` и `MANAGER`.
+Все эндпоинты аналитики доступны для `TENANT_ADMIN`, `MANAGER` или любой роли с permission `ANALYTICS_VIEW`.
+
+Исключение: `group-attendance` также доступен `TEACHER` и ролям с `LESSONS_VIEW`.
 
 ---
 
@@ -2476,7 +2478,7 @@ interface RetentionResponse {
 
 #### `GET /api/v1/analytics/group-load`
 
-**Доступ:** `TENANT_ADMIN`, `MANAGER`
+**Доступ:** `TENANT_ADMIN`, `MANAGER` или permission `ANALYTICS_VIEW`
 
 **Response:**
 ```typescript
