@@ -48,4 +48,7 @@ public class TenantStatsDto {
 
     // Системная инфо
     private String schemaName;
+
+    // Admin notes (not visible to tenant)
+    private String notes;
 }

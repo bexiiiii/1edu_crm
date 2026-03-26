@@ -5,10 +5,12 @@ import com.ondeedu.tenant.dto.admin.*;
 import com.ondeedu.tenant.entity.TenantStatus;
 import com.ondeedu.tenant.service.AdminDashboardService;
 import com.ondeedu.tenant.service.SuperAdminAnalyticsService;
+import com.ondeedu.tenant.service.TenantAdminService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
@@ -24,6 +26,7 @@ public class AdminController {
 
     private final AdminDashboardService adminDashboardService;
     private final SuperAdminAnalyticsService analyticsService;
+    private final TenantAdminService tenantAdminService;
 
     // -----------------------------------------------------------------------
     // Dashboard
@@ -161,5 +164,85 @@ public class AdminController {
     public ApiResponse<Void> hardDelete(@PathVariable UUID id) {
         adminDashboardService.hardDelete(id);
         return ApiResponse.success(null, "Tenant permanently deleted");
+    }
+
+    // -----------------------------------------------------------------------
+    // Trial management
+    // -----------------------------------------------------------------------
+
+    @PatchMapping("/tenants/{id}/trial")
+    @Operation(summary = "Extend trial period for a TRIAL-status tenant")
+    public ApiResponse<TenantStatsDto> extendTrial(
+            @PathVariable UUID id,
+            @Valid @RequestBody ExtendTrialRequest request) {
+        return ApiResponse.success(tenantAdminService.extendTrial(id, request),
+                "Trial extended to " + request.getTrialEndsAt());
+    }
+
+    @GetMapping("/tenants/expiring-trials")
+    @Operation(summary = "List tenants whose trial expires within N days (default 7)")
+    public ApiResponse<List<TenantStatsDto>> getExpiringTrials(
+            @RequestParam(defaultValue = "7") int days) {
+        return ApiResponse.success(tenantAdminService.getExpiringTrials(Math.min(days, 90)));
+    }
+
+    // -----------------------------------------------------------------------
+    // Admin notes
+    // -----------------------------------------------------------------------
+
+    @PatchMapping("/tenants/{id}/notes")
+    @Operation(summary = "Set internal admin notes on a tenant (not visible to tenant)")
+    public ApiResponse<TenantStatsDto> updateNotes(
+            @PathVariable UUID id,
+            @RequestBody UpdateNotesRequest request) {
+        return ApiResponse.success(tenantAdminService.updateNotes(id, request));
+    }
+
+    // -----------------------------------------------------------------------
+    // Tenant search (paginated)
+    // -----------------------------------------------------------------------
+
+    @GetMapping("/tenants/search")
+    @Operation(summary = "Search tenants by name/email, optionally filter by status (paginated)")
+    public ApiResponse<Page<TenantStatsDto>> searchTenants(
+            @RequestParam(required = false) String q,
+            @RequestParam(required = false) TenantStatus status,
+            @RequestParam(defaultValue = "0")  int page,
+            @RequestParam(defaultValue = "20") int size) {
+        return ApiResponse.success(tenantAdminService.searchTenants(q, status, page, size));
+    }
+
+    // -----------------------------------------------------------------------
+    // Quota monitoring
+    // -----------------------------------------------------------------------
+
+    @GetMapping("/tenants/quota-warnings")
+    @Operation(summary = "List tenants that have used >= threshold% of their student/staff quota (default 80%)")
+    public ApiResponse<List<QuotaWarningDto>> getQuotaWarnings(
+            @RequestParam(defaultValue = "80") int threshold) {
+        return ApiResponse.success(tenantAdminService.getQuotaWarnings(Math.min(threshold, 100)));
+    }
+
+    // -----------------------------------------------------------------------
+    // Cross-tenant deep dive
+    // -----------------------------------------------------------------------
+
+    @GetMapping("/tenants/{id}/overview")
+    @Operation(summary = "Full cross-tenant overview: students, staff, finance, recent activity")
+    public ApiResponse<TenantOverviewResponse> getTenantOverview(@PathVariable UUID id) {
+        return ApiResponse.success(tenantAdminService.getTenantOverview(id));
+    }
+
+    // -----------------------------------------------------------------------
+    // Bulk operations
+    // -----------------------------------------------------------------------
+
+    @PostMapping("/tenants/bulk-status")
+    @Operation(summary = "Bulk change status for multiple tenants (max 50 at once)")
+    public ApiResponse<List<TenantStatsDto>> bulkChangeStatus(
+            @Valid @RequestBody BulkStatusRequest request) {
+        return ApiResponse.success(
+                tenantAdminService.bulkChangeStatus(request),
+                "Bulk status change completed");
     }
 }

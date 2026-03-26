@@ -1,0 +1,302 @@
+{
+  "title": "1edu CRM — Admin Platform Health",
+  "uid": "1edu-admin-platform",
+  "schemaVersion": 38,
+  "version": 1,
+  "refresh": "30s",
+  "time": { "from": "now-3h", "to": "now" },
+  "tags": ["1edu", "admin", "super-admin"],
+  "description": "SUPER_ADMIN view: all services health, throughput, error rates, DB pool, queues",
+  "templating": {
+    "list": [
+      {
+        "name": "interval",
+        "type": "interval",
+        "options": [
+          { "text": "1m",  "value": "1m"  },
+          { "text": "5m",  "value": "5m"  },
+          { "text": "10m", "value": "10m" }
+        ],
+        "current": { "text": "5m", "value": "5m" },
+        "auto": false
+      }
+    ]
+  },
+  "panels": [
+
+    { "id": 100, "type": "text", "title": "", "gridPos": { "x": 0, "y": 0, "w": 24, "h": 1 },
+      "options": { "mode": "markdown", "content": "## Platform Overview" } },
+
+    {
+      "id": 1, "title": "Services Up", "type": "stat",
+      "gridPos": { "x": 0, "y": 1, "w": 3, "h": 4 },
+      "options": { "colorMode": "background", "graphMode": "none", "textMode": "value" },
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "red", "value": 0 }, { "color": "green", "value": 1 }] }
+        }
+      },
+      "targets": [{ "expr": "count(up{job!~\"prometheus|postgres|redis|rabbitmq\"} == 1)", "legendFormat": "Up",
+                    "datasource": { "type": "prometheus", "uid": "prometheus" } }]
+    },
+    {
+      "id": 2, "title": "Services Down", "type": "stat",
+      "gridPos": { "x": 3, "y": 1, "w": 3, "h": 4 },
+      "options": { "colorMode": "background", "graphMode": "none" },
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": 0 }, { "color": "red", "value": 1 }] }
+        }
+      },
+      "targets": [{ "expr": "count(up{job!~\"prometheus|postgres|redis|rabbitmq\"} == 0) OR vector(0)", "legendFormat": "Down",
+                    "datasource": { "type": "prometheus", "uid": "prometheus" } }]
+    },
+    {
+      "id": 3, "title": "Total Req/s (all services)", "type": "stat",
+      "gridPos": { "x": 6, "y": 1, "w": 4, "h": 4 },
+      "options": { "colorMode": "value", "graphMode": "area" },
+      "fieldConfig": { "defaults": { "unit": "reqps", "thresholds": { "mode": "absolute",
+        "steps": [{ "color": "green", "value": 0 }, { "color": "yellow", "value": 200 }, { "color": "red", "value": 500 }] } } },
+      "targets": [{ "expr": "sum(rate(http_server_requests_seconds_count{job!~\"prometheus\"}[$interval]))",
+                    "legendFormat": "req/s", "datasource": { "type": "prometheus", "uid": "prometheus" } }]
+    },
+    {
+      "id": 4, "title": "Error Rate (5xx, all services)", "type": "stat",
+      "gridPos": { "x": 10, "y": 1, "w": 4, "h": 4 },
+      "options": { "colorMode": "background", "graphMode": "area" },
+      "fieldConfig": { "defaults": { "unit": "percentunit",
+        "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": 0 }, { "color": "yellow", "value": 0.01 }, { "color": "red", "value": 0.05 }] } } },
+      "targets": [{ "expr": "sum(rate(http_server_requests_seconds_count{status=~\"5..\"}[$interval])) / sum(rate(http_server_requests_seconds_count{}[$interval]))",
+                    "legendFormat": "Error %", "datasource": { "type": "prometheus", "uid": "prometheus" } }]
+    },
+    {
+      "id": 5, "title": "P99 Latency (api-gateway)", "type": "stat",
+      "gridPos": { "x": 14, "y": 1, "w": 4, "h": 4 },
+      "options": { "colorMode": "background", "graphMode": "area" },
+      "fieldConfig": { "defaults": { "unit": "ms",
+        "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": 0 }, { "color": "yellow", "value": 500 }, { "color": "red", "value": 2000 }] } } },
+      "targets": [{ "expr": "histogram_quantile(0.99, sum(rate(http_server_requests_seconds_bucket{job=\"api-gateway\"}[$interval])) by (le)) * 1000",
+                    "legendFormat": "P99 ms", "datasource": { "type": "prometheus", "uid": "prometheus" } }]
+    },
+    {
+      "id": 6, "title": "DB Pool Active / Max", "type": "stat",
+      "gridPos": { "x": 18, "y": 1, "w": 3, "h": 4 },
+      "options": { "colorMode": "value", "graphMode": "none", "textMode": "value_and_name" },
+      "fieldConfig": { "defaults": { "thresholds": { "mode": "absolute",
+        "steps": [{ "color": "green", "value": 0 }, { "color": "yellow", "value": 70 }, { "color": "red", "value": 90 }] } } },
+      "targets": [
+        { "expr": "sum(hikaricp_connections_active)", "legendFormat": "Active", "datasource": { "type": "prometheus", "uid": "prometheus" } },
+        { "expr": "sum(hikaricp_connections_max)", "legendFormat": "Max", "datasource": { "type": "prometheus", "uid": "prometheus" } }
+      ]
+    },
+    {
+      "id": 7, "title": "Redis Hit Rate", "type": "stat",
+      "gridPos": { "x": 21, "y": 1, "w": 3, "h": 4 },
+      "options": { "colorMode": "background", "graphMode": "area" },
+      "fieldConfig": { "defaults": { "unit": "percentunit",
+        "thresholds": { "mode": "absolute", "steps": [{ "color": "red", "value": 0 }, { "color": "yellow", "value": 0.5 }, { "color": "green", "value": 0.8 }] } } },
+      "targets": [{ "expr": "redis_keyspace_hits_total / (redis_keyspace_hits_total + redis_keyspace_misses_total + 1)",
+                    "legendFormat": "Hit Rate", "datasource": { "type": "prometheus", "uid": "prometheus" } }]
+    },
+
+    { "id": 101, "type": "text", "title": "", "gridPos": { "x": 0, "y": 5, "w": 24, "h": 1 },
+      "options": { "mode": "markdown", "content": "## Per-Service Health" } },
+
+    {
+      "id": 10, "title": "All Services Status", "type": "table",
+      "gridPos": { "x": 0, "y": 6, "w": 12, "h": 10 },
+      "options": { "sortBy": [{ "displayName": "Status", "desc": false }] },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "Status" },
+            "properties": [{ "id": "custom.displayMode", "value": "color-background" },
+              { "id": "thresholds", "value": { "mode": "absolute", "steps": [{ "color": "red", "value": 0 }, { "color": "green", "value": 1 }] } }] }
+        ]
+      },
+      "targets": [{
+        "expr": "up{job!~\"prometheus|postgres|redis|rabbitmq\"}",
+        "legendFormat": "{{job}}",
+        "format": "table",
+        "instant": true,
+        "datasource": { "type": "prometheus", "uid": "prometheus" }
+      }],
+      "transformations": [
+        { "id": "organize", "options": { "excludeByName": { "__name__": true, "instance": true },
+            "renameByName": { "job": "Service", "Value": "Status" } } }
+      ]
+    },
+    {
+      "id": 11, "title": "Requests per Service (req/s)", "type": "bargauge",
+      "gridPos": { "x": 12, "y": 6, "w": 12, "h": 10 },
+      "options": { "orientation": "horizontal", "displayMode": "gradient", "reduceOptions": { "calcs": ["lastNotNull"] } },
+      "fieldConfig": { "defaults": { "unit": "reqps",
+        "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": 0 }, { "color": "yellow", "value": 50 }, { "color": "red", "value": 200 }] } } },
+      "targets": [{
+        "expr": "sum(rate(http_server_requests_seconds_count{job!~\"prometheus\"}[$interval])) by (job)",
+        "legendFormat": "{{job}}",
+        "datasource": { "type": "prometheus", "uid": "prometheus" }
+      }]
+    },
+
+    { "id": 102, "type": "text", "title": "", "gridPos": { "x": 0, "y": 16, "w": 24, "h": 1 },
+      "options": { "mode": "markdown", "content": "## Error Rates & Latency" } },
+
+    {
+      "id": 20, "title": "Error Rate per Service", "type": "timeseries",
+      "gridPos": { "x": 0, "y": 17, "w": 12, "h": 8 },
+      "options": { "tooltip": { "mode": "multi" } },
+      "fieldConfig": { "defaults": { "unit": "percentunit", "min": 0,
+        "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": 0 }, { "color": "red", "value": 0.05 }] } } },
+      "targets": [{
+        "expr": "sum(rate(http_server_requests_seconds_count{status=~\"5..\"}[$interval])) by (job) / sum(rate(http_server_requests_seconds_count{}[$interval])) by (job)",
+        "legendFormat": "{{job}}",
+        "datasource": { "type": "prometheus", "uid": "prometheus" }
+      }]
+    },
+    {
+      "id": 21, "title": "P99 Latency per Service", "type": "timeseries",
+      "gridPos": { "x": 12, "y": 17, "w": 12, "h": 8 },
+      "options": { "tooltip": { "mode": "multi" } },
+      "fieldConfig": { "defaults": { "unit": "ms",
+        "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": 0 }, { "color": "yellow", "value": 500 }, { "color": "red", "value": 2000 }] } } },
+      "targets": [{
+        "expr": "histogram_quantile(0.99, sum(rate(http_server_requests_seconds_bucket{}[$interval])) by (job, le)) * 1000",
+        "legendFormat": "{{job}} P99",
+        "datasource": { "type": "prometheus", "uid": "prometheus" }
+      }]
+    },
+
+    { "id": 103, "type": "text", "title": "", "gridPos": { "x": 0, "y": 25, "w": 24, "h": 1 },
+      "options": { "mode": "markdown", "content": "## Database & Connection Pools" } },
+
+    {
+      "id": 30, "title": "HikariCP Active Connections per Service", "type": "timeseries",
+      "gridPos": { "x": 0, "y": 26, "w": 12, "h": 8 },
+      "options": { "tooltip": { "mode": "multi" } },
+      "fieldConfig": { "defaults": { "unit": "short" } },
+      "targets": [{
+        "expr": "hikaricp_connections_active{job!~\"prometheus\"}",
+        "legendFormat": "{{job}}",
+        "datasource": { "type": "prometheus", "uid": "prometheus" }
+      }]
+    },
+    {
+      "id": 31, "title": "HikariCP Pending Threads (pool exhaustion risk)", "type": "timeseries",
+      "gridPos": { "x": 12, "y": 26, "w": 12, "h": 8 },
+      "options": { "tooltip": { "mode": "multi" } },
+      "fieldConfig": { "defaults": { "unit": "short",
+        "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": 0 }, { "color": "yellow", "value": 1 }, { "color": "red", "value": 5 }] } } },
+      "targets": [{
+        "expr": "hikaricp_connections_pending{job!~\"prometheus\"}",
+        "legendFormat": "{{job}}",
+        "datasource": { "type": "prometheus", "uid": "prometheus" }
+      }]
+    },
+    {
+      "id": 32, "title": "PostgreSQL Active Connections", "type": "stat",
+      "gridPos": { "x": 0, "y": 34, "w": 4, "h": 4 },
+      "options": { "colorMode": "background", "graphMode": "area" },
+      "fieldConfig": { "defaults": { "unit": "short",
+        "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": 0 }, { "color": "yellow", "value": 100 }, { "color": "red", "value": 180 }] } } },
+      "targets": [{ "expr": "pg_stat_database_numbackends{datname!~\"template.*|postgres\"}",
+                    "legendFormat": "Active", "datasource": { "type": "prometheus", "uid": "prometheus" } }]
+    },
+    {
+      "id": 33, "title": "PostgreSQL Transactions/s", "type": "stat",
+      "gridPos": { "x": 4, "y": 34, "w": 4, "h": 4 },
+      "options": { "colorMode": "value", "graphMode": "area" },
+      "fieldConfig": { "defaults": { "unit": "tps" } },
+      "targets": [{ "expr": "sum(rate(pg_stat_database_xact_commit{datname!~\"template.*|postgres\"}[$interval]))",
+                    "legendFormat": "TPS", "datasource": { "type": "prometheus", "uid": "prometheus" } }]
+    },
+    {
+      "id": 34, "title": "PostgreSQL Cache Hit Rate", "type": "stat",
+      "gridPos": { "x": 8, "y": 34, "w": 4, "h": 4 },
+      "options": { "colorMode": "background", "graphMode": "area" },
+      "fieldConfig": { "defaults": { "unit": "percentunit",
+        "thresholds": { "mode": "absolute", "steps": [{ "color": "red", "value": 0 }, { "color": "yellow", "value": 0.9 }, { "color": "green", "value": 0.99 }] } } },
+      "targets": [{ "expr": "sum(rate(pg_stat_bgwriter_buffers_checkpoint[$interval])) / (sum(rate(pg_stat_bgwriter_buffers_checkpoint[$interval])) + sum(rate(pg_stat_bgwriter_buffers_clean[$interval])) + 1)",
+                    "legendFormat": "Cache Hit", "datasource": { "type": "prometheus", "uid": "prometheus" } }]
+    },
+    {
+      "id": 35, "title": "PostgreSQL Slow Queries (>1s)", "type": "stat",
+      "gridPos": { "x": 12, "y": 34, "w": 4, "h": 4 },
+      "options": { "colorMode": "background" },
+      "fieldConfig": { "defaults": { "unit": "short",
+        "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": 0 }, { "color": "yellow", "value": 1 }, { "color": "red", "value": 5 }] } } },
+      "targets": [{ "expr": "pg_stat_activity_count{state=\"active\",wait_event_type!~\"Lock|Client\"} OR vector(0)",
+                    "legendFormat": "Slow", "datasource": { "type": "prometheus", "uid": "prometheus" } }]
+    },
+
+    { "id": 104, "type": "text", "title": "", "gridPos": { "x": 0, "y": 38, "w": 24, "h": 1 },
+      "options": { "mode": "markdown", "content": "## Message Queues (RabbitMQ)" } },
+
+    {
+      "id": 40, "title": "RabbitMQ Queue Depth", "type": "timeseries",
+      "gridPos": { "x": 0, "y": 39, "w": 12, "h": 8 },
+      "options": { "tooltip": { "mode": "multi" } },
+      "fieldConfig": { "defaults": { "unit": "short",
+        "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": 0 }, { "color": "yellow", "value": 100 }, { "color": "red", "value": 500 }] } } },
+      "targets": [{
+        "expr": "rabbitmq_queue_messages{queue!~\".*dlq.*|.*dead.*\"}",
+        "legendFormat": "{{queue}}",
+        "datasource": { "type": "prometheus", "uid": "prometheus" }
+      }]
+    },
+    {
+      "id": 41, "title": "RabbitMQ Message Rate", "type": "timeseries",
+      "gridPos": { "x": 12, "y": 39, "w": 12, "h": 8 },
+      "options": { "tooltip": { "mode": "multi" } },
+      "fieldConfig": { "defaults": { "unit": "msgs" } },
+      "targets": [
+        { "expr": "sum(rate(rabbitmq_channel_messages_published_total[$interval]))", "legendFormat": "Published/s",
+          "datasource": { "type": "prometheus", "uid": "prometheus" } },
+        { "expr": "sum(rate(rabbitmq_channel_messages_delivered_total[$interval]))", "legendFormat": "Delivered/s",
+          "datasource": { "type": "prometheus", "uid": "prometheus" } }
+      ]
+    },
+    {
+      "id": 42, "title": "Dead Letter Queues depth", "type": "stat",
+      "gridPos": { "x": 0, "y": 47, "w": 6, "h": 4 },
+      "options": { "colorMode": "background" },
+      "fieldConfig": { "defaults": { "unit": "short",
+        "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": 0 }, { "color": "red", "value": 1 }] } } },
+      "targets": [{ "expr": "sum(rabbitmq_queue_messages{queue=~\".*dlq.*|.*dead.*\"}) OR vector(0)",
+                    "legendFormat": "DLQ msgs", "datasource": { "type": "prometheus", "uid": "prometheus" } }]
+    },
+
+    { "id": 105, "type": "text", "title": "", "gridPos": { "x": 0, "y": 51, "w": 24, "h": 1 },
+      "options": { "mode": "markdown", "content": "## JVM Health (all services)" } },
+
+    {
+      "id": 50, "title": "JVM Heap Used %", "type": "timeseries",
+      "gridPos": { "x": 0, "y": 52, "w": 12, "h": 8 },
+      "options": { "tooltip": { "mode": "multi" } },
+      "fieldConfig": { "defaults": { "unit": "percentunit", "min": 0, "max": 1,
+        "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": 0 }, { "color": "yellow", "value": 0.7 }, { "color": "red", "value": 0.9 }] } } },
+      "targets": [{
+        "expr": "jvm_memory_used_bytes{area=\"heap\"} / jvm_memory_max_bytes{area=\"heap\"}",
+        "legendFormat": "{{job}}",
+        "datasource": { "type": "prometheus", "uid": "prometheus" }
+      }]
+    },
+    {
+      "id": 51, "title": "GC Pause Time (p99)", "type": "timeseries",
+      "gridPos": { "x": 12, "y": 52, "w": 12, "h": 8 },
+      "options": { "tooltip": { "mode": "multi" } },
+      "fieldConfig": { "defaults": { "unit": "ms",
+        "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": 0 }, { "color": "yellow", "value": 50 }, { "color": "red", "value": 200 }] } } },
+      "targets": [{
+        "expr": "histogram_quantile(0.99, sum(rate(jvm_gc_pause_seconds_bucket[$interval])) by (job, le)) * 1000",
+        "legendFormat": "{{job}} GC P99",
+        "datasource": { "type": "prometheus", "uid": "prometheus" }
+      }]
+    }
+  ],
+  "links": [
+    { "title": "Services Overview", "url": "/d/1edu-services", "type": "dashboards" },
+    { "title": "JVM Metrics",       "url": "/d/1edu-jvm",      "type": "dashboards" },
+    { "title": "Infrastructure",    "url": "/d/1edu-infra",    "type": "dashboards" }
+  ]
+}

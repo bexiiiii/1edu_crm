@@ -290,6 +290,7 @@ public class AdminDashboardService {
                 .bannedUntil(t.getBannedUntil())
                 .deletedAt(t.getDeletedAt())
                 .schemaName(t.getSchemaName())
+                .notes(t.getNotes())
                 .build();
     }
 

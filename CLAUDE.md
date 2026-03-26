@@ -716,6 +716,99 @@ upstream api_gateway {
 | `GET /api/v1/admin/analytics/tenant-growth?months=12` | Рост/отток тенантов по месяцам |
 | `GET /api/v1/admin/analytics/churn` | Churn rate за 30/90 дней, разбивка по планам |
 
+## SUPER_ADMIN Full Control Endpoints (tenant-service)
+
+Полный список новых эндпоинтов для управления и мониторинга — все требуют роль `SUPER_ADMIN`:
+
+### Управление тенантами
+| Эндпоинт | Описание |
+|---|---|
+| `GET /api/v1/admin/tenants/search?q=&status=&page=&size=` | Поиск тенантов по имени/email с пагинацией |
+| `GET /api/v1/admin/tenants/expiring-trials?days=7` | Список тенантов с истекающим trial-периодом |
+| `GET /api/v1/admin/tenants/quota-warnings?threshold=80` | Тенанты, использующие ≥ порога % лимита студентов/сотрудников |
+| `GET /api/v1/admin/tenants/banned` | Список забаненных тенантов |
+| `GET /api/v1/admin/tenants/deleted` | Список soft-deleted тенантов |
+
+### Управление конкретным тенантом
+| Эндпоинт | Описание |
+|---|---|
+| `PATCH /api/v1/admin/tenants/{id}/trial` | Продлить trial-период (body: `{ trialEndsAt, reason }`) |
+| `PATCH /api/v1/admin/tenants/{id}/notes` | Обновить внутренние заметки (не видны тенанту) |
+| `GET /api/v1/admin/tenants/{id}/overview` | Полный cross-tenant обзор: студенты, сотрудники, финансы, активность |
+| `PATCH /api/v1/admin/tenants/{id}/status` | Сменить статус тенанта |
+| `PATCH /api/v1/admin/tenants/{id}/plan` | Сменить план тенанта + лимиты |
+| `POST /api/v1/admin/tenants/{id}/ban` | Забанить тенанта |
+| `POST /api/v1/admin/tenants/{id}/unban` | Разбанить тенанта |
+| `DELETE /api/v1/admin/tenants/{id}` | Soft-delete тенанта |
+| `POST /api/v1/admin/tenants/{id}/restore` | Восстановить soft-deleted тенанта |
+| `DELETE /api/v1/admin/tenants/{id}/permanent` | Permanent delete (DROP SCHEMA CASCADE) |
+
+### Bulk операции
+| Эндпоинт | Описание |
+|---|---|
+| `POST /api/v1/admin/tenants/bulk-status` | Массовая смена статуса (max 50 тенантов, body: `{ tenantIds, status, reason }`) |
+
+### Cross-tenant deep dive (`TenantOverviewResponse`)
+`GET /api/v1/admin/tenants/{id}/overview` возвращает:
+- **Студенты**: total, active, trial, inactive, newThisMonth, expiringSubscriptions
+- **Сотрудники**: total, staffByRole map
+- **Финансы**: revenueThisMonth, revenueLastMonth, expensesThisMonth, profitThisMonth, revenueTotal, debtorsCount, totalDebt
+- **Занятия**: lessonsThisMonth, planned, completed, cancelled
+- **Абонементы**: active, expired
+- **Последняя активность**: recentTransactions (10), recentEnrollments (10), recentLessons (10)
+
+### Компоненты
+- `TenantAdminService` — все новые операции, нативные SQL-запросы по схемам
+- `TenantOverviewResponse` — полный DTO с cross-tenant данными
+- `QuotaWarningDto` — предупреждение о превышении квоты (`studentsUsagePct`, `staffUsagePct`, `criticalStudents`)
+- `ExtendTrialRequest` — `trialEndsAt: LocalDate, reason: String`
+- `BulkStatusRequest` — `tenantIds: List<UUID>, status: TenantStatus, reason: String`
+
+## PgBouncer — Connection Pooling
+
+PgBouncer добавлен перед PostgreSQL как прокси пула соединений.
+
+### Конфигурация
+- Image: `edoburu/pgbouncer:latest`
+- Порт: `127.0.0.1:6432 -> pgbouncer:5432`
+- Режим: **session** — обязателен для Hibernate multi-tenancy (`SET search_path`)
+- `server_reset_query = RESET ALL` — очищает `search_path` при возврате соединения в пул
+- `max_client_conn = 500` — принимает до 500 HikariCP подключений
+- `default_pool_size = 20` — реальных Postgres соединений на (user, database)
+- `max_db_connections = 150` — жёсткий лимит реальных соединений к Postgres (PostgreSQL `max_connections=200`, оставляем 50 для Keycloak, pg_exporter, ad-hoc)
+
+### Маршрутизация
+- Spring Boot сервисы: `jdbc:postgresql://pgbouncer:5432/${DB_NAME}` (через PgBouncer)
+- Keycloak: `jdbc:postgresql://postgres:5432/${DB_NAME}` (напрямую — JPA без multi-tenancy)
+- postgres-exporter: `postgres:5432` (напрямую — мониторинг)
+
+### Зависимости в docker-compose
+`x-depends-infra` ждёт `pgbouncer: service_healthy` вместо `postgres: service_healthy`. PgBouncer сам ждёт postgres.
+
+### Мониторинг PgBouncer
+```bash
+psql -h localhost -p 6432 -U ondeedu pgbouncer -c "SHOW POOLS;"
+psql -h localhost -p 6432 -U ondeedu pgbouncer -c "SHOW STATS;"
+psql -h localhost -p 6432 -U ondeedu pgbouncer -c "SHOW SERVERS;"
+```
+
+### Важно при session-mode
+Session-mode не даёт прироста throughput для нагрузок с короткими транзакциями (в отличие от transaction-mode). Выгода — **мультиплексирование соединений**: 18 сервисов × 10 HikariCP = 180 потенциальных соединений → PgBouncer сводит к 20 реальным Postgres соединениям, снижая нагрузку на PostgreSQL connection overhead (~5 МБ RAM каждое).
+
+## Grafana — Admin Platform Dashboard
+
+Добавлен дашборд `04-admin-platform.json` ("1edu CRM — Admin Platform Health") для SUPER_ADMIN.
+
+### Секции дашборда
+- **Platform Overview**: сервисы up/down, total req/s, error rate %, P99 latency api-gateway, DB pool active/max, Redis hit rate
+- **Per-Service Health**: статус всех сервисов (таблица), requests/s bargauge
+- **Error Rates & Latency**: error rate per service (timeseries), P99 latency per service
+- **Database & Connection Pools**: HikariCP active connections per service, pending threads (pool exhaustion risk), Postgres stats (active connections, TPS, cache hit rate, slow queries)
+- **Message Queues**: RabbitMQ queue depth per queue, publish/deliver rate, DLQ depth
+- **JVM Health**: heap used % per service, GC pause P99 per service
+
+UID: `1edu-admin-platform`, ссылки на остальные дашборды в links секции.
+
 ## Finance Service — Payroll (port 8112)
 
 Модуль расчёта зарплат добавлен в finance-service (Flyway V12).

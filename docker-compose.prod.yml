@@ -26,7 +26,10 @@ x-service-defaults: &service-defaults
       max-file: "5"
 
 x-spring-env: &spring-env
-  SPRING_DATASOURCE_URL: jdbc:postgresql://${DB_HOST}:${DB_PORT}/${DB_NAME}
+  # Route all Spring Boot services through PgBouncer (session-mode pooling).
+  # PgBouncer caps total Postgres connections at 150 while allowing 500 client-side threads.
+  # The container still listens on 5432; host access is remapped to 6432.
+  SPRING_DATASOURCE_URL: jdbc:postgresql://pgbouncer:5432/${DB_NAME}
   SPRING_DATASOURCE_USERNAME: ${DB_USERNAME}
   SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD}
   SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE: ${HIKARI_MAXIMUM_POOL_SIZE:-10}
@@ -65,7 +68,7 @@ x-spring-env: &spring-env
 
 x-depends-infra: &depends-infra
   depends_on:
-    postgres:
+    pgbouncer:
       condition: service_healthy
     redis:
       condition: service_healthy
@@ -142,6 +145,46 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+
+  pgbouncer:
+    image: edoburu/pgbouncer:latest
+    container_name: 1edu-pgbouncer
+    environment:
+      DATABASE_URL: postgres://${DB_USERNAME}:${DB_PASSWORD}@postgres/${DB_NAME}
+      POOL_MODE: session
+      MAX_CLIENT_CONN: "500"
+      DEFAULT_POOL_SIZE: "20"
+      MIN_POOL_SIZE: "5"
+      RESERVE_POOL_SIZE: "5"
+      MAX_DB_CONNECTIONS: "150"
+      SERVER_RESET_QUERY: "RESET ALL"
+      SERVER_IDLE_TIMEOUT: "300"
+      CLIENT_IDLE_TIMEOUT: "60"
+      LOG_CONNECTIONS: "0"
+      LOG_DISCONNECTIONS: "0"
+      STATS_PERIOD: "60"
+      AUTH_TYPE: md5
+      ADMIN_USERS: pgbouncer
+    ports:
+      - "127.0.0.1:6432:5432"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks: [1edu-network]
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+          cpus: "0.25"
+        reservations:
+          memory: 32M
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -p 5432 -U ${DB_USERNAME} -d ${DB_NAME}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
 
   redis:
     image: redis:7-alpine
