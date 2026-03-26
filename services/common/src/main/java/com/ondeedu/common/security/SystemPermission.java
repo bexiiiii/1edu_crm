@@ -22,6 +22,12 @@ public enum SystemPermission {
     GROUPS_EDIT,
     GROUPS_DELETE,
 
+    // Rooms
+    ROOMS_VIEW,
+    ROOMS_CREATE,
+    ROOMS_EDIT,
+    ROOMS_DELETE,
+
     // Lessons
     LESSONS_VIEW,
     LESSONS_CREATE,
@@ -45,6 +51,12 @@ public enum SystemPermission {
     SUBSCRIPTIONS_CREATE,
     SUBSCRIPTIONS_EDIT,
 
+    // Price lists
+    PRICE_LISTS_VIEW,
+    PRICE_LISTS_CREATE,
+    PRICE_LISTS_EDIT,
+    PRICE_LISTS_DELETE,
+
     // Tasks
     TASKS_VIEW,
     TASKS_CREATE,
@@ -58,6 +70,7 @@ public enum SystemPermission {
     STAFF_DELETE,
 
     // Reports & Analytics
+    ANALYTICS_VIEW,
     REPORTS_VIEW,
 
     // Settings

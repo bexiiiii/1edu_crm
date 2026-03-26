@@ -1,6 +1,7 @@
 global:
-  scrape_interval: 15s
-  evaluation_interval: 15s
+  scrape_interval: 30s      # was 15s — halves per-service CPU overhead from metric collection
+  scrape_timeout: 10s
+  evaluation_interval: 15s  # alert evaluation stays fast
   external_labels:
     project: '1edu-crm'
 
@@ -8,11 +9,14 @@ scrape_configs:
 
   # ── Prometheus itself ────────────────────────────────────────
   - job_name: 'prometheus'
+    metrics_path: '/prometheus/metrics'
     static_configs:
       - targets: ['localhost:9090']
 
   # ── Spring Boot services (Docker container names) ────────────
+  # api-gateway keeps 15s for fine-grained latency/error visibility
   - job_name: 'api-gateway'
+    scrape_interval: 15s
     metrics_path: '/actuator/prometheus'
     static_configs:
       - targets: ['api-gateway:8090']

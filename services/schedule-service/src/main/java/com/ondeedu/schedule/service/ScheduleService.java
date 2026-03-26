@@ -69,7 +69,7 @@ public class ScheduleService {
     }
 
     @Transactional(readOnly = true)
-    @Cacheable(value = "schedules", key = "#id")
+    @Cacheable(value = "schedules", key = "T(com.ondeedu.common.cache.TenantCacheKeys).id(#id)")
     public ScheduleDto getSchedule(UUID id) {
         Schedule schedule = scheduleRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Schedule", "id", id));

@@ -2,7 +2,8 @@ package com.ondeedu.gateway.controller;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.http.server.reactive.ServerHttpRequest;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import reactor.core.publisher.Mono;
@@ -13,68 +14,47 @@ import java.util.Map;
 @RequestMapping("/fallback")
 public class FallbackController {
 
-    @GetMapping("/student")
-    public Mono<ResponseEntity<Map<String, Object>>> studentFallback() {
-        return fallbackResponse("Student service is temporarily unavailable");
+    private static final Map<String, String> SERVICE_NAMES = Map.ofEntries(
+        Map.entry("student", "Student"),
+        Map.entry("course", "Course"),
+        Map.entry("lead", "Lead"),
+        Map.entry("payment", "Payment"),
+        Map.entry("schedule", "Schedule"),
+        Map.entry("lesson", "Lesson"),
+        Map.entry("settings", "Settings"),
+        Map.entry("audit", "Audit"),
+        Map.entry("staff", "Staff"),
+        Map.entry("notification", "Notification"),
+        Map.entry("file", "File"),
+        Map.entry("auth", "Auth"),
+        Map.entry("tenant", "Tenant"),
+        Map.entry("finance", "Finance"),
+        Map.entry("task", "Task"),
+        Map.entry("analytics", "Analytics"),
+        Map.entry("report", "Report")
+    );
+
+    @RequestMapping("/{service}")
+    public Mono<ResponseEntity<Map<String, Object>>> fallback(
+            @PathVariable String service,
+            ServerHttpRequest request) {
+        String serviceName = SERVICE_NAMES.getOrDefault(service, "Upstream");
+        return fallbackResponse(serviceName + " service is temporarily unavailable", service, request);
     }
 
-    @GetMapping("/course")
-    public Mono<ResponseEntity<Map<String, Object>>> courseFallback() {
-        return fallbackResponse("Course service is temporarily unavailable");
-    }
-
-    @GetMapping("/lead")
-    public Mono<ResponseEntity<Map<String, Object>>> leadFallback() {
-        return fallbackResponse("Lead service is temporarily unavailable");
-    }
-
-    @GetMapping("/payment")
-    public Mono<ResponseEntity<Map<String, Object>>> paymentFallback() {
-        return fallbackResponse("Payment service is temporarily unavailable");
-    }
-
-    @GetMapping("/schedule")
-    public Mono<ResponseEntity<Map<String, Object>>> scheduleFallback() {
-        return fallbackResponse("Schedule service is temporarily unavailable");
-    }
-
-    @GetMapping("/staff")
-    public Mono<ResponseEntity<Map<String, Object>>> staffFallback() {
-        return fallbackResponse("Staff service is temporarily unavailable");
-    }
-
-    @GetMapping("/notification")
-    public Mono<ResponseEntity<Map<String, Object>>> notificationFallback() {
-        return fallbackResponse("Notification service is temporarily unavailable");
-    }
-
-    @GetMapping("/file")
-    public Mono<ResponseEntity<Map<String, Object>>> fileFallback() {
-        return fallbackResponse("File service is temporarily unavailable");
-    }
-
-    @GetMapping("/tenant")
-    public Mono<ResponseEntity<Map<String, Object>>> tenantFallback() {
-        return fallbackResponse("Tenant service is temporarily unavailable");
-    }
-
-    @GetMapping("/analytics")
-    public Mono<ResponseEntity<Map<String, Object>>> analyticsFallback() {
-        return fallbackResponse("Analytics service is temporarily unavailable");
-    }
-
-    @GetMapping("/auth")
-    public Mono<ResponseEntity<Map<String, Object>>> authFallback() {
-        return fallbackResponse("Auth service is temporarily unavailable");
-    }
-
-    private Mono<ResponseEntity<Map<String, Object>>> fallbackResponse(String message) {
+    private Mono<ResponseEntity<Map<String, Object>>> fallbackResponse(
+            String message,
+            String service,
+            ServerHttpRequest request) {
         return Mono.just(ResponseEntity
             .status(HttpStatus.SERVICE_UNAVAILABLE)
             .body(Map.of(
                 "success", false,
                 "errorCode", "SERVICE_UNAVAILABLE",
-                "message", message
+                "message", message,
+                "service", service,
+                "method", request.getMethod() != null ? request.getMethod().name() : "UNKNOWN",
+                "path", request.getPath().value()
             )));
     }
 }

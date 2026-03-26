@@ -29,21 +29,21 @@ public class SettingsController {
     private final SettingsService settingsService;
 
     @GetMapping
-    @PreAuthorize("hasAnyRole('TENANT_ADMIN','MANAGER','RECEPTIONIST','TEACHER')")
+    @PreAuthorize("hasAnyRole('TENANT_ADMIN','MANAGER','RECEPTIONIST','TEACHER') or hasAuthority('SETTINGS_VIEW')")
     @Operation(summary = "Get current tenant settings")
     public ApiResponse<SettingsDto> getSettings() {
         return ApiResponse.success(settingsService.getSettings());
     }
 
     @PutMapping
-    @PreAuthorize("hasRole('TENANT_ADMIN')")
+    @PreAuthorize("hasRole('TENANT_ADMIN') or hasAuthority('SETTINGS_EDIT')")
     @Operation(summary = "Update tenant settings")
     public ApiResponse<SettingsDto> updateSettings(@Valid @RequestBody UpdateSettingsRequest request) {
         return ApiResponse.success(settingsService.upsertSettings(request), "Settings updated successfully");
     }
 
     @PostMapping(value = "/logo", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    @PreAuthorize("hasRole('TENANT_ADMIN')")
+    @PreAuthorize("hasRole('TENANT_ADMIN') or hasAuthority('SETTINGS_EDIT')")
     @Operation(summary = "Upload tenant logo and update logoUrl")
     public ApiResponse<SettingsDto> uploadLogo(@RequestPart("file") MultipartFile file,
                                                JwtAuthenticationToken authentication) {

@@ -57,7 +57,7 @@ public class FinanceController {
     }
 
     @DeleteMapping("/transactions/{id}")
-    @PreAuthorize("hasRole('TENANT_ADMIN') or hasAuthority('FINANCE_VIEW')")
+    @PreAuthorize("hasRole('TENANT_ADMIN') or hasAuthority('FINANCE_EDIT')")
     @Operation(summary = "Delete transaction")
     public ApiResponse<Void> deleteTransaction(@PathVariable UUID id) {
         financeService.deleteTransaction(id);

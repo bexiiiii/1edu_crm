@@ -24,7 +24,7 @@ public class ManagerEfficiencyController {
     private final ManagerEfficiencyService managerEfficiencyService;
 
     @GetMapping
-    @PreAuthorize("hasAnyRole('TENANT_ADMIN', 'MANAGER')")
+    @PreAuthorize("hasAnyRole('TENANT_ADMIN', 'MANAGER') or hasAuthority('ANALYTICS_VIEW')")
     @Operation(summary = "Эффективность менеджеров — лиды, конверсия, FRT")
     public ApiResponse<ManagerEfficiencyResponse> getEfficiency(
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,

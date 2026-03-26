@@ -6,6 +6,15 @@ spring:
     name: api-gateway
 
   cloud:
+    loadbalancer:
+      cache:
+        caffeine:
+          spec: maximumSize=2048,expireAfterWrite=30s
+      # Health-check: skip DOWN instances when routing via lb://
+      health-check:
+        refetch-instances: true
+        refetch-instances-interval: 30s
+        repeat-health-check: true
     gateway:
       discovery:
         locator:
@@ -15,6 +24,17 @@ spring:
       default-filters:
         - DedupeResponseHeader=Access-Control-Allow-Credentials Access-Control-Allow-Origin
         - AddRequestHeader=X-Request-ID, ${random.uuid}
+        # Retry idempotent requests on transient failures (GET/HEAD only)
+        - name: Retry
+          args:
+            retries: 2
+            statuses: BAD_GATEWAY,SERVICE_UNAVAILABLE,GATEWAY_TIMEOUT
+            methods: GET,HEAD
+            backoff:
+              firstBackoff: 100ms
+              maxBackoff: 400ms
+              factor: 2
+              basedOnPreviousValue: false
 
       globalcors:
         cors-configurations:
@@ -260,10 +280,15 @@ resilience4j:
   circuitbreaker:
     configs:
       default:
-        slidingWindowSize: 10
-        failureRateThreshold: 50
-        waitDurationInOpenState: 10000
-        permittedNumberOfCallsInHalfOpenState: 3
+        slidingWindowType: COUNT_BASED
+        slidingWindowSize: 20          # evaluate last 20 calls (was 10, less noise)
+        minimumNumberOfCalls: 5        # need at least 5 calls before tripping
+        failureRateThreshold: 50       # open when 50%+ fail
+        slowCallDurationThreshold: 8s  # calls >8s count as slow
+        slowCallRateThreshold: 80      # open when 80%+ are slow
+        waitDurationInOpenState: 15s   # wait 15s before half-open (was 10s)
+        permittedNumberOfCallsInHalfOpenState: 5
+        automaticTransitionFromOpenToHalfOpenEnabled: true
     instances:
       studentService:
         baseConfig: default
@@ -303,7 +328,7 @@ resilience4j:
   timelimiter:
     configs:
       default:
-        timeoutDuration: 5s
+        timeoutDuration: ${GATEWAY_TIMEOUT_DURATION:12s}
 
 management:
   endpoints:
@@ -317,12 +342,12 @@ management:
       enabled: true
   tracing:
     sampling:
-      probability: 1.0
+      probability: ${MANAGEMENT_TRACING_SAMPLING_PROBABILITY:0.1}
 
 logging:
   level:
-    org.springframework.cloud.gateway: DEBUG
-    org.springframework.security: DEBUG
+    org.springframework.cloud.gateway: ${GATEWAY_LOG_LEVEL:INFO}
+    org.springframework.security: ${SPRING_SECURITY_LOG_LEVEL:WARN}
 
 app:
   domain: ${APP_DOMAIN:1edu.kz}

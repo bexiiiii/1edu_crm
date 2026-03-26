@@ -33,7 +33,7 @@ public class FinanceCategoryConfigController {
     private final FinanceCategoryConfigService service;
 
     @GetMapping("/income-categories")
-    @PreAuthorize("hasAnyRole('TENANT_ADMIN','MANAGER','ACCOUNTANT')")
+    @PreAuthorize("hasAnyRole('TENANT_ADMIN','MANAGER','ACCOUNTANT') or hasAuthority('FINANCE_VIEW') or hasAuthority('SETTINGS_VIEW')")
     @Operation(summary = "Get all custom income categories")
     public ApiResponse<List<FinanceCategoryConfigDto>> getIncomeCategories() {
         return ApiResponse.success(service.getAll(FinanceCategoryType.INCOME));
@@ -41,7 +41,7 @@ public class FinanceCategoryConfigController {
 
     @PostMapping("/income-categories")
     @ResponseStatus(HttpStatus.CREATED)
-    @PreAuthorize("hasRole('TENANT_ADMIN') or hasRole('ACCOUNTANT')")
+    @PreAuthorize("hasRole('TENANT_ADMIN') or hasRole('ACCOUNTANT') or hasAuthority('FINANCE_EDIT') or hasAuthority('SETTINGS_EDIT')")
     @Operation(summary = "Create a custom income category")
     public ApiResponse<FinanceCategoryConfigDto> createIncomeCategory(
             @Valid @RequestBody SaveFinanceCategoryRequest request) {
@@ -50,7 +50,7 @@ public class FinanceCategoryConfigController {
     }
 
     @PutMapping("/income-categories/{id}")
-    @PreAuthorize("hasRole('TENANT_ADMIN') or hasRole('ACCOUNTANT')")
+    @PreAuthorize("hasRole('TENANT_ADMIN') or hasRole('ACCOUNTANT') or hasAuthority('FINANCE_EDIT') or hasAuthority('SETTINGS_EDIT')")
     @Operation(summary = "Update a custom income category")
     public ApiResponse<FinanceCategoryConfigDto> updateIncomeCategory(
             @PathVariable UUID id,
@@ -60,7 +60,7 @@ public class FinanceCategoryConfigController {
     }
 
     @DeleteMapping("/income-categories/{id}")
-    @PreAuthorize("hasRole('TENANT_ADMIN') or hasRole('ACCOUNTANT')")
+    @PreAuthorize("hasRole('TENANT_ADMIN') or hasRole('ACCOUNTANT') or hasAuthority('FINANCE_EDIT') or hasAuthority('SETTINGS_EDIT')")
     @Operation(summary = "Delete a custom income category")
     public ApiResponse<Void> deleteIncomeCategory(@PathVariable UUID id) {
         service.delete(FinanceCategoryType.INCOME, id);
@@ -68,7 +68,7 @@ public class FinanceCategoryConfigController {
     }
 
     @GetMapping("/expense-categories")
-    @PreAuthorize("hasAnyRole('TENANT_ADMIN','MANAGER','ACCOUNTANT')")
+    @PreAuthorize("hasAnyRole('TENANT_ADMIN','MANAGER','ACCOUNTANT') or hasAuthority('FINANCE_VIEW') or hasAuthority('SETTINGS_VIEW')")
     @Operation(summary = "Get all custom expense categories")
     public ApiResponse<List<FinanceCategoryConfigDto>> getExpenseCategories() {
         return ApiResponse.success(service.getAll(FinanceCategoryType.EXPENSE));
@@ -76,7 +76,7 @@ public class FinanceCategoryConfigController {
 
     @PostMapping("/expense-categories")
     @ResponseStatus(HttpStatus.CREATED)
-    @PreAuthorize("hasRole('TENANT_ADMIN') or hasRole('ACCOUNTANT')")
+    @PreAuthorize("hasRole('TENANT_ADMIN') or hasRole('ACCOUNTANT') or hasAuthority('FINANCE_EDIT') or hasAuthority('SETTINGS_EDIT')")
     @Operation(summary = "Create a custom expense category")
     public ApiResponse<FinanceCategoryConfigDto> createExpenseCategory(
             @Valid @RequestBody SaveFinanceCategoryRequest request) {
@@ -85,7 +85,7 @@ public class FinanceCategoryConfigController {
     }
 
     @PutMapping("/expense-categories/{id}")
-    @PreAuthorize("hasRole('TENANT_ADMIN') or hasRole('ACCOUNTANT')")
+    @PreAuthorize("hasRole('TENANT_ADMIN') or hasRole('ACCOUNTANT') or hasAuthority('FINANCE_EDIT') or hasAuthority('SETTINGS_EDIT')")
     @Operation(summary = "Update a custom expense category")
     public ApiResponse<FinanceCategoryConfigDto> updateExpenseCategory(
             @PathVariable UUID id,
@@ -95,7 +95,7 @@ public class FinanceCategoryConfigController {
     }
 
     @DeleteMapping("/expense-categories/{id}")
-    @PreAuthorize("hasRole('TENANT_ADMIN') or hasRole('ACCOUNTANT')")
+    @PreAuthorize("hasRole('TENANT_ADMIN') or hasRole('ACCOUNTANT') or hasAuthority('FINANCE_EDIT') or hasAuthority('SETTINGS_EDIT')")
     @Operation(summary = "Delete a custom expense category")
     public ApiResponse<Void> deleteExpenseCategory(@PathVariable UUID id) {
         service.delete(FinanceCategoryType.EXPENSE, id);

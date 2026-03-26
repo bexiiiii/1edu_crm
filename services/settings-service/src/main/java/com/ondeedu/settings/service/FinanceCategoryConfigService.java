@@ -10,6 +10,8 @@ import com.ondeedu.settings.mapper.FinanceCategoryConfigMapper;
 import com.ondeedu.settings.repository.FinanceCategoryConfigRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -26,6 +28,7 @@ public class FinanceCategoryConfigService {
     private final FinanceCategoryConfigMapper mapper;
 
     @Transactional(readOnly = true)
+    @Cacheable(value = "finance-categories", key = "T(com.ondeedu.common.cache.TenantCacheKeys).fixed(#type.name())")
     public List<FinanceCategoryConfigDto> getAll(FinanceCategoryType type) {
         return repository.findAllByTypeOrderBySortOrderAscNameAsc(type)
                 .stream()
@@ -34,6 +37,7 @@ public class FinanceCategoryConfigService {
     }
 
     @Transactional
+    @CacheEvict(value = "finance-categories", allEntries = true)
     public FinanceCategoryConfigDto create(FinanceCategoryType type, SaveFinanceCategoryRequest request) {
         if (repository.existsByTypeAndNameIgnoreCase(type, request.getName())) {
             throw new BusinessException("DUPLICATE_FINANCE_CATEGORY",
@@ -48,6 +52,7 @@ public class FinanceCategoryConfigService {
     }
 
     @Transactional
+    @CacheEvict(value = "finance-categories", allEntries = true)
     public FinanceCategoryConfigDto update(FinanceCategoryType type, UUID id, SaveFinanceCategoryRequest request) {
         FinanceCategoryConfig entity = repository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("FinanceCategoryConfig", "id", id));
@@ -70,6 +75,7 @@ public class FinanceCategoryConfigService {
     }
 
     @Transactional
+    @CacheEvict(value = "finance-categories", allEntries = true)
     public void delete(FinanceCategoryType type, UUID id) {
         FinanceCategoryConfig entity = repository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("FinanceCategoryConfig", "id", id));

@@ -25,14 +25,14 @@ public class SettingsService {
     private final FileServiceClient fileServiceClient;
 
     @Transactional(readOnly = true)
-    @Cacheable(value = "settings", key = "'tenant-settings'")
+    @Cacheable(value = "settings", key = "T(com.ondeedu.common.cache.TenantCacheKeys).fixed('tenant-settings')")
     public SettingsDto getSettings() {
         TenantSettings settings = getOrCreateSettings();
         return settingsMapper.toDto(settings);
     }
 
     @Transactional
-    @CacheEvict(value = "settings", key = "'tenant-settings'")
+    @CacheEvict(value = "settings", key = "T(com.ondeedu.common.cache.TenantCacheKeys).fixed('tenant-settings')")
     public SettingsDto upsertSettings(UpdateSettingsRequest request) {
         TenantSettings settings = getOrCreateSettings();
         settingsMapper.updateEntity(settings, request);
@@ -42,7 +42,7 @@ public class SettingsService {
     }
 
     @Transactional
-    @CacheEvict(value = "settings", key = "'tenant-settings'")
+    @CacheEvict(value = "settings", key = "T(com.ondeedu.common.cache.TenantCacheKeys).fixed('tenant-settings')")
     public SettingsDto uploadLogo(MultipartFile file, String bearerToken) {
         if (file == null || file.isEmpty()) {
             throw new BusinessException("LOGO_FILE_REQUIRED", "Logo file is required");

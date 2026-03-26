@@ -25,7 +25,7 @@ public class FunnelController {
     private final FunnelService funnelService;
 
     @GetMapping("/funnel")
-    @PreAuthorize("hasAnyRole('TENANT_ADMIN', 'MANAGER')")
+    @PreAuthorize("hasAnyRole('TENANT_ADMIN', 'MANAGER') or hasAuthority('ANALYTICS_VIEW')")
     @Operation(summary = "Воронка продаж")
     public ApiResponse<SalesFunnelResponse> getFunnel(
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
@@ -36,7 +36,7 @@ public class FunnelController {
     }
 
     @GetMapping("/lead-conversions")
-    @PreAuthorize("hasAnyRole('TENANT_ADMIN', 'MANAGER')")
+    @PreAuthorize("hasAnyRole('TENANT_ADMIN', 'MANAGER') or hasAuthority('ANALYTICS_VIEW')")
     @Operation(summary = "Конверсии лидов — детализация")
     public ApiResponse<LeadConversionResponse> getConversions(
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,

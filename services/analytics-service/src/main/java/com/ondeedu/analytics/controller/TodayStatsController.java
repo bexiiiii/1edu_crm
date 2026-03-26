@@ -25,7 +25,7 @@ public class TodayStatsController {
     private final TodayStatsService todayStatsService;
 
     @GetMapping
-    @PreAuthorize("hasAnyRole('TENANT_ADMIN', 'MANAGER')")
+    @PreAuthorize("hasAnyRole('TENANT_ADMIN', 'MANAGER') or hasAuthority('ANALYTICS_VIEW')")
     @Operation(
             summary = "Статистика за выбранную дату",
             description = """

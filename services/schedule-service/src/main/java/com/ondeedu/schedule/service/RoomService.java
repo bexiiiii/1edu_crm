@@ -38,7 +38,7 @@ public class RoomService {
     }
 
     @Transactional(readOnly = true)
-    @Cacheable(value = "rooms", key = "#id")
+    @Cacheable(value = "rooms", key = "T(com.ondeedu.common.cache.TenantCacheKeys).id(#id)")
     public RoomDto getRoom(UUID id) {
         Room room = roomRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Room", "id", id));
@@ -46,7 +46,7 @@ public class RoomService {
     }
 
     @Transactional
-    @CacheEvict(value = "rooms", key = "#id")
+    @CacheEvict(value = "rooms", key = "T(com.ondeedu.common.cache.TenantCacheKeys).id(#id)")
     public RoomDto updateRoom(UUID id, UpdateRoomRequest request) {
         Room room = roomRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Room", "id", id));
@@ -57,7 +57,7 @@ public class RoomService {
     }
 
     @Transactional
-    @CacheEvict(value = "rooms", key = "#id")
+    @CacheEvict(value = "rooms", key = "T(com.ondeedu.common.cache.TenantCacheKeys).id(#id)")
     public void deleteRoom(UUID id) {
         if (!roomRepository.existsById(id)) {
             throw new ResourceNotFoundException("Room", "id", id);

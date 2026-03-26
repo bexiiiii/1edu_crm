@@ -26,7 +26,7 @@ public class ReportController {
     private final ReportService reportService;
 
     @GetMapping("/generate")
-    @PreAuthorize("hasAnyRole('TENANT_ADMIN', 'MANAGER')")
+    @PreAuthorize("hasAnyRole('TENANT_ADMIN', 'MANAGER') or hasAuthority('REPORTS_VIEW')")
     public ResponseEntity<byte[]> generateReport(
             @RequestParam ReportType type,
             @RequestParam ReportFormat format,

@@ -32,7 +32,7 @@ public class PaymentSourceController {
     private final PaymentSourceService service;
 
     @GetMapping
-    @PreAuthorize("hasAnyRole('TENANT_ADMIN','MANAGER','RECEPTIONIST')")
+    @PreAuthorize("hasAnyRole('TENANT_ADMIN','MANAGER','RECEPTIONIST') or hasAuthority('SETTINGS_VIEW') or hasAuthority('FINANCE_VIEW') or hasAuthority('FINANCE_CREATE')")
     @Operation(summary = "Get all payment sources ordered by sort order")
     public ApiResponse<List<PaymentSourceDto>> getAll() {
         return ApiResponse.success(service.getAll());
@@ -40,14 +40,14 @@ public class PaymentSourceController {
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
-    @PreAuthorize("hasRole('TENANT_ADMIN')")
+    @PreAuthorize("hasRole('TENANT_ADMIN') or hasAuthority('SETTINGS_EDIT')")
     @Operation(summary = "Create a new payment source")
     public ApiResponse<PaymentSourceDto> create(@Valid @RequestBody SavePaymentSourceRequest request) {
         return ApiResponse.success(service.create(request), "Payment source created successfully");
     }
 
     @PutMapping("/{id}")
-    @PreAuthorize("hasRole('TENANT_ADMIN')")
+    @PreAuthorize("hasRole('TENANT_ADMIN') or hasAuthority('SETTINGS_EDIT')")
     @Operation(summary = "Update a payment source")
     public ApiResponse<PaymentSourceDto> update(
             @PathVariable UUID id,
@@ -56,7 +56,7 @@ public class PaymentSourceController {
     }
 
     @DeleteMapping("/{id}")
-    @PreAuthorize("hasRole('TENANT_ADMIN')")
+    @PreAuthorize("hasRole('TENANT_ADMIN') or hasAuthority('SETTINGS_EDIT')")
     @Operation(summary = "Delete a payment source")
     public ApiResponse<Void> delete(@PathVariable UUID id) {
         service.delete(id);

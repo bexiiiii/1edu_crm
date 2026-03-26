@@ -20,7 +20,7 @@ public class GroupLoadController {
     private final GroupLoadService groupLoadService;
 
     @GetMapping
-    @PreAuthorize("hasAnyRole('TENANT_ADMIN', 'MANAGER')")
+    @PreAuthorize("hasAnyRole('TENANT_ADMIN', 'MANAGER') or hasAuthority('ANALYTICS_VIEW')")
     @Operation(summary = "Загрузка групп — текущий снимок")
     public ApiResponse<GroupLoadResponse> getLoad() {
         return ApiResponse.success(groupLoadService.getLoad());

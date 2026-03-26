@@ -24,7 +24,7 @@ public class FinanceReportController {
     private final FinanceReportService financeReportService;
 
     @GetMapping
-    @PreAuthorize("hasAnyRole('TENANT_ADMIN', 'MANAGER')")
+    @PreAuthorize("hasAnyRole('TENANT_ADMIN', 'MANAGER') or hasAuthority('ANALYTICS_VIEW')")
     @Operation(summary = "Финансовый отчёт за период")
     public ApiResponse<FinanceReportResponse> getReport(
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,

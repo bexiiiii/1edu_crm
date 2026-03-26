@@ -43,7 +43,7 @@ public class LessonService {
     }
 
     @Transactional(readOnly = true)
-    @Cacheable(value = "lessons", key = "#id")
+    @Cacheable(value = "lessons", key = "T(com.ondeedu.common.cache.TenantCacheKeys).id(#id)")
     public LessonDto getLesson(UUID id) {
         Lesson lesson = lessonRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Lesson", "id", id));
@@ -51,7 +51,7 @@ public class LessonService {
     }
 
     @Transactional
-    @CacheEvict(value = "lessons", key = "#id")
+    @CacheEvict(value = "lessons", key = "T(com.ondeedu.common.cache.TenantCacheKeys).id(#id)")
     public LessonDto updateLesson(UUID id, UpdateLessonRequest request) {
         Lesson lesson = lessonRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Lesson", "id", id));
@@ -64,7 +64,7 @@ public class LessonService {
     }
 
     @Transactional
-    @CacheEvict(value = "lessons", key = "#id")
+    @CacheEvict(value = "lessons", key = "T(com.ondeedu.common.cache.TenantCacheKeys).id(#id)")
     public void deleteLesson(UUID id) {
         if (!lessonRepository.existsById(id)) {
             throw new ResourceNotFoundException("Lesson", "id", id);
@@ -74,7 +74,7 @@ public class LessonService {
     }
 
     @Transactional
-    @CacheEvict(value = "lessons", key = "#id")
+    @CacheEvict(value = "lessons", key = "T(com.ondeedu.common.cache.TenantCacheKeys).id(#id)")
     public LessonDto completeLesson(UUID id, String topic, String homework) {
         Lesson lesson = lessonRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Lesson", "id", id));
@@ -93,7 +93,7 @@ public class LessonService {
     }
 
     @Transactional
-    @CacheEvict(value = "lessons", key = "#id")
+    @CacheEvict(value = "lessons", key = "T(com.ondeedu.common.cache.TenantCacheKeys).id(#id)")
     public LessonDto cancelLesson(UUID id) {
         Lesson lesson = lessonRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Lesson", "id", id));
@@ -145,7 +145,7 @@ public class LessonService {
     }
 
     @Transactional
-    @CacheEvict(value = "lessons", key = "#id")
+    @CacheEvict(value = "lessons", key = "T(com.ondeedu.common.cache.TenantCacheKeys).id(#id)")
     public LessonDto markTeacherAbsent(UUID id) {
         Lesson lesson = lessonRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Lesson", "id", id));
@@ -156,7 +156,7 @@ public class LessonService {
     }
 
     @Transactional
-    @CacheEvict(value = "lessons", key = "#id")
+    @CacheEvict(value = "lessons", key = "T(com.ondeedu.common.cache.TenantCacheKeys).id(#id)")
     public LessonDto markTeacherSick(UUID id) {
         Lesson lesson = lessonRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Lesson", "id", id));
@@ -167,7 +167,7 @@ public class LessonService {
     }
 
     @Transactional
-    @CacheEvict(value = "lessons", key = "#id")
+    @CacheEvict(value = "lessons", key = "T(com.ondeedu.common.cache.TenantCacheKeys).id(#id)")
     public LessonDto rescheduleLesson(UUID id, RescheduleLessonRequest request) {
         Lesson lesson = lessonRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Lesson", "id", id));

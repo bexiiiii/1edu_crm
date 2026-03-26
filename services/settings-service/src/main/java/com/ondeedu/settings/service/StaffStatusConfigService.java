@@ -9,6 +9,8 @@ import com.ondeedu.settings.mapper.StaffStatusConfigMapper;
 import com.ondeedu.settings.repository.StaffStatusConfigRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -25,6 +27,7 @@ public class StaffStatusConfigService {
     private final StaffStatusConfigMapper mapper;
 
     @Transactional(readOnly = true)
+    @Cacheable(value = "staff-statuses", key = "T(com.ondeedu.common.cache.TenantCacheKeys).fixed('all')")
     public List<StaffStatusConfigDto> getAll() {
         return repository.findAllByOrderBySortOrderAscNameAsc()
                 .stream()
@@ -33,6 +36,7 @@ public class StaffStatusConfigService {
     }
 
     @Transactional
+    @CacheEvict(value = "staff-statuses", allEntries = true)
     public StaffStatusConfigDto create(SaveStaffStatusRequest request) {
         if (repository.existsByNameIgnoreCase(request.getName())) {
             throw new BusinessException("DUPLICATE_STAFF_STATUS", "Staff status with name '" + request.getName() + "' already exists");
@@ -45,6 +49,7 @@ public class StaffStatusConfigService {
     }
 
     @Transactional
+    @CacheEvict(value = "staff-statuses", allEntries = true)
     public StaffStatusConfigDto update(UUID id, SaveStaffStatusRequest request) {
         StaffStatusConfig entity = repository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("StaffStatusConfig", "id", id));
@@ -60,6 +65,7 @@ public class StaffStatusConfigService {
     }
 
     @Transactional
+    @CacheEvict(value = "staff-statuses", allEntries = true)
     public void delete(UUID id) {
         if (!repository.existsById(id)) {
             throw new ResourceNotFoundException("StaffStatusConfig", "id", id);

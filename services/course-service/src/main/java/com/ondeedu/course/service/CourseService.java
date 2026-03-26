@@ -52,7 +52,7 @@ public class CourseService {
     }
 
     @Transactional(readOnly = true)
-    @Cacheable(value = "courses", key = "#id")
+    @Cacheable(value = "courses", key = "T(com.ondeedu.common.cache.TenantCacheKeys).id(#id)")
     public CourseDto getCourse(UUID id) {
         Course course = courseRepository.findById(id)
             .orElseThrow(() -> new ResourceNotFoundException("Course", "id", id));
@@ -60,7 +60,7 @@ public class CourseService {
     }
 
     @Transactional
-    @CacheEvict(value = "courses", key = "#id")
+    @CacheEvict(value = "courses", key = "T(com.ondeedu.common.cache.TenantCacheKeys).id(#id)")
     public CourseDto updateCourse(UUID id, UpdateCourseRequest request) {
         Course course = courseRepository.findById(id)
             .orElseThrow(() -> new ResourceNotFoundException("Course", "id", id));
@@ -76,7 +76,7 @@ public class CourseService {
     }
 
     @Transactional
-    @CacheEvict(value = "courses", key = "#id")
+    @CacheEvict(value = "courses", key = "T(com.ondeedu.common.cache.TenantCacheKeys).id(#id)")
     public void deleteCourse(UUID id) {
         Course course = courseRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Course", "id", id));

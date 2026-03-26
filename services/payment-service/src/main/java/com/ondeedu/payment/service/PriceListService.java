@@ -77,6 +77,7 @@ public class PriceListService {
     }
 
     @Transactional(readOnly = true)
+    @Cacheable(value = "price-lists", keyGenerator = "tenantCacheKeyGenerator")
     public PageResponse<PriceListDto> list(Boolean isActive, Pageable pageable) {
         Page<PriceList> page;
         if (isActive != null) {
@@ -88,6 +89,7 @@ public class PriceListService {
     }
 
     @Transactional(readOnly = true)
+    @Cacheable(value = "price-lists", keyGenerator = "tenantCacheKeyGenerator")
     public PageResponse<PriceListDto> listByCourse(UUID courseId, Pageable pageable) {
         Page<PriceList> page = priceListRepository.findByCourseId(courseId, pageable);
         return PageResponse.from(page, priceListMapper::toDto);

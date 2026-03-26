@@ -41,8 +41,8 @@ management:
         include: health,info,prometheus,metrics
   tracing:
     sampling:
-      probability: 1.0
+      probability: ${MANAGEMENT_TRACING_SAMPLING_PROBABILITY:0.1}
 
 logging:
   level:
-    com.ondeedu.audit: DEBUG
+    com.ondeedu.audit: ${AUDIT_LOG_LEVEL:INFO}

@@ -29,7 +29,7 @@ public class PriceListController {
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
-    @PreAuthorize("hasAnyRole('TENANT_ADMIN', 'MANAGER')")
+    @PreAuthorize("hasAnyRole('TENANT_ADMIN', 'MANAGER') or hasAuthority('PRICE_LISTS_CREATE')")
     @Operation(summary = "Create a new price list")
     public ApiResponse<PriceListDto> createPriceList(
             @Valid @RequestBody CreatePriceListRequest request) {
@@ -37,14 +37,14 @@ public class PriceListController {
     }
 
     @GetMapping("/{id}")
-    @PreAuthorize("hasAnyRole('TENANT_ADMIN', 'MANAGER', 'RECEPTIONIST', 'TEACHER')")
+    @PreAuthorize("hasAnyRole('TENANT_ADMIN', 'MANAGER', 'RECEPTIONIST', 'TEACHER') or hasAuthority('PRICE_LISTS_VIEW')")
     @Operation(summary = "Get price list by ID")
     public ApiResponse<PriceListDto> getPriceList(@PathVariable UUID id) {
         return ApiResponse.success(priceListService.getPriceList(id));
     }
 
     @PutMapping("/{id}")
-    @PreAuthorize("hasAnyRole('TENANT_ADMIN', 'MANAGER')")
+    @PreAuthorize("hasAnyRole('TENANT_ADMIN', 'MANAGER') or hasAuthority('PRICE_LISTS_EDIT')")
     @Operation(summary = "Update price list")
     public ApiResponse<PriceListDto> updatePriceList(
             @PathVariable UUID id,
@@ -53,7 +53,7 @@ public class PriceListController {
     }
 
     @DeleteMapping("/{id}")
-    @PreAuthorize("hasAnyRole('TENANT_ADMIN', 'MANAGER')")
+    @PreAuthorize("hasAnyRole('TENANT_ADMIN', 'MANAGER') or hasAuthority('PRICE_LISTS_DELETE')")
     @Operation(summary = "Delete price list")
     public ApiResponse<Void> deletePriceList(@PathVariable UUID id) {
         priceListService.deletePriceList(id);
@@ -61,7 +61,7 @@ public class PriceListController {
     }
 
     @GetMapping
-    @PreAuthorize("hasAnyRole('TENANT_ADMIN', 'MANAGER', 'RECEPTIONIST', 'TEACHER')")
+    @PreAuthorize("hasAnyRole('TENANT_ADMIN', 'MANAGER', 'RECEPTIONIST', 'TEACHER') or hasAuthority('PRICE_LISTS_VIEW')")
     @Operation(summary = "List price lists with optional active filter")
     public ApiResponse<PageResponse<PriceListDto>> list(
             @RequestParam(required = false) Boolean active,
@@ -70,7 +70,7 @@ public class PriceListController {
     }
 
     @GetMapping("/course/{courseId}")
-    @PreAuthorize("hasAnyRole('TENANT_ADMIN', 'MANAGER', 'RECEPTIONIST', 'TEACHER')")
+    @PreAuthorize("hasAnyRole('TENANT_ADMIN', 'MANAGER', 'RECEPTIONIST', 'TEACHER') or hasAuthority('PRICE_LISTS_VIEW')")
     @Operation(summary = "List price lists by course")
     public ApiResponse<PageResponse<PriceListDto>> listByCourse(
             @PathVariable UUID courseId,

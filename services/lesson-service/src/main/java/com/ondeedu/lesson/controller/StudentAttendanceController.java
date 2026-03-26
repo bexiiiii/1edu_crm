@@ -24,7 +24,7 @@ public class StudentAttendanceController {
     private final AttendanceService attendanceService;
 
     @GetMapping("/student/{studentId}")
-    @PreAuthorize("hasAnyRole('TENANT_ADMIN', 'MANAGER', 'RECEPTIONIST', 'TEACHER')")
+    @PreAuthorize("hasAnyRole('TENANT_ADMIN', 'MANAGER', 'RECEPTIONIST', 'TEACHER') or hasAuthority('LESSONS_VIEW')")
     @Operation(summary = "Get attendance history for a student")
     public ApiResponse<PageResponse<AttendanceDto>> getStudentAttendance(
             @PathVariable UUID studentId,

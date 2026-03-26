@@ -24,7 +24,7 @@ public class RetentionController {
     private final RetentionService retentionService;
 
     @GetMapping
-    @PreAuthorize("hasAnyRole('TENANT_ADMIN', 'MANAGER')")
+    @PreAuthorize("hasAnyRole('TENANT_ADMIN', 'MANAGER') or hasAuthority('ANALYTICS_VIEW')")
     @Operation(summary = "Когортный анализ удержания студентов")
     public ApiResponse<RetentionResponse> getCohorts(
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,

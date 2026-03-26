@@ -18,6 +18,12 @@ public enum Permission {
     GROUPS_EDIT,
     GROUPS_DELETE,
 
+    // Аудитории
+    ROOMS_VIEW,
+    ROOMS_CREATE,
+    ROOMS_EDIT,
+    ROOMS_DELETE,
+
     // Занятия
     LESSONS_VIEW,
     LESSONS_CREATE,
@@ -41,6 +47,12 @@ public enum Permission {
     SUBSCRIPTIONS_CREATE,
     SUBSCRIPTIONS_EDIT,
 
+    // Прайс-листы
+    PRICE_LISTS_VIEW,
+    PRICE_LISTS_CREATE,
+    PRICE_LISTS_EDIT,
+    PRICE_LISTS_DELETE,
+
     // Задачи
     TASKS_VIEW,
     TASKS_CREATE,
@@ -54,6 +66,7 @@ public enum Permission {
     STAFF_DELETE,
 
     // Отчёты
+    ANALYTICS_VIEW,
     REPORTS_VIEW,
 
     // Настройки

@@ -81,6 +81,14 @@ cleanup_macos_metadata() {
     find "$target" -type f \( -name '._*' -o -name '.DS_Store' \) -delete
 }
 
+ensure_monitoring_auth() {
+    load_env
+    require_var MONITORING_BASIC_AUTH_USER
+    require_var MONITORING_BASIC_AUTH_PASSWORD
+
+    log "Ensuring monitoring basic auth credentials"
+    "$ROOT/scripts/generate-monitoring-auth.sh"
+}
 ensure_network() {
     if ! docker network inspect "$NETWORK_NAME" >/dev/null 2>&1; then
         log "Creating Docker network $NETWORK_NAME"
@@ -308,6 +316,7 @@ full_deploy() {
     check_resources
     ensure_directories
     ensure_network
+    ensure_monitoring_auth
     build_all_jars
     ensure_api_certificate
     deploy_infra
@@ -356,12 +365,14 @@ main() {
             load_env
             ensure_directories
             ensure_network
+            ensure_monitoring_auth
             deploy_infra
             ;;
         services)
             load_env
             ensure_directories
             ensure_network
+            ensure_monitoring_auth
             build_all_jars
             deploy_services
             verify_edge

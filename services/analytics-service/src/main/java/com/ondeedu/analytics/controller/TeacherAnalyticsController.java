@@ -24,7 +24,7 @@ public class TeacherAnalyticsController {
     private final TeacherAnalyticsService teacherAnalyticsService;
 
     @GetMapping
-    @PreAuthorize("hasAnyRole('TENANT_ADMIN', 'MANAGER')")
+    @PreAuthorize("hasAnyRole('TENANT_ADMIN', 'MANAGER') or hasAuthority('ANALYTICS_VIEW')")
     @Operation(summary = "Аналитика преподавателей — выручка, загрузка, удержание, лучший сотрудник")
     public ApiResponse<TeacherAnalyticsResponse> getAnalytics(
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,

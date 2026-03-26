@@ -30,21 +30,21 @@ public class RoomController {
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
-    @PreAuthorize("hasAnyRole('TENANT_ADMIN', 'MANAGER')")
+    @PreAuthorize("hasAnyRole('TENANT_ADMIN', 'MANAGER') or hasAuthority('ROOMS_CREATE')")
     @Operation(summary = "Create a new room")
     public ApiResponse<RoomDto> createRoom(@Valid @RequestBody CreateRoomRequest request) {
         return ApiResponse.success(roomService.createRoom(request), "Room created successfully");
     }
 
     @GetMapping("/{id}")
-    @PreAuthorize("hasAnyRole('TENANT_ADMIN', 'MANAGER', 'RECEPTIONIST', 'TEACHER')")
+    @PreAuthorize("hasAnyRole('TENANT_ADMIN', 'MANAGER', 'RECEPTIONIST', 'TEACHER') or hasAuthority('ROOMS_VIEW')")
     @Operation(summary = "Get room by ID")
     public ApiResponse<RoomDto> getRoom(@PathVariable UUID id) {
         return ApiResponse.success(roomService.getRoom(id));
     }
 
     @PutMapping("/{id}")
-    @PreAuthorize("hasAnyRole('TENANT_ADMIN', 'MANAGER')")
+    @PreAuthorize("hasAnyRole('TENANT_ADMIN', 'MANAGER') or hasAuthority('ROOMS_EDIT')")
     @Operation(summary = "Update room")
     public ApiResponse<RoomDto> updateRoom(
             @PathVariable UUID id,
@@ -53,7 +53,7 @@ public class RoomController {
     }
 
     @DeleteMapping("/{id}")
-    @PreAuthorize("hasAnyRole('TENANT_ADMIN', 'MANAGER')")
+    @PreAuthorize("hasAnyRole('TENANT_ADMIN', 'MANAGER') or hasAuthority('ROOMS_DELETE')")
     @Operation(summary = "Delete room")
     public ApiResponse<Void> deleteRoom(@PathVariable UUID id) {
         roomService.deleteRoom(id);
@@ -61,7 +61,7 @@ public class RoomController {
     }
 
     @GetMapping
-    @PreAuthorize("hasAnyRole('TENANT_ADMIN', 'MANAGER', 'RECEPTIONIST', 'TEACHER')")
+    @PreAuthorize("hasAnyRole('TENANT_ADMIN', 'MANAGER', 'RECEPTIONIST', 'TEACHER') or hasAuthority('ROOMS_VIEW')")
     @Operation(summary = "List rooms with pagination and optional status filter")
     public ApiResponse<PageResponse<RoomDto>> listRooms(
             @RequestParam(required = false) RoomStatus status,
@@ -70,7 +70,7 @@ public class RoomController {
     }
 
     @GetMapping("/search")
-    @PreAuthorize("hasAnyRole('TENANT_ADMIN', 'MANAGER', 'RECEPTIONIST', 'TEACHER')")
+    @PreAuthorize("hasAnyRole('TENANT_ADMIN', 'MANAGER', 'RECEPTIONIST', 'TEACHER') or hasAuthority('ROOMS_VIEW')")
     @Operation(summary = "Search rooms by name")
     public ApiResponse<PageResponse<RoomDto>> searchRooms(
             @RequestParam String query,

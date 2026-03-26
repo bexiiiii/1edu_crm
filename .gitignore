@@ -39,6 +39,7 @@ out/
 ### Docker ###
 infrastructure/**/data/
 infrastructure/**/*.log
+infrastructure/nginx/tenants/monitoring.htpasswd
 
 ### Environment files ###
 .env

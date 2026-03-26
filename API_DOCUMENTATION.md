@@ -224,6 +224,19 @@ grant_type=password&client_id=1edu-web-app&username=<login>&password=<pass>
 | `MANAGER` | Менеджер учебного центра |
 | `RECEPTIONIST` | Ресепшионист |
 | `TEACHER` | Преподаватель |
+| `ACCOUNTANT` | Финансовый сотрудник |
+
+> Модель доступа смешанная:
+> - роль задаёт базовый coarse-grained доступ;
+> - granular `permissions` задают CRUD-доступ в бизнес-модулях;
+> - для большинства CRUD-модулей backend проверяет `TENANT_ADMIN` **или** соответствующий permission.
+>
+> Практически это означает:
+> - `SUPER_ADMIN` и `TENANT_ADMIN` имеют самый широкий доступ;
+> - `MANAGER`, `TEACHER`, `RECEPTIONIST`, `ACCOUNTANT` по роли получают только часть role-only эндпоинтов;
+> - для `students`, `leads`, `groups/courses`, `rooms`, `price-lists`, `lessons`, `tasks`, `subscriptions`, `finance`, `analytics`, `staff`, `settings` расширенный доступ обычно выдаётся через `permissions`;
+> - platform/tenant administration surfaces (`/api/v1/tenants`, `/api/v1/auth/users`, `/api/v1/settings/roles`) остаются built-in role-only;
+> - `notifications` и `files` пока остаются intentional exceptions к общей permission-модели: там используются `isAuthenticated()` и/или hardcoded elevated roles.
 
 ### Гранулярные permissions (настраиваются в Settings Service)
 
@@ -241,6 +254,10 @@ grant_type=password&client_id=1edu-web-app&username=<login>&password=<pass>
 | `GROUPS_CREATE` | Создание групп/курсов |
 | `GROUPS_EDIT` | Редактирование групп/курсов |
 | `GROUPS_DELETE` | Удаление групп/курсов |
+| `ROOMS_VIEW` | Просмотр аудиторий |
+| `ROOMS_CREATE` | Создание аудиторий |
+| `ROOMS_EDIT` | Редактирование аудиторий |
+| `ROOMS_DELETE` | Удаление аудиторий |
 | `STAFF_VIEW` | Просмотр сотрудников |
 | `STAFF_CREATE` | Создание сотрудников |
 | `STAFF_EDIT` | Редактирование сотрудников |
@@ -257,9 +274,21 @@ grant_type=password&client_id=1edu-web-app&username=<login>&password=<pass>
 | `SUBSCRIPTIONS_VIEW` | Просмотр абонементов |
 | `SUBSCRIPTIONS_CREATE` | Создание абонементов |
 | `SUBSCRIPTIONS_EDIT` | Редактирование абонементов |
+| `PRICE_LISTS_VIEW` | Просмотр прайс-листов |
+| `PRICE_LISTS_CREATE` | Создание прайс-листов |
+| `PRICE_LISTS_EDIT` | Редактирование прайс-листов |
+| `PRICE_LISTS_DELETE` | Удаление прайс-листов |
 | `FINANCE_VIEW` | Просмотр финансов |
 | `FINANCE_CREATE` | Создание транзакций |
 | `FINANCE_EDIT` | Редактирование транзакций |
+| `ANALYTICS_VIEW` | Просмотр аналитических дашбордов и отчётов |
+| `REPORTS_VIEW` | Просмотр и генерация отчётов |
+| `SETTINGS_VIEW` | Просмотр tenant settings |
+| `SETTINGS_EDIT` | Изменение tenant settings |
+
+> `RoleConfig` в Settings Service хранит tenant-scoped custom roles и синкает их в реальные Keycloak realm roles.
+> Built-in names (`SUPER_ADMIN`, `TENANT_ADMIN`, `MANAGER`, `TEACHER`, `RECEPTIONIST`, `ACCOUNTANT`) зарезервированы и не создаются через `RoleConfig`.
+> При создании и обновлении пользователя список `permissions` может передаваться отдельно от роли как прямой override.
 
 ---
 
@@ -747,6 +776,9 @@ interface UserDto {
 
 **Response:** `ApiResponse<UserDto>`
 
+> Tenant scope берётся из JWT claim `tenant_id`.
+> Если запрос идёт от обычного `TENANT_ADMIN`, backend привязывает нового пользователя к текущему tenant context и не позволяет создать пользователя в другом tenant через произвольный `tenantId` в body.
+
 > Текущий backend-flow для выдачи доступа сотруднику такой:
 > 1. создаёшь или выбираешь сотрудника через `/api/v1/staff`
 > 2. создаёшь ему логин/пароль через `/api/v1/auth/users`
@@ -765,12 +797,18 @@ interface UserDto {
 
 **Response:** `ApiResponse<List<UserDto>>`
 
+> Возвращаются только пользователи текущего учебного центра.
+> Пользователи других tenant'ов и глобальный `SUPER_ADMIN` в tenant-список не попадают.
+
 ---
 
 #### `GET /api/v1/auth/users/{id}` — Получить пользователя
 **Доступ:** `TENANT_ADMIN`, `MANAGER`
 
 **Response:** `ApiResponse<UserDto>`
+
+> Cross-tenant доступ по `id` запрещён.
+> Если пользователь не относится к текущему tenant context, backend отвечает как будто запись не найдена.
 
 ---
 
@@ -790,12 +828,16 @@ interface UserDto {
 
 **Response:** `ApiResponse<UserDto>`
 
+> Обновление разрешено только для пользователей текущего tenant.
+
 ---
 
 #### `DELETE /api/v1/auth/users/{id}` — Деактивировать пользователя (soft delete)
 **Доступ:** `TENANT_ADMIN`
 
 **Response:** `ApiResponse<Void>`
+
+> Деактивация разрешена только для пользователей текущего tenant.
 
 ---
 
@@ -811,6 +853,8 @@ interface UserDto {
 
 **Response:** `ApiResponse<Void>`
 
+> Сброс пароля разрешён только для пользователей текущего tenant.
+
 ---
 
 #### `PUT /api/v1/auth/users/{id}/permissions` — Обновить права пользователя
@@ -822,6 +866,9 @@ interface UserDto {
 ```
 
 **Response:** `ApiResponse<UserDto>`
+
+> Прямое изменение permissions по `id` тоже tenant-scoped и не работает для чужого tenant.
+> Эти permissions сохраняются как явный user override и имеют отдельный source, независимый от role-backed permission-набора.
 
 ---
 
@@ -1348,7 +1395,7 @@ interface ScheduleDto {
 ### 11.1 Аудитории (`/api/v1/rooms`)
 
 #### `POST /api/v1/rooms` — Создать аудиторию
-**Доступ:** `TENANT_ADMIN` | `MANAGER`
+**Доступ:** `TENANT_ADMIN`, `MANAGER` или permission `ROOMS_CREATE`
 
 **Request Body:**
 ```json
@@ -1365,7 +1412,7 @@ interface ScheduleDto {
 ---
 
 #### `GET /api/v1/rooms` — Список аудиторий
-**Доступ:** `TENANT_ADMIN`, `MANAGER`, `RECEPTIONIST`, `TEACHER`
+**Доступ:** `TENANT_ADMIN`, `MANAGER`, `RECEPTIONIST`, `TEACHER` или permission `ROOMS_VIEW`
 
 **Query Params:**
 - `status` (optional): `ACTIVE | INACTIVE`
@@ -1376,14 +1423,14 @@ interface ScheduleDto {
 ---
 
 #### `GET /api/v1/rooms/{id}` — Получить аудиторию
-**Доступ:** `TENANT_ADMIN`, `MANAGER`, `RECEPTIONIST`, `TEACHER`
+**Доступ:** `TENANT_ADMIN`, `MANAGER`, `RECEPTIONIST`, `TEACHER` или permission `ROOMS_VIEW`
 
 **Response:** `ApiResponse<RoomDto>`
 
 ---
 
 #### `PUT /api/v1/rooms/{id}` — Обновить аудиторию
-**Доступ:** `TENANT_ADMIN` | `MANAGER`
+**Доступ:** `TENANT_ADMIN`, `MANAGER` или permission `ROOMS_EDIT`
 
 **Request Body:**
 ```json
@@ -1399,14 +1446,14 @@ interface ScheduleDto {
 ---
 
 #### `DELETE /api/v1/rooms/{id}` — Удалить аудиторию
-**Доступ:** `TENANT_ADMIN` | `MANAGER`
+**Доступ:** `TENANT_ADMIN`, `MANAGER` или permission `ROOMS_DELETE`
 
 **Response:** `ApiResponse<Void>`
 
 ---
 
 #### `GET /api/v1/rooms/search` — Поиск аудиторий
-**Доступ:** `TENANT_ADMIN`, `MANAGER`, `RECEPTIONIST`, `TEACHER`
+**Доступ:** `TENANT_ADMIN`, `MANAGER`, `RECEPTIONIST`, `TEACHER` или permission `ROOMS_VIEW`
 
 **Query Params:** `query`, `page`, `size`
 
@@ -1568,7 +1615,7 @@ interface PriceListDto {
 ### 12.1 Прайс-листы (`/api/v1/price-lists`)
 
 #### `POST /api/v1/price-lists` — Создать прайс-лист
-**Доступ:** `TENANT_ADMIN` | `MANAGER`
+**Доступ:** `TENANT_ADMIN`, `MANAGER` или permission `PRICE_LISTS_CREATE`
 
 **Request Body:**
 ```json
@@ -1588,7 +1635,7 @@ interface PriceListDto {
 ---
 
 #### `GET /api/v1/price-lists` — Список прайс-листов
-**Доступ:** `TENANT_ADMIN`, `MANAGER`, `RECEPTIONIST`, `TEACHER`
+**Доступ:** `TENANT_ADMIN`, `MANAGER`, `RECEPTIONIST`, `TEACHER` или permission `PRICE_LISTS_VIEW`
 
 **Query Params:**
 - `active` (boolean, optional)
@@ -1599,28 +1646,28 @@ interface PriceListDto {
 ---
 
 #### `GET /api/v1/price-lists/{id}` — Получить прайс-лист
-**Доступ:** `TENANT_ADMIN`, `MANAGER`, `RECEPTIONIST`, `TEACHER`
+**Доступ:** `TENANT_ADMIN`, `MANAGER`, `RECEPTIONIST`, `TEACHER` или permission `PRICE_LISTS_VIEW`
 
 **Response:** `ApiResponse<PriceListDto>`
 
 ---
 
 #### `PUT /api/v1/price-lists/{id}` — Обновить прайс-лист
-**Доступ:** `TENANT_ADMIN` | `MANAGER`
+**Доступ:** `TENANT_ADMIN`, `MANAGER` или permission `PRICE_LISTS_EDIT`
 
 **Response:** `ApiResponse<PriceListDto>`
 
 ---
 
 #### `DELETE /api/v1/price-lists/{id}` — Удалить прайс-лист
-**Доступ:** `TENANT_ADMIN` | `MANAGER`
+**Доступ:** `TENANT_ADMIN`, `MANAGER` или permission `PRICE_LISTS_DELETE`
 
 **Response:** `ApiResponse<Void>`
 
 ---
 
 #### `GET /api/v1/price-lists/course/{courseId}` — Прайс-листы курса
-**Доступ:** `TENANT_ADMIN`, `MANAGER`, `RECEPTIONIST`, `TEACHER`
+**Доступ:** `TENANT_ADMIN`, `MANAGER`, `RECEPTIONIST`, `TEACHER` или permission `PRICE_LISTS_VIEW`
 
 **Query Params:** `page`, `size`, `sort`
 
@@ -1825,7 +1872,7 @@ interface StudentDebtDto {
 ---
 
 #### `DELETE /api/v1/payments/student-payments/{id}` — Удалить платёж
-**Доступ:** `TENANT_ADMIN`
+**Доступ:** `TENANT_ADMIN` или permission `FINANCE_EDIT`
 
 **Response:** `ApiResponse<Void>`
 
@@ -1905,7 +1952,7 @@ interface TransactionDto {
 ---
 
 #### `DELETE /api/v1/finance/transactions/{id}` — Удалить транзакцию
-**Доступ:** `TENANT_ADMIN` | `FINANCE_VIEW`
+**Доступ:** `TENANT_ADMIN` | `FINANCE_EDIT`
 
 **Response:** `ApiResponse<Void>`
 
@@ -2481,7 +2528,7 @@ interface RoomLoadResponse {
 
 #### `GET /api/v1/analytics/group-attendance/{groupId}`
 
-**Доступ:** `TENANT_ADMIN`, `MANAGER`, `TEACHER`
+**Доступ:** `TENANT_ADMIN`, `MANAGER`, `TEACHER` или permission `ANALYTICS_VIEW` / `LESSONS_VIEW`
 
 **Query Params:**
 - `from`: `YYYY-MM-DD`
@@ -2530,6 +2577,8 @@ interface NotificationDto {
 
 #### `GET /api/v1/notifications` — Список уведомлений
 **Доступ:** любой аутентифицированный пользователь tenant
+
+> Это intentional exception к общей permission-модели: доступ определяется аутентификацией и elevated built-in roles, а не кастомными permissions.
 
 > Для обычного tenant user backend автоматически ограничивает выборку текущим пользователем по `email` / `preferred_username` из JWT.
 > `TENANT_ADMIN`, `MANAGER`, `SUPER_ADMIN` могут получать общую tenant-выборку; для просмотра только своих уведомлений передай `mine=true`.
@@ -2604,6 +2653,8 @@ interface FileUploadResponse {
 #### `POST /api/v1/files/upload` — Загрузить файл
 **Доступ:** Любой аутентифицированный
 
+> Это intentional exception к общей permission-модели: upload/presigned-url не завязаны на granular permissions.
+
 **Request:** `multipart/form-data`
 ```
 file: <binary>
@@ -2639,7 +2690,7 @@ folder: "avatars"    // необязательно: avatars | documents | report
 ### 17.1 Генерация отчётов (`/api/v1/reports`)
 
 #### `GET /api/v1/reports/generate` — Сгенерировать отчёт
-**Доступ:** `TENANT_ADMIN`, `MANAGER`
+**Доступ:** `TENANT_ADMIN`, `MANAGER` или permission `REPORTS_VIEW`
 
 **Query Params:**
 - `type`: тип отчёта — `DASHBOARD | FINANCE | STUDENTS | ATTENDANCE | SUBSCRIPTIONS | TEACHERS`
@@ -3211,7 +3262,7 @@ interface SettingsDto {
 ### 21.1 Основные настройки (`/api/v1/settings`)
 
 #### `GET /api/v1/settings` — Получить настройки тенанта
-**Доступ:** `TENANT_ADMIN`, `MANAGER`, `RECEPTIONIST`, `TEACHER`
+**Доступ:** `TENANT_ADMIN`, `MANAGER`, `RECEPTIONIST`, `TEACHER` или permission `SETTINGS_VIEW`
 
 **Response:** `ApiResponse<SettingsDto>`
 
@@ -3220,7 +3271,7 @@ interface SettingsDto {
 ---
 
 #### `PUT /api/v1/settings` — Обновить настройки (upsert)
-**Доступ:** `TENANT_ADMIN`
+**Доступ:** `TENANT_ADMIN` или permission `SETTINGS_EDIT`
 
 **Request Body:** (все поля опциональны, null-значения игнорируются)
 ```json
@@ -3240,7 +3291,7 @@ interface SettingsDto {
 ---
 
 #### `POST /api/v1/settings/logo` — Загрузить логотип и обновить `logoUrl`
-**Доступ:** `TENANT_ADMIN`
+**Доступ:** `TENANT_ADMIN` или permission `SETTINGS_EDIT`
 
 **Request:** `multipart/form-data`
 
@@ -3259,6 +3310,8 @@ interface SettingsDto {
 
 **Response:** `ApiResponse<List<String>>`
 
+> Это built-in role-only admin surface. Custom tenant roles не могут управлять роль-моделью других пользователей.
+
 ---
 
 #### `GET /api/v1/settings/roles` — Конфигурации ролей
@@ -3275,6 +3328,8 @@ interface RoleConfigDto {
 }
 ```
 
+> Это уже не просто UI-шаблоны: backend синкает `RoleConfig` в реальные tenant-scoped Keycloak realm roles.
+
 ---
 
 #### `GET /api/v1/settings/roles/{id}` — Получить конфигурацию роли
@@ -3290,13 +3345,16 @@ interface RoleConfigDto {
 **Request Body:**
 ```json
 {
-  "name": "Менеджер по продажам",
+  "name": "SALES_MANAGER",
   "description": "Доступ к лидам и записям",
   "permissions": ["LEADS_VIEW", "LEADS_CREATE", "STUDENTS_VIEW"]
 }
 ```
 
 **Response:** `ApiResponse<RoleConfigDto>`
+
+> `name` должен быть в формате `UPPERCASE_WITH_UNDERSCORES`.
+> Built-in names (`SUPER_ADMIN`, `TENANT_ADMIN`, `MANAGER`, `TEACHER`, `RECEPTIONIST`, `ACCOUNTANT`) зарезервированы.
 
 ---
 
@@ -3305,6 +3363,8 @@ interface RoleConfigDto {
 
 **Response:** `ApiResponse<RoleConfigDto>`
 
+> Rename роли не поддерживается. Для нового имени создай новую роль и мигрируй пользователей.
+
 ---
 
 #### `DELETE /api/v1/settings/roles/{id}` — Удалить конфигурацию роли
@@ -3312,12 +3372,14 @@ interface RoleConfigDto {
 
 **Response:** `ApiResponse<Void>`
 
+> Удаление built-in roles запрещено.
+
 ---
 
 ### 21.3 Источники оплаты (`/api/v1/settings/payment-sources`)
 
 #### `GET /api/v1/settings/payment-sources` — Список источников
-**Доступ:** `TENANT_ADMIN`, `MANAGER`, `RECEPTIONIST`
+**Доступ:** `TENANT_ADMIN`, `MANAGER`, `RECEPTIONIST` или permission `SETTINGS_VIEW` / `FINANCE_VIEW` / `FINANCE_CREATE`
 
 **Response:** `ApiResponse<List<PaymentSourceDto>>`
 
@@ -3333,7 +3395,7 @@ interface PaymentSourceDto {
 ---
 
 #### `POST /api/v1/settings/payment-sources` — Создать источник
-**Доступ:** `TENANT_ADMIN`
+**Доступ:** `TENANT_ADMIN` или permission `SETTINGS_EDIT`
 
 **Request Body:**
 ```json
@@ -3349,14 +3411,14 @@ interface PaymentSourceDto {
 ---
 
 #### `PUT /api/v1/settings/payment-sources/{id}` — Обновить источник
-**Доступ:** `TENANT_ADMIN`
+**Доступ:** `TENANT_ADMIN` или permission `SETTINGS_EDIT`
 
 **Response:** `ApiResponse<PaymentSourceDto>`
 
 ---
 
 #### `DELETE /api/v1/settings/payment-sources/{id}` — Удалить источник
-**Доступ:** `TENANT_ADMIN`
+**Доступ:** `TENANT_ADMIN` или permission `SETTINGS_EDIT`
 
 **Response:** `ApiResponse<Void>`
 
@@ -3365,7 +3427,7 @@ interface PaymentSourceDto {
 ### 21.4 Настройка статусов посещаемости (`/api/v1/settings/attendance-statuses`)
 
 #### `GET /api/v1/settings/attendance-statuses` — Список статусов
-**Доступ:** `TENANT_ADMIN`, `MANAGER`, `RECEPTIONIST`, `TEACHER`
+**Доступ:** `TENANT_ADMIN`, `MANAGER`, `RECEPTIONIST`, `TEACHER` или permission `SETTINGS_VIEW` / `LESSONS_VIEW` / `LESSONS_MARK_ATTENDANCE`
 
 **Response:** `ApiResponse<List<AttendanceStatusConfigDto>>`
 
@@ -3385,7 +3447,7 @@ interface AttendanceStatusConfigDto {
 ---
 
 #### `POST /api/v1/settings/attendance-statuses` — Создать статус
-**Доступ:** `TENANT_ADMIN`
+**Доступ:** `TENANT_ADMIN` или permission `SETTINGS_EDIT`
 
 **Request Body:**
 ```json
@@ -3404,14 +3466,14 @@ interface AttendanceStatusConfigDto {
 ---
 
 #### `PUT /api/v1/settings/attendance-statuses/{id}` — Обновить статус
-**Доступ:** `TENANT_ADMIN`
+**Доступ:** `TENANT_ADMIN` или permission `SETTINGS_EDIT`
 
 **Response:** `ApiResponse<AttendanceStatusConfigDto>`
 
 ---
 
 #### `DELETE /api/v1/settings/attendance-statuses/{id}` — Удалить статус
-**Доступ:** `TENANT_ADMIN`
+**Доступ:** `TENANT_ADMIN` или permission `SETTINGS_EDIT`
 
 **Response:** `ApiResponse<Void>`
 
@@ -3420,7 +3482,7 @@ interface AttendanceStatusConfigDto {
 ### 21.5 Настройка кастомных статусов сотрудников (`/api/v1/settings/staff-statuses`)
 
 #### `GET /api/v1/settings/staff-statuses` — Список кастомных статусов сотрудников
-**Доступ:** `TENANT_ADMIN`, `MANAGER`
+**Доступ:** `TENANT_ADMIN`, `MANAGER` или permission `SETTINGS_VIEW` / `STAFF_VIEW`
 
 **Response:** `ApiResponse<List<StaffStatusConfigDto>>`
 
@@ -3437,7 +3499,7 @@ interface StaffStatusConfigDto {
 ```
 
 #### `POST /api/v1/settings/staff-statuses` — Создать кастомный статус сотрудника
-**Доступ:** `TENANT_ADMIN`
+**Доступ:** `TENANT_ADMIN` или permission `SETTINGS_EDIT`
 
 **Request Body:**
 ```json
@@ -3452,12 +3514,12 @@ interface StaffStatusConfigDto {
 **Response:** `ApiResponse<StaffStatusConfigDto>`
 
 #### `PUT /api/v1/settings/staff-statuses/{id}` — Обновить кастомный статус сотрудника
-**Доступ:** `TENANT_ADMIN`
+**Доступ:** `TENANT_ADMIN` или permission `SETTINGS_EDIT`
 
 **Response:** `ApiResponse<StaffStatusConfigDto>`
 
 #### `DELETE /api/v1/settings/staff-statuses/{id}` — Удалить кастомный статус сотрудника
-**Доступ:** `TENANT_ADMIN`
+**Доступ:** `TENANT_ADMIN` или permission `SETTINGS_EDIT`
 
 **Response:** `ApiResponse<Void>`
 
@@ -3466,7 +3528,7 @@ interface StaffStatusConfigDto {
 ### 21.6 Статьи доходов (`/api/v1/settings/income-categories`)
 
 #### `GET /api/v1/settings/income-categories` — Список статей доходов
-**Доступ:** `TENANT_ADMIN`, `MANAGER`, `ACCOUNTANT`
+**Доступ:** `TENANT_ADMIN`, `MANAGER`, `ACCOUNTANT` или permission `FINANCE_VIEW` / `SETTINGS_VIEW`
 
 **Response:** `ApiResponse<List<FinanceCategoryConfigDto>>`
 
@@ -3484,7 +3546,7 @@ interface FinanceCategoryConfigDto {
 ```
 
 #### `POST /api/v1/settings/income-categories` — Создать статью дохода
-**Доступ:** `TENANT_ADMIN`, `ACCOUNTANT`
+**Доступ:** `TENANT_ADMIN`, `ACCOUNTANT` или permission `FINANCE_EDIT` / `SETTINGS_EDIT`
 
 **Request Body:**
 ```json
@@ -3499,12 +3561,12 @@ interface FinanceCategoryConfigDto {
 **Response:** `ApiResponse<FinanceCategoryConfigDto>`
 
 #### `PUT /api/v1/settings/income-categories/{id}` — Обновить статью дохода
-**Доступ:** `TENANT_ADMIN`, `ACCOUNTANT`
+**Доступ:** `TENANT_ADMIN`, `ACCOUNTANT` или permission `FINANCE_EDIT` / `SETTINGS_EDIT`
 
 **Response:** `ApiResponse<FinanceCategoryConfigDto>`
 
 #### `DELETE /api/v1/settings/income-categories/{id}` — Удалить статью дохода
-**Доступ:** `TENANT_ADMIN`, `ACCOUNTANT`
+**Доступ:** `TENANT_ADMIN`, `ACCOUNTANT` или permission `FINANCE_EDIT` / `SETTINGS_EDIT`
 
 **Response:** `ApiResponse<Void>`
 
@@ -3513,12 +3575,12 @@ interface FinanceCategoryConfigDto {
 ### 21.7 Статьи расходов (`/api/v1/settings/expense-categories`)
 
 #### `GET /api/v1/settings/expense-categories` — Список статей расходов
-**Доступ:** `TENANT_ADMIN`, `MANAGER`, `ACCOUNTANT`
+**Доступ:** `TENANT_ADMIN`, `MANAGER`, `ACCOUNTANT` или permission `FINANCE_VIEW` / `SETTINGS_VIEW`
 
 **Response:** `ApiResponse<List<FinanceCategoryConfigDto>>`
 
 #### `POST /api/v1/settings/expense-categories` — Создать статью расхода
-**Доступ:** `TENANT_ADMIN`, `ACCOUNTANT`
+**Доступ:** `TENANT_ADMIN`, `ACCOUNTANT` или permission `FINANCE_EDIT` / `SETTINGS_EDIT`
 
 **Request Body:**
 ```json
@@ -3533,12 +3595,12 @@ interface FinanceCategoryConfigDto {
 **Response:** `ApiResponse<FinanceCategoryConfigDto>`
 
 #### `PUT /api/v1/settings/expense-categories/{id}` — Обновить статью расхода
-**Доступ:** `TENANT_ADMIN`, `ACCOUNTANT`
+**Доступ:** `TENANT_ADMIN`, `ACCOUNTANT` или permission `FINANCE_EDIT` / `SETTINGS_EDIT`
 
 **Response:** `ApiResponse<FinanceCategoryConfigDto>`
 
 #### `DELETE /api/v1/settings/expense-categories/{id}` — Удалить статью расхода
-**Доступ:** `TENANT_ADMIN`, `ACCOUNTANT`
+**Доступ:** `TENANT_ADMIN`, `ACCOUNTANT` или permission `FINANCE_EDIT` / `SETTINGS_EDIT`
 
 **Response:** `ApiResponse<Void>`
 

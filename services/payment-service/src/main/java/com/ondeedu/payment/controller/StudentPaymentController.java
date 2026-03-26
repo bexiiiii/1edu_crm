@@ -77,9 +77,9 @@ public class StudentPaymentController {
     // ── Delete payment record ────────────────────────────────────────────
 
     @DeleteMapping("/{id}")
-    @PreAuthorize("hasRole('TENANT_ADMIN')")
+    @PreAuthorize("hasRole('TENANT_ADMIN') or hasAuthority('FINANCE_EDIT')")
     @Operation(summary = "Удалить запись платежа",
-               description = "Только TENANT_ADMIN. Используется для исправления ошибочно записанного платежа")
+               description = "Используется для исправления ошибочно записанного платежа")
     public ApiResponse<Void> deletePayment(@PathVariable UUID id) {
         studentPaymentService.deletePayment(id);
         return ApiResponse.success("Запись платежа удалена");

@@ -8,6 +8,8 @@ import com.ondeedu.settings.mapper.PaymentSourceMapper;
 import com.ondeedu.settings.repository.PaymentSourceRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -24,12 +26,14 @@ public class PaymentSourceService {
     private final PaymentSourceMapper mapper;
 
     @Transactional(readOnly = true)
+    @Cacheable(value = "payment-sources", key = "T(com.ondeedu.common.cache.TenantCacheKeys).fixed('all')")
     public List<PaymentSourceDto> getAll() {
         return repository.findAllByOrderBySortOrderAsc()
                 .stream().map(mapper::toDto).collect(Collectors.toList());
     }
 
     @Transactional
+    @CacheEvict(value = "payment-sources", allEntries = true)
     public PaymentSourceDto create(SavePaymentSourceRequest request) {
         PaymentSource entity = mapper.toEntity(request);
         entity = repository.save(entity);
@@ -38,6 +42,7 @@ public class PaymentSourceService {
     }
 
     @Transactional
+    @CacheEvict(value = "payment-sources", allEntries = true)
     public PaymentSourceDto update(UUID id, SavePaymentSourceRequest request) {
         PaymentSource entity = repository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("PaymentSource", "id", id));
@@ -48,6 +53,7 @@ public class PaymentSourceService {
     }
 
     @Transactional
+    @CacheEvict(value = "payment-sources", allEntries = true)
     public void delete(UUID id) {
         if (!repository.existsById(id)) {
             throw new ResourceNotFoundException("PaymentSource", "id", id);

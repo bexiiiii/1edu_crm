@@ -75,5 +75,7 @@ logging:
     com.ondeedu: INFO
 
 services:
+  auth-service:
+    url: ${AUTH_SERVICE_URL:http://localhost:8101}
   file-service:
     base-url: ${FILE_SERVICE_BASE_URL:http://localhost:8118}

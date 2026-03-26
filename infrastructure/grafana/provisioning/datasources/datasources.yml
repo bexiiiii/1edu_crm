@@ -17,10 +17,10 @@ datasources:
     uid: prometheus
     type: prometheus
     access: proxy
-    url: http://prometheus:9090
+    url: http://prometheus:9090/prometheus
     isDefault: true
     editable: false
-    version: 2
+    version: 3
     jsonData:
       timeInterval: "15s"
       httpMethod: POST
@@ -30,9 +30,9 @@ datasources:
     uid: zipkin
     type: zipkin
     access: proxy
-    url: http://zipkin:9411
+    url: http://zipkin:9411/zipkin
     editable: false
-    version: 2
+    version: 3
 
   - name: Elasticsearch
     orgId: 1

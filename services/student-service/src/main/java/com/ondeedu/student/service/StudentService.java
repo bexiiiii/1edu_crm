@@ -23,6 +23,7 @@ import com.ondeedu.student.repository.StudentRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
+import org.springframework.cache.annotation.Caching;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.data.domain.Page;
@@ -38,6 +39,7 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 
 @Slf4j
 @Service
@@ -52,7 +54,7 @@ public class StudentService {
     private final Optional<StudentSearchService> studentSearchService;
 
     @Transactional
-    @CacheEvict(value = "students", allEntries = true)
+    @CacheEvict(value = {"students", "student-stats"}, allEntries = true)
     public StudentDto createStudent(CreateStudentRequest request) {
         normalizeCreateRequest(request);
 
@@ -78,7 +80,7 @@ public class StudentService {
     }
 
     @Transactional(readOnly = true)
-    @Cacheable(value = "students", key = "#id")
+    @Cacheable(value = "students", key = "T(com.ondeedu.common.cache.TenantCacheKeys).id(#id)")
     public StudentDto getStudent(UUID id) {
         Student student = studentRepository.findById(id)
             .orElseThrow(() -> new ResourceNotFoundException("Student", "id", id));
@@ -86,7 +88,10 @@ public class StudentService {
     }
 
     @Transactional
-    @CacheEvict(value = "students", key = "#id")
+    @Caching(evict = {
+            @CacheEvict(value = "students", key = "T(com.ondeedu.common.cache.TenantCacheKeys).id(#id)"),
+            @CacheEvict(value = "student-stats", allEntries = true)
+    })
     public StudentDto updateStudent(UUID id, UpdateStudentRequest request) {
         Student student = studentRepository.findById(id)
             .orElseThrow(() -> new ResourceNotFoundException("Student", "id", id));
@@ -115,7 +120,10 @@ public class StudentService {
     }
 
     @Transactional
-    @CacheEvict(value = "students", key = "#id")
+    @Caching(evict = {
+            @CacheEvict(value = "students", key = "T(com.ondeedu.common.cache.TenantCacheKeys).id(#id)"),
+            @CacheEvict(value = "student-stats", allEntries = true)
+    })
     public void deleteStudent(UUID id) {
         if (!studentRepository.existsById(id)) {
             throw new ResourceNotFoundException("Student", "id", id);
@@ -153,9 +161,7 @@ public class StudentService {
         }
 
         Page<Student> page = studentRepository.search(query, pageable);
-        if (StringUtils.hasText(tenantId)) {
-            indexStudents(page.getContent());
-        }
+        scheduleIndexBackfill(page.getContent(), tenantId);
         return PageResponse.from(page, this::toDto);
     }
 
@@ -201,6 +207,7 @@ public class StudentService {
     }
 
     @Transactional(readOnly = true)
+    @Cacheable(value = "student-stats", key = "T(com.ondeedu.common.cache.TenantCacheKeys).fixed('summary')")
     public StudentStatsDto getStats() {
         Instant monthStart = Instant.now().minus(30, ChronoUnit.DAYS);
 
@@ -244,19 +251,30 @@ public class StudentService {
     }
 
     private void indexStudents(List<Student> students) {
-        studentSearchService.ifPresent(service -> students.forEach(student -> safeIndexStudent(service, student)));
+        String tenantId = TenantContext.getTenantId();
+        studentSearchService.ifPresent(service -> students.forEach(student -> safeIndexStudent(service, student, tenantId)));
     }
 
     private void indexStudent(Student student) {
-        studentSearchService.ifPresent(service -> safeIndexStudent(service, student));
+        String tenantId = TenantContext.getTenantId();
+        studentSearchService.ifPresent(service -> safeIndexStudent(service, student, tenantId));
     }
 
-    private void safeIndexStudent(StudentSearchService service, Student student) {
+    private void safeIndexStudent(StudentSearchService service, Student student, String tenantId) {
         try {
-            service.indexStudent(student, TenantContext.getTenantId(), readMetadata(student.getMetadata()));
+            service.indexStudent(student, tenantId, readMetadata(student.getMetadata()));
         } catch (Exception e) {
             log.warn("Failed to index student {} in Elasticsearch: {}", student.getId(), e.getMessage());
         }
+    }
+
+    private void scheduleIndexBackfill(List<Student> students, String tenantId) {
+        if (!StringUtils.hasText(tenantId) || students == null || students.isEmpty()) {
+            return;
+        }
+        studentSearchService.ifPresent(service -> CompletableFuture.runAsync(
+                () -> students.forEach(student -> safeIndexStudent(service, student, tenantId))
+        ));
     }
 
     private void deleteStudentFromIndex(UUID studentId) {

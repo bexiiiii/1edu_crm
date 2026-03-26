@@ -24,7 +24,7 @@ public class SubscriptionReportController {
     private final SubscriptionReportService subscriptionReportService;
 
     @GetMapping
-    @PreAuthorize("hasAnyRole('TENANT_ADMIN', 'MANAGER')")
+    @PreAuthorize("hasAnyRole('TENANT_ADMIN', 'MANAGER') or hasAuthority('ANALYTICS_VIEW')")
     @Operation(summary = "Отчёт по абонементам за период")
     public ApiResponse<SubscriptionReportResponse> getReport(
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,

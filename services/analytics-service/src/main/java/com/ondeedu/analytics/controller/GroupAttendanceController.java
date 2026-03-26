@@ -26,7 +26,7 @@ public class GroupAttendanceController {
     private final GroupAttendanceService groupAttendanceService;
 
     @GetMapping("/{groupId}")
-    @PreAuthorize("hasAnyRole('TENANT_ADMIN', 'MANAGER', 'TEACHER')")
+    @PreAuthorize("hasAnyRole('TENANT_ADMIN', 'MANAGER', 'TEACHER') or hasAuthority('ANALYTICS_VIEW') or hasAuthority('LESSONS_VIEW')")
     @Operation(summary = "Посещаемость группы по месяцам")
     public ApiResponse<GroupAttendanceResponse> getAttendance(
             @PathVariable UUID groupId,

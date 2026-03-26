@@ -9,6 +9,8 @@ import com.ondeedu.settings.mapper.AttendanceStatusConfigMapper;
 import com.ondeedu.settings.repository.AttendanceStatusConfigRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -25,12 +27,14 @@ public class AttendanceStatusConfigService {
     private final AttendanceStatusConfigMapper mapper;
 
     @Transactional(readOnly = true)
+    @Cacheable(value = "attendance-statuses", key = "T(com.ondeedu.common.cache.TenantCacheKeys).fixed('all')")
     public List<AttendanceStatusConfigDto> getAll() {
         return repository.findAllByOrderBySortOrderAsc()
                 .stream().map(mapper::toDto).collect(Collectors.toList());
     }
 
     @Transactional
+    @CacheEvict(value = "attendance-statuses", allEntries = true)
     public AttendanceStatusConfigDto create(SaveAttendanceStatusRequest request) {
         AttendanceStatusConfig entity = mapper.toEntity(request);
         entity = repository.save(entity);
@@ -39,6 +43,7 @@ public class AttendanceStatusConfigService {
     }
 
     @Transactional
+    @CacheEvict(value = "attendance-statuses", allEntries = true)
     public AttendanceStatusConfigDto update(UUID id, SaveAttendanceStatusRequest request) {
         AttendanceStatusConfig entity = repository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("AttendanceStatusConfig", "id", id));
@@ -49,6 +54,7 @@ public class AttendanceStatusConfigService {
     }
 
     @Transactional
+    @CacheEvict(value = "attendance-statuses", allEntries = true)
     public void delete(UUID id) {
         AttendanceStatusConfig entity = repository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("AttendanceStatusConfig", "id", id));

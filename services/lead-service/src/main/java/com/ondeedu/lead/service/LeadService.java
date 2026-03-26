@@ -22,6 +22,7 @@ import org.springframework.util.StringUtils;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 
 @Slf4j
 @Service
@@ -112,26 +113,35 @@ public class LeadService {
         }
 
         Page<Lead> page = leadRepository.search(query, pageable);
-        if (StringUtils.hasText(tenantId)) {
-            indexLeads(page.getContent());
-        }
+        scheduleIndexBackfill(page.getContent(), tenantId);
         return PageResponse.from(page, leadMapper::toDto);
     }
 
     private void indexLeads(List<Lead> leads) {
-        leadSearchService.ifPresent(service -> leads.forEach(lead -> safeIndexLead(service, lead)));
+        String tenantId = TenantContext.getTenantId();
+        leadSearchService.ifPresent(service -> leads.forEach(lead -> safeIndexLead(service, lead, tenantId)));
     }
 
     private void indexLead(Lead lead) {
-        leadSearchService.ifPresent(service -> safeIndexLead(service, lead));
+        String tenantId = TenantContext.getTenantId();
+        leadSearchService.ifPresent(service -> safeIndexLead(service, lead, tenantId));
     }
 
-    private void safeIndexLead(LeadSearchService service, Lead lead) {
+    private void safeIndexLead(LeadSearchService service, Lead lead, String tenantId) {
         try {
-            service.indexLead(lead, TenantContext.getTenantId());
+            service.indexLead(lead, tenantId);
         } catch (Exception e) {
             log.warn("Failed to index lead {} in Elasticsearch: {}", lead.getId(), e.getMessage());
         }
+    }
+
+    private void scheduleIndexBackfill(List<Lead> leads, String tenantId) {
+        if (!StringUtils.hasText(tenantId) || leads == null || leads.isEmpty()) {
+            return;
+        }
+        leadSearchService.ifPresent(service -> CompletableFuture.runAsync(
+                () -> leads.forEach(lead -> safeIndexLead(service, lead, tenantId))
+        ));
     }
 
     private void deleteLeadFromIndex(UUID id) {

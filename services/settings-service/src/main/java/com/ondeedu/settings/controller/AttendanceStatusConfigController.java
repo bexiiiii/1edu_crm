@@ -32,7 +32,7 @@ public class AttendanceStatusConfigController {
     private final AttendanceStatusConfigService service;
 
     @GetMapping
-    @PreAuthorize("hasAnyRole('TENANT_ADMIN','MANAGER','RECEPTIONIST','TEACHER')")
+    @PreAuthorize("hasAnyRole('TENANT_ADMIN','MANAGER','RECEPTIONIST','TEACHER') or hasAuthority('SETTINGS_VIEW') or hasAuthority('LESSONS_VIEW') or hasAuthority('LESSONS_MARK_ATTENDANCE')")
     @Operation(summary = "Get all attendance status configs ordered by sort order")
     public ApiResponse<List<AttendanceStatusConfigDto>> getAll() {
         return ApiResponse.success(service.getAll());
@@ -40,14 +40,14 @@ public class AttendanceStatusConfigController {
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
-    @PreAuthorize("hasRole('TENANT_ADMIN')")
+    @PreAuthorize("hasRole('TENANT_ADMIN') or hasAuthority('SETTINGS_EDIT')")
     @Operation(summary = "Create a new attendance status config")
     public ApiResponse<AttendanceStatusConfigDto> create(@Valid @RequestBody SaveAttendanceStatusRequest request) {
         return ApiResponse.success(service.create(request), "Attendance status created successfully");
     }
 
     @PutMapping("/{id}")
-    @PreAuthorize("hasRole('TENANT_ADMIN')")
+    @PreAuthorize("hasRole('TENANT_ADMIN') or hasAuthority('SETTINGS_EDIT')")
     @Operation(summary = "Update an attendance status config")
     public ApiResponse<AttendanceStatusConfigDto> update(
             @PathVariable UUID id,
@@ -56,7 +56,7 @@ public class AttendanceStatusConfigController {
     }
 
     @DeleteMapping("/{id}")
-    @PreAuthorize("hasRole('TENANT_ADMIN')")
+    @PreAuthorize("hasRole('TENANT_ADMIN') or hasAuthority('SETTINGS_EDIT')")
     @Operation(summary = "Delete an attendance status config (system statuses cannot be deleted)")
     public ApiResponse<Void> delete(@PathVariable UUID id) {
         service.delete(id);

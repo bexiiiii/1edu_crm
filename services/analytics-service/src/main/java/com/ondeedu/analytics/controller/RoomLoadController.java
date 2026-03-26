@@ -24,7 +24,7 @@ public class RoomLoadController {
     private final RoomLoadService roomLoadService;
 
     @GetMapping
-    @PreAuthorize("hasAnyRole('TENANT_ADMIN', 'MANAGER')")
+    @PreAuthorize("hasAnyRole('TENANT_ADMIN', 'MANAGER') or hasAuthority('ANALYTICS_VIEW')")
     @Operation(summary = "Загрузка аудиторий за период + таймлайн на дату")
     public ApiResponse<RoomLoadResponse> getLoad(
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,

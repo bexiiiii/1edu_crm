@@ -32,7 +32,7 @@ public class StaffStatusConfigController {
     private final StaffStatusConfigService service;
 
     @GetMapping
-    @PreAuthorize("hasAnyRole('TENANT_ADMIN','MANAGER')")
+    @PreAuthorize("hasAnyRole('TENANT_ADMIN','MANAGER') or hasAuthority('SETTINGS_VIEW') or hasAuthority('STAFF_VIEW')")
     @Operation(summary = "Get all custom staff statuses ordered by sort order")
     public ApiResponse<List<StaffStatusConfigDto>> getAll() {
         return ApiResponse.success(service.getAll());
@@ -40,14 +40,14 @@ public class StaffStatusConfigController {
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
-    @PreAuthorize("hasRole('TENANT_ADMIN')")
+    @PreAuthorize("hasRole('TENANT_ADMIN') or hasAuthority('SETTINGS_EDIT') or hasAuthority('STAFF_EDIT')")
     @Operation(summary = "Create a custom staff status")
     public ApiResponse<StaffStatusConfigDto> create(@Valid @RequestBody SaveStaffStatusRequest request) {
         return ApiResponse.success(service.create(request), "Staff status created successfully");
     }
 
     @PutMapping("/{id}")
-    @PreAuthorize("hasRole('TENANT_ADMIN')")
+    @PreAuthorize("hasRole('TENANT_ADMIN') or hasAuthority('SETTINGS_EDIT') or hasAuthority('STAFF_EDIT')")
     @Operation(summary = "Update a custom staff status")
     public ApiResponse<StaffStatusConfigDto> update(@PathVariable UUID id,
                                                     @Valid @RequestBody SaveStaffStatusRequest request) {
@@ -55,7 +55,7 @@ public class StaffStatusConfigController {
     }
 
     @DeleteMapping("/{id}")
-    @PreAuthorize("hasRole('TENANT_ADMIN')")
+    @PreAuthorize("hasRole('TENANT_ADMIN') or hasAuthority('SETTINGS_EDIT') or hasAuthority('STAFF_EDIT')")
     @Operation(summary = "Delete a custom staff status")
     public ApiResponse<Void> delete(@PathVariable UUID id) {
         service.delete(id);
