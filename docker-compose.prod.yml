@@ -163,7 +163,8 @@ services:
       LOG_CONNECTIONS: "0"
       LOG_DISCONNECTIONS: "0"
       STATS_PERIOD: "60"
-      AUTH_TYPE: md5
+      # PostgreSQL 16 defaults to SCRAM; PgBouncer must use the same auth type.
+      AUTH_TYPE: scram-sha-256
       ADMIN_USERS: pgbouncer
     ports:
       - "127.0.0.1:6432:5432"

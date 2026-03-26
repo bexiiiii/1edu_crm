@@ -771,6 +771,7 @@ PgBouncer добавлен перед PostgreSQL как прокси пула с
 ### Конфигурация
 - Image: `edoburu/pgbouncer:latest`
 - Порт: `127.0.0.1:6432 -> pgbouncer:5432`
+- `auth_type = scram-sha-256` — обязательно для PostgreSQL 16+ с SCRAM passwords
 - Режим: **session** — обязателен для Hibernate multi-tenancy (`SET search_path`)
 - `server_reset_query = RESET ALL` — очищает `search_path` при возврате соединения в пул
 - `max_client_conn = 500` — принимает до 500 HikariCP подключений
