@@ -26,7 +26,19 @@ public final class RoleNameUtils {
         if (!StringUtils.hasText(roleName)) {
             throw new IllegalArgumentException("Role name is required");
         }
-        return roleName.trim().toUpperCase(Locale.ROOT);
+        // uppercase, replace spaces/hyphens with _, strip everything else except A-Z0-9_
+        String normalized = roleName.trim()
+                .toUpperCase(Locale.ROOT)
+                .replaceAll("[\\s\\-]+", "_")
+                .replaceAll("[^A-Z0-9_]", "");
+        if (normalized.isEmpty()) {
+            throw new IllegalArgumentException("Role name contains no valid characters");
+        }
+        // ensure starts with a letter
+        if (!Character.isLetter(normalized.charAt(0))) {
+            normalized = "R_" + normalized;
+        }
+        return normalized;
     }
 
     public static boolean isSystemRole(String roleName) {

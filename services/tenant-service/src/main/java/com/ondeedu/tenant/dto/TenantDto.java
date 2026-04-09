@@ -1,10 +1,12 @@
 package com.ondeedu.tenant.dto;
 
+import com.ondeedu.tenant.entity.BillingPeriod;
 import com.ondeedu.tenant.entity.TenantPlan;
 import com.ondeedu.tenant.entity.TenantStatus;
 import lombok.Builder;
 import lombok.Data;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.UUID;
@@ -40,6 +42,14 @@ public class TenantDto {
     private String contactPerson;
 
     private String notes;
+
+    private BillingPeriod billingPeriod;
+
+    private Instant subscriptionStartAt;
+
+    private Instant subscriptionEndAt;
+
+    private BigDecimal subscriptionPrice;
 
     private Instant createdAt;
 

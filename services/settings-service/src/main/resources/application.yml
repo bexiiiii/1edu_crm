@@ -8,6 +8,10 @@ grpc:
 spring:
   application:
     name: settings-service
+  servlet:
+    multipart:
+      max-file-size: 10MB
+      max-request-size: 15MB
   datasource:
     url: jdbc:postgresql://localhost:5432/ondeedu_crm
     username: ondeedu

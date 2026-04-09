@@ -7,6 +7,7 @@ import org.hibernate.annotations.SQLRestriction;
 
 import java.time.Instant;
 import java.time.LocalDate;
+import java.math.BigDecimal;
 
 @Entity
 @Table(
@@ -79,6 +80,20 @@ public class Tenant extends BaseEntity {
 
     @Column(name = "banned_until")
     private Instant bannedUntil;
+
+    // Subscription fields
+    @Enumerated(EnumType.STRING)
+    @Column(name = "billing_period", length = 20)
+    private BillingPeriod billingPeriod;
+
+    @Column(name = "subscription_start_at")
+    private Instant subscriptionStartAt;
+
+    @Column(name = "subscription_end_at")
+    private Instant subscriptionEndAt;
+
+    @Column(name = "subscription_price", precision = 12, scale = 2)
+    private BigDecimal subscriptionPrice;
 
     // Soft delete (filtered by @SQLRestriction)
     @Column(name = "deleted_at")

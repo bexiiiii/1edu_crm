@@ -7,6 +7,8 @@ import jakarta.validation.constraints.Size;
 import lombok.Builder;
 import lombok.Data;
 
+import java.time.LocalDate;
+
 @Data
 @Builder
 public class CreateTenantRequest {
@@ -34,4 +36,6 @@ public class CreateTenantRequest {
     private String contactPerson;
 
     private String notes;
+
+    private LocalDate trialEndsAt;
 }

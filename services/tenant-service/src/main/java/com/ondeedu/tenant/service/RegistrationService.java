@@ -11,6 +11,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
+import java.time.LocalDate;
 import java.util.UUID;
 
 @Slf4j
@@ -33,6 +34,7 @@ public class RegistrationService {
                 .phone(request.getPhone())
                 .contactPerson(request.getFirstName() + " " + request.getLastName())
                 .plan(TenantPlan.BASIC)
+                .trialEndsAt(LocalDate.now().plusDays(7))
                 .build();
 
         TenantDto tenant = tenantService.createTenant(tenantRequest);
