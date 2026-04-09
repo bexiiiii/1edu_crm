@@ -18,8 +18,8 @@ public class AdminDashboardResponse {
 
     // Тенанты по тарифу
     private long basicPlanCount;
-    private long professionalPlanCount;
-    private long enterprisePlanCount;
+    private long extendedPlanCount;
+    private long extendedPlusPlanCount;
 
     // Сводная статистика по всем тенантам
     private long totalStudentsAllTenants;

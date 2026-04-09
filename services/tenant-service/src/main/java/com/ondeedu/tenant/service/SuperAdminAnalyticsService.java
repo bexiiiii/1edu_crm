@@ -43,8 +43,8 @@ public class SuperAdminAnalyticsService {
         long inactive   = count(all, TenantStatus.INACTIVE);
 
         long basic        = countPlan(all, TenantPlan.BASIC);
-        long professional = countPlan(all, TenantPlan.PROFESSIONAL);
-        long enterprise   = countPlan(all, TenantPlan.ENTERPRISE);
+        long extended     = countPlan(all, TenantPlan.EXTENDED);
+        long extendedPlus = countPlan(all, TenantPlan.EXTENDED_PLUS);
 
         double activeRate           = total > 0 ? round2((double) active / total) : 0.0;
         double trialConversionRate  = (active + trial) > 0 ? round2((double) active / (active + trial)) : 0.0;
@@ -102,8 +102,8 @@ public class SuperAdminAnalyticsService {
                 .totalActiveSubs(totalSubs)
                 .avgStudentsPerTenant(avgStudents)
                 .basicCount(basic)
-                .professionalCount(professional)
-                .enterpriseCount(enterprise)
+                .extendedCount(extended)
+                .extendedPlusCount(extendedPlus)
                 .build();
     }
 
@@ -230,9 +230,9 @@ public class SuperAdminAnalyticsService {
         double rate90 = (activeCount + c90) > 0 ? round2((double) c90 / (activeCount + c90)) : 0.0;
 
         Map<String, Long> byPlan = new LinkedHashMap<>();
-        byPlan.put("BASIC",        churned30.stream().filter(t -> t.getPlan() == TenantPlan.BASIC).count());
-        byPlan.put("PROFESSIONAL", churned30.stream().filter(t -> t.getPlan() == TenantPlan.PROFESSIONAL).count());
-        byPlan.put("ENTERPRISE",   churned30.stream().filter(t -> t.getPlan() == TenantPlan.ENTERPRISE).count());
+        byPlan.put("BASIC",          churned30.stream().filter(t -> t.getPlan() == TenantPlan.BASIC).count());
+        byPlan.put("EXTENDED",       churned30.stream().filter(t -> t.getPlan() == TenantPlan.EXTENDED).count());
+        byPlan.put("EXTENDED_PLUS",  churned30.stream().filter(t -> t.getPlan() == TenantPlan.EXTENDED_PLUS).count());
 
         List<TenantStatsDto> recentlyChurned = churned30.stream()
                 .map(this::toStatsDto)

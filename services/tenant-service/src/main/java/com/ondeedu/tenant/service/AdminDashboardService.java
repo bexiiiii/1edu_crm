@@ -48,9 +48,9 @@ public class AdminDashboardService {
         long suspended  = count(allTenants, TenantStatus.SUSPENDED);
         long inactive   = count(allTenants, TenantStatus.INACTIVE);
 
-        long basic        = countPlan(allTenants, TenantPlan.BASIC);
-        long professional = countPlan(allTenants, TenantPlan.PROFESSIONAL);
-        long enterprise   = countPlan(allTenants, TenantPlan.ENTERPRISE);
+        long basic         = countPlan(allTenants, TenantPlan.BASIC);
+        long extended      = countPlan(allTenants, TenantPlan.EXTENDED);
+        long extendedPlus  = countPlan(allTenants, TenantPlan.EXTENDED_PLUS);
 
         long newLast30 = allTenants.stream()
                 .filter(t -> t.getCreatedAt() != null &&
@@ -97,8 +97,8 @@ public class AdminDashboardService {
                 .suspendedTenants(suspended)
                 .inactiveTenants(inactive)
                 .basicPlanCount(basic)
-                .professionalPlanCount(professional)
-                .enterprisePlanCount(enterprise)
+                .extendedPlanCount(extended)
+                .extendedPlusPlanCount(extendedPlus)
                 .newTenantsLast30Days(newLast30)
                 .expiringTrialTenants(expiringTrials)
                 .totalStudentsAllTenants(totalStudents)

@@ -32,6 +32,6 @@ public class PlatformKpiResponse {
 
     // Plan distribution
     private long basicCount;
-    private long professionalCount;
-    private long enterpriseCount;
+    private long extendedCount;
+    private long extendedPlusCount;
 }
