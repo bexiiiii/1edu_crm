@@ -157,6 +157,65 @@ System-level service that manages tenants (education centers). Key architectural
 - **Endpoints**: `POST/GET/PUT/DELETE /api/v1/tenants`, `GET /api/v1/tenants/search?query=`
 - **Delete guard** — tenant can only be deleted when `status = INACTIVE`; throws `BusinessException` otherwise.
 
+## SaaS Subscription System (tenant-service + api-gateway)
+
+### Планы и тарифы
+
+Enum `TenantPlan`: `BASIC`, `EXTENDED`, `EXTENDED_PLUS` (старые `PROFESSIONAL`/`ENTERPRISE` удалены).
+
+Цены (из `system.subscription_plans`, Flyway V18):
+| План | Месяц | 6 мес (мес) | Год (мес) |
+|---|---|---|---|
+| BASIC | 20 000 тг | 18 000 тг (-10%) | 16 600 тг (-17%) |
+| EXTENDED | 30 000 тг | 27 000 тг (-10%) | 24 900 тг (-17%) |
+| EXTENDED_PLUS | 50 000 тг | 45 000 тг (-10%) | 41 500 тг (-17%) |
+
+Enum `BillingPeriod`: `MONTHLY` (+30d), `SIX_MONTHS` (+183d), `ANNUAL` (+365d).
+
+### Жизненный цикл тенанта с подпиской
+```
+Регистрация → TRIAL (7 дней) → [оплата] → ACTIVE → SUSPENDED/BANNED/INACTIVE
+```
+- При регистрации `RegistrationService` автоматически ставит `trialEndsAt = today + 7 days`
+- `SubscriptionStatusDto.AccessState`: `TRIAL_ACTIVE`, `TRIAL_EXPIRED`, `SUBSCRIPTION_ACTIVE`, `SUBSCRIPTION_EXPIRED`, `SUSPENDED`, `BANNED`, `INACTIVE`
+
+### Поля Tenant (добавлены V18)
+`billingPeriod`, `subscriptionStartAt`, `subscriptionEndAt`, `subscriptionPrice`
+
+### API Подписок
+| Эндпоинт | Доступ | Описание |
+|---|---|---|
+| `GET /api/v1/subscription/plans` | Public | Список тарифных планов с ценами |
+| `GET /api/v1/subscription/status` | Authenticated | Статус подписки текущего тенанта |
+| `POST /api/v1/admin/tenants/{id}/subscription/activate` | SUPER_ADMIN | Активировать подписку тенанту |
+| `GET /internal/tenants/{id}/subscription-status` | Internal | Для api-gateway filter (без JWT) |
+
+### SubscriptionCheckFilter (api-gateway)
+GlobalFilter с order=-50 (после SubdomainTenantFilter=-200, TenantHeaderFilter=-100).
+
+**Логика**: Redis cache `sub-status:{tenantId}` TTL 5 мин → при промахе запрашивает `tenant-service/internal/...` → кэширует. При `TRIAL_ACTIVE` / `SUBSCRIPTION_ACTIVE` пропускает, иначе HTTP 402.
+
+**Bypass paths** (не проверяются):
+`/api/v1/register`, `/api/v1/subscription/**`, `/api/v1/auth/**`, `/auth/**`, `/actuator/**`, `/fallback/**`, `/swagger-ui`, `/v3/api-docs`, `/webjars/`, `/internal/`
+
+**Fail-open**: если tenant-service недоступен — запрос пропускается (не блокируем из-за инфраструктурного сбоя).
+
+**HTTP 402 error codes**: `TRIAL_EXPIRED`, `SUBSCRIPTION_EXPIRED`, `SUBSCRIPTION_SUSPENDED`, `TENANT_BANNED`, `SUBSCRIPTION_INACTIVE`.
+
+**Evict cache**: при активации подписки `SubscriptionService.activate()` удаляет ключ `sub-status:{tenantId}` из Redis.
+
+### Flyway V18 (tenant-service)
+`V18__add_subscription_system.sql`:
+- Обновляет CHECK constraint `plan` → BASIC/EXTENDED/EXTENDED_PLUS (мигрирует PROFESSIONAL→EXTENDED, ENTERPRISE→EXTENDED_PLUS)
+- Добавляет поля `billing_period`, `subscription_start_at`, `subscription_end_at`, `subscription_price` в `system.tenants`
+- Создаёт `system.subscription_plans` с seed-данными трёх тарифов
+- Индексы на новые поля
+
+### AdminDashboard / PlatformKPI — план distribution
+`AdminDashboardResponse`: `basicPlanCount`, `extendedPlanCount`, `extendedPlusPlanCount`
+`PlatformKpiResponse`: `basicCount`, `extendedCount`, `extendedPlusCount`
+`ChurnAnalyticsResponse.byPlan`: ключи `BASIC`, `EXTENDED`, `EXTENDED_PLUS`
+
 ## Auth Service (port 8101)
 
 Manages Keycloak users (staff members) via Keycloak Admin Client. No database, no JPA, no Redis, no RabbitMQ.
@@ -176,6 +235,15 @@ Manages Keycloak users (staff members) via Keycloak Admin Client. No database, n
 - **Endpoints**: `POST/GET/PUT/DELETE /api/v1/auth/users`, `POST /api/v1/auth/users/{id}/reset-password`
 
 ### Known Issues & Solutions
+
+#### nginx 502 после рестарта api-gateway
+nginx кэширует IP контейнера — после рестарта api-gateway старый IP устаревает.
+
+**Симптом**: все API-запросы возвращают 502 Bad Gateway после `make deploy-service s=api-gateway`.
+
+**Решение**: `docker exec 1edu-nginx nginx -s reload` — перечитывает upstream IP из DNS.
+
+`make deploy-service` вызывает `scripts/deploy.sh`, который делает reload автоматически. Проблема возникает только при ручном `docker compose up` без использования make.
 
 #### Keycloak 26 User Profile — кастомные атрибуты (tenant_id, permissions)
 Keycloak 26 использует **DeclarativeUserProfile** по умолчанию. Кастомные атрибуты, не объявленные в схеме User Profile, **молча игнорируются** при создании/обновлении пользователя через Admin API.
@@ -332,14 +400,16 @@ RABBITMQ_API_BASE="http://${RABBITMQ_API_HOST}:${RABBITMQ_API_PORT}/rabbitmq/api
 Уже исправлено в репо. Применять при написании новых скриптов, работающих с RabbitMQ Management API.
 
 #### PgBouncer — query_wait_timeout при одновременном старте сервисов
-При старте 10+ сервисов одновременно PgBouncer отдаёт `FATAL: query_wait_timeout` — пул `default_pool_size=20` исчерпывается, клиенты ждут дольше 120 с (дефолтный `query_wait_timeout`) и падают.
+При старте 10+ сервисов одновременно PgBouncer отдаёт `FATAL: query_wait_timeout` — пул исчерпывается, клиенты ждут дольше 120 с (дефолтный `query_wait_timeout`) и падают.
 
 **Симптом**: `org.postgresql.util.PSQLException: FATAL: query_wait_timeout` во время Flyway-миграции при старте сервиса.
 
 **Решение**:
-1. `DEFAULT_POOL_SIZE` в `docker-compose.prod.yml` — **50** (было 20). Обновлено.
+1. `DEFAULT_POOL_SIZE` в `docker-compose.prod.yml` — **100** (было 20, потом 50 — недостаточно при 15+ сервисах с min_idle=2-5). Обновлено.
 2. `HIKARI_CONNECTION_TIMEOUT_MS` в `.env` — **30000** (было 3000). Хватает времени дождаться свободного слота.
 3. При первом деплое поднимать сервисы группами с задержкой 60 с между группами — не все сразу.
+
+**Почему 100**: 15 сервисов × min_idle=2 = 30 соединений в idle, плюс пики при старте дают 60-80. `default_pool_size=50` переполняется.
 
 #### Config Server — сервисы без Spring Cloud Config
 Сервисы (`audit-service`, `file-service`) с `spring-cloud-starter-config` на classpath падают при старте если Config Server недоступен.
@@ -492,13 +562,21 @@ Spring Boot 3.4.2, Spring Cloud 2024.0.0, gRPC 1.68.2, Protobuf 4.29.3, PostgreS
 ### Redis кэширование
 Кэш `settings` с ключом через `TenantCacheKeys.fixed('tenant-settings')`. `@CacheEvict` при каждом PUT.
 
+### Logo Upload — лимит файлов
+`application.yml` settings-service:
+```yaml
+spring.servlet.multipart.max-file-size: 10MB
+spring.servlet.multipart.max-request-size: 15MB
+```
+**Симптом `MaxUploadSizeExceededException` (500)**: Spring дефолт 1MB. Уже исправлено — лимит 10MB.
+
 ### Кастомные роли — синхронизация с Keycloak
 `RoleConfigService` при create/update/delete вызывает `AuthRoleClient` (REST → `PUT/DELETE /internal/auth/roles/{name}`), который через `KeycloakRoleService` создаёт/обновляет/удаляет роль в Keycloak.
 
 **Ограничения:**
 - Системные роли (`TENANT_ADMIN`, `MANAGER`, `TEACHER`, `RECEPTIONIST`, `ACCOUNTANT`, `SUPER_ADMIN`) защищены от изменения — выбрасывают `SYSTEM_ROLE_CONFIG_FORBIDDEN`
 - Переименование ролей не поддерживается (`ROLE_RENAME_NOT_SUPPORTED`) — нужно создать новую роль и переназначить пользователей
-- Имя роли: regex `^[A-Z][A-Z0-9_]{1,99}$`
+- Имя роли нормализуется автоматически через `RoleNameUtils.normalizeRoleName()` — lowercase/пробелы/дефисы принимаются, конвертируются в UPPER_CASE_SNAKE. **`@Pattern` в `SaveRoleConfigRequest` удалена** — валидация на уровне util, а не DTO.
 - Удаление роли блокируется если она назначена пользователям (`ROLE_IN_USE`)
 
 **Именование в Keycloak:**
