@@ -153,7 +153,7 @@ services:
       DATABASE_URL: postgres://${DB_USERNAME}:${DB_PASSWORD}@postgres/${DB_NAME}
       POOL_MODE: session
       MAX_CLIENT_CONN: "500"
-      DEFAULT_POOL_SIZE: "20"
+      DEFAULT_POOL_SIZE: "100"
       MIN_POOL_SIZE: "5"
       RESERVE_POOL_SIZE: "5"
       MAX_DB_CONNECTIONS: "150"
