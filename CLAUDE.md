@@ -1009,6 +1009,20 @@ gRPC proto обновлён: `staff.proto` включает salary-поля в `
 - `student_groups` — backfilled при миграции
 - Индексы по `course_id`, `student_id`, `group_id`
 
+### Автоподстановка учителя и лимита из курса
+При создании/обновлении расписания с `courseId` — `teacherId` и `maxStudents` автоматически берутся из курса через gRPC и **не могут быть изменены вручную** (ошибка `COURSE_BOUND_FIELD_IMMUTABLE`).
+
+**Компоненты:**
+- `CourseGrpcClient` — gRPC-клиент для course-service (порт 9106); метод `getCourseInfo(courseId)` возвращает `CourseInfo(teacherId, enrollmentLimit, roomId)`
+- `course.proto` обновлён: `Course` message содержит `teacher_id` (field 13) и `room_id` (field 14)
+- `CourseGrpcService.toGrpcCourse()` обновлён: заполняет `teacherId` и `roomId`
+- `docker-compose.prod.yml`: `GRPC_CLIENT_COURSE_SERVICE_ADDRESS: discovery:///course-service` для schedule-service
+
+### Проверка вместимости аудитории
+При создании/обновлении расписания с `roomId`:
+- **Блокировка** (`ROOM_CAPACITY_EXCEEDED`): если `maxStudents > room.capacity`
+- **Уведомление** via RabbitMQ (`NOTIFICATION_EXCHANGE` / `notification.assignment`): если `maxStudents == room.capacity` — событие `ROOM_AT_CAPACITY` отправляется создателю расписания
+
 ## Course Service — Auto-Subscription (port 8106)
 
 При добавлении студента на курс автоматически создаётся подписка (subscription) через gRPC.
