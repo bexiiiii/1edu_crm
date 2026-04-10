@@ -1471,17 +1471,21 @@ interface ScheduleDto {
 {
   "name": "Группа English A1 — Утро",
   "courseId": "uuid",
-  "teacherId": "uuid",
   "roomId": "uuid",
   "daysOfWeek": ["MONDAY", "WEDNESDAY", "FRIDAY"],
   "startTime": "09:00:00",
   "endTime": "10:30:00",
   "startDate": "2026-02-01",
-  "endDate": "2026-06-30",
-  "maxStudents": 12
+  "endDate": "2026-06-30"
 }
 ```
 
+> **Автоподстановка из курса**: если передан `courseId`, поля `teacherId` и `maxStudents` автоматически берутся из курса (через gRPC) и **не нужно передавать вручную**. Если они переданы при наличии `courseId`, будет возвращена ошибка `400 COURSE_BOUND_FIELD_IMMUTABLE`.
+>
+> **Проверка вместимости аудитории**: если передан `roomId` и `maxStudents` (напрямую или из курса):
+> - если `maxStudents > room.capacity` → `400 ROOM_CAPACITY_EXCEEDED`
+> - если `maxStudents == room.capacity` → создание пройдёт успешно, но создателю придёт уведомление «аудитория заполнена до предела»
+>
 > После создания расписания backend автоматически создаёт записи в `lesson-service`:
 > - если `endDate` задан, создаётся серия занятий по всем датам в диапазоне `startDate..endDate`, которые входят в `daysOfWeek`;
 > - если `endDate` не задан, создаётся только первое подходящее занятие;
@@ -1531,6 +1535,10 @@ interface ScheduleDto {
 }
 ```
 
+> **Ограничение**: если у расписания задан `courseId`, поля `teacherId` и `maxStudents` нельзя изменить напрямую — они управляются курсом. Попытка изменить вернёт `400 COURSE_BOUND_FIELD_IMMUTABLE`.
+>
+> **Проверка вместимости**: при изменении `roomId` или `maxStudents` также применяется проверка вместимости аудитории (аналогично созданию).
+>
 > Backend автоматически синхронизирует связанные занятия в `lesson-service`:
 > - для дат, которые остались в расписании, `PLANNED` занятия обновляются по новым `startTime`, `endTime`, `teacherId`, `roomId`, `maxStudents`;
 > - для новых дат создаются новые занятия;
