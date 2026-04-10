@@ -146,6 +146,8 @@ public class CourseGrpcService extends CourseServiceGrpc.CourseServiceImplBase {
         if (dto.getDescription() != null) builder.setDescription(StringValue.of(dto.getDescription()));
         if (dto.getBasePrice() != null) builder.setPrice(GrpcUtils.toMoney(dto.getBasePrice(), "UZS"));
         if (dto.getEnrollmentLimit() != null) builder.setMaxStudentsPerGroup(dto.getEnrollmentLimit());
+        if (dto.getTeacherId() != null) builder.setTeacherId(StringValue.of(dto.getTeacherId().toString()));
+        if (dto.getRoomId() != null) builder.setRoomId(StringValue.of(dto.getRoomId().toString()));
         if (dto.getCreatedAt() != null) builder.setCreatedAt(GrpcUtils.toTimestamp(dto.getCreatedAt()));
         if (dto.getUpdatedAt() != null) builder.setUpdatedAt(GrpcUtils.toTimestamp(dto.getUpdatedAt()));
 

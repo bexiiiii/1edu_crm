@@ -40,6 +40,8 @@ message Course {
   google.protobuf.Timestamp created_at = 10;
   google.protobuf.Timestamp updated_at = 11;
   map<string, string> metadata = 12;
+  google.protobuf.StringValue teacher_id = 13;  // staff-service reference
+  google.protobuf.StringValue room_id = 14;      // room reference
 }
 
 message Group {

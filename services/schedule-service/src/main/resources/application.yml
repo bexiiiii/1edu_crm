@@ -61,6 +61,8 @@ grpc:
       negotiation-type: plaintext
     lesson-service:
       address: static://localhost:9126
+    course-service:
+      address: static://localhost:9106
 
 management:
   endpoints:

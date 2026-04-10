@@ -1,22 +1,29 @@
 package com.ondeedu.schedule.service;
 
+import com.ondeedu.common.config.RabbitMQConfig;
 import com.ondeedu.common.dto.PageResponse;
+import com.ondeedu.common.event.AssignmentNotificationEvent;
 import com.ondeedu.common.exception.BusinessException;
 import com.ondeedu.common.exception.ResourceNotFoundException;
+import com.ondeedu.common.tenant.TenantContext;
+import com.ondeedu.schedule.client.CourseGrpcClient;
 import com.ondeedu.schedule.client.LessonGrpcClient;
 import com.ondeedu.schedule.client.LessonGrpcClient.ManagedLesson;
 import com.ondeedu.schedule.dto.CreateScheduleRequest;
 import com.ondeedu.schedule.dto.ScheduleDto;
 import com.ondeedu.schedule.dto.UpdateScheduleRequest;
+import com.ondeedu.schedule.entity.Room;
 import com.ondeedu.schedule.entity.ScheduleStudentEnrollment;
 import com.ondeedu.schedule.entity.Schedule;
 import com.ondeedu.schedule.entity.ScheduleStatus;
 import com.ondeedu.schedule.mapper.ScheduleMapper;
 import com.ondeedu.schedule.repository.CourseStudentLinkRepository;
+import com.ondeedu.schedule.repository.RoomRepository;
 import com.ondeedu.schedule.repository.ScheduleRepository;
 import com.ondeedu.schedule.repository.ScheduleStudentEnrollmentRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.data.domain.Page;
@@ -53,12 +60,26 @@ public class ScheduleService {
     private final LessonGrpcClient lessonGrpcClient;
     private final CourseStudentLinkRepository courseStudentLinkRepository;
     private final ScheduleStudentEnrollmentRepository scheduleStudentEnrollmentRepository;
+    private final CourseGrpcClient courseGrpcClient;
+    private final RoomRepository roomRepository;
+    private final RabbitTemplate rabbitTemplate;
 
     @Transactional
     @CacheEvict(value = "schedules", allEntries = true)
     public ScheduleDto createSchedule(CreateScheduleRequest request) {
         validateScheduleRange(request.getStartDate(), request.getEndDate());
         Schedule schedule = scheduleMapper.toEntity(request);
+
+        // Auto-populate teacherId and maxStudents from course — they cannot be overridden manually
+        if (request.getCourseId() != null) {
+            applyCourseDerivedFields(schedule, request.getCourseId());
+        }
+
+        // Validate room capacity: block if maxStudents > capacity, notify if at capacity
+        if (schedule.getRoomId() != null) {
+            checkRoomCapacity(schedule.getRoomId(), schedule.getMaxStudents(), schedule.getName());
+        }
+
         schedule = scheduleRepository.saveAndFlush(schedule);
 
         synchronizeCourseStudents(schedule);
@@ -81,10 +102,35 @@ public class ScheduleService {
     public ScheduleDto updateSchedule(UUID id, UpdateScheduleRequest request) {
         Schedule schedule = scheduleRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Schedule", "id", id));
-        List<ManagedLesson> existingLessons = lessonGrpcClient.listGroupLessons(id);
 
+        // Determine effective courseId after the update
+        UUID effectiveCourseId = request.getCourseId() != null ? request.getCourseId() : schedule.getCourseId();
+
+        // teacherId and maxStudents are managed by the course — block manual changes when courseId is set
+        if (effectiveCourseId != null) {
+            if (request.getTeacherId() != null || request.getMaxStudents() != null) {
+                throw new BusinessException(
+                        "COURSE_BOUND_FIELD_IMMUTABLE",
+                        "teacherId and maxStudents are automatically set from the course and cannot be changed directly"
+                );
+            }
+        }
+
+        List<ManagedLesson> existingLessons = lessonGrpcClient.listGroupLessons(id);
         scheduleMapper.updateEntity(schedule, request);
+
+        // Re-apply course-derived fields if courseId changed or is still set
+        if (effectiveCourseId != null) {
+            applyCourseDerivedFields(schedule, effectiveCourseId);
+        }
+
         validateScheduleRange(schedule.getStartDate(), schedule.getEndDate());
+
+        // Validate room capacity after applying all changes
+        if (schedule.getRoomId() != null) {
+            checkRoomCapacity(schedule.getRoomId(), schedule.getMaxStudents(), schedule.getName());
+        }
+
         schedule = scheduleRepository.saveAndFlush(schedule);
 
         synchronizeCourseStudents(schedule);
@@ -401,6 +447,69 @@ public class ScheduleService {
                 .distinct()
                 .sorted()
                 .collect(Collectors.joining(", "));
+    }
+
+    private void applyCourseDerivedFields(Schedule schedule, UUID courseId) {
+        courseGrpcClient.getCourseInfo(courseId).ifPresent(info -> {
+            if (info.teacherId() != null) {
+                schedule.setTeacherId(info.teacherId());
+            }
+            if (info.enrollmentLimit() != null) {
+                schedule.setMaxStudents(info.enrollmentLimit());
+            }
+        });
+    }
+
+    private void checkRoomCapacity(UUID roomId, Integer maxStudents, String scheduleName) {
+        if (maxStudents == null) return;
+        roomRepository.findById(roomId).ifPresent(room -> {
+            if (room.getCapacity() == null) return;
+            if (maxStudents > room.getCapacity()) {
+                throw new BusinessException(
+                        "ROOM_CAPACITY_EXCEEDED",
+                        "Количество учеников (" + maxStudents + ") превышает вместимость аудитории '"
+                                + room.getName() + "' (" + room.getCapacity() + " мест)"
+                );
+            }
+            if (maxStudents.equals(room.getCapacity())) {
+                publishRoomAtCapacityNotification(room, scheduleName, maxStudents);
+            }
+        });
+    }
+
+    private void publishRoomAtCapacityNotification(Room room, String scheduleName, int maxStudents) {
+        try {
+            String tenantId = TenantContext.getTenantId();
+            String userId = TenantContext.getUserId();
+            UUID creatorId = null;
+            try {
+                if (userId != null) creatorId = UUID.fromString(userId);
+            } catch (IllegalArgumentException ignored) {}
+
+            AssignmentNotificationEvent event = new AssignmentNotificationEvent(
+                    "ROOM_AT_CAPACITY",
+                    tenantId,
+                    userId,
+                    creatorId,
+                    null,
+                    null,
+                    "SCHEDULE",
+                    room.getId(),
+                    scheduleName,
+                    "Аудитория заполнена",
+                    "Расписание '" + scheduleName + "': аудитория '" + room.getName()
+                            + "' заполнена до предела (" + maxStudents + "/" + room.getCapacity() + " мест)"
+            );
+
+            rabbitTemplate.convertAndSend(
+                    RabbitMQConfig.NOTIFICATION_EXCHANGE,
+                    RabbitMQConfig.NOTIFICATION_ASSIGNMENT_KEY,
+                    event
+            );
+            log.info("Published room-at-capacity notification for schedule '{}', room '{}'", scheduleName, room.getName());
+        } catch (Exception e) {
+            log.warn("Failed to publish room-at-capacity notification: {}", e.getMessage());
+        }
     }
 
     private void validateScheduleRange(LocalDate startDate, LocalDate endDate) {
