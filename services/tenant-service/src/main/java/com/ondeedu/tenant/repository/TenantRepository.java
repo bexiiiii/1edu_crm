@@ -35,4 +35,8 @@ public interface TenantRepository extends JpaRepository<Tenant, UUID> {
 
     @Query(value = "SELECT * FROM system.tenants WHERE status = 'BANNED' AND deleted_at IS NULL ORDER BY banned_at DESC", nativeQuery = true)
     List<Tenant> findAllBanned();
+
+    List<Tenant> findAllByStatusAndTrialEndsAtIsNotNull(TenantStatus status);
+
+    List<Tenant> findAllByStatusAndSubscriptionEndAtIsNotNull(TenantStatus status);
 }

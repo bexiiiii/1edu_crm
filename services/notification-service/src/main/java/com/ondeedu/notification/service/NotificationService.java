@@ -45,10 +45,17 @@ public class NotificationService {
 
         log = notificationRepository.save(log);
 
+        if (!StringUtils.hasText(recipientEmail)) {
+            log.setStatus(NotificationStatus.FAILED);
+            log.setErrorMessage("Recipient email is blank");
+            return notificationRepository.save(log);
+        }
+
         try {
-            emailService.sendEmail(recipientEmail, subject, body);
+            emailService.sendEmail(recipientEmail.trim(), subject, body);
             log.setStatus(NotificationStatus.SENT);
             log.setSentAt(Instant.now());
+            log.setErrorMessage(null);
         } catch (Exception e) {
             NotificationService.log.error("Failed to send email notification for event '{}': {}", eventType, e.getMessage());
             log.setStatus(NotificationStatus.FAILED);

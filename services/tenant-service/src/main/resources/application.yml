@@ -64,6 +64,17 @@ services:
   auth-service:
     url: ${AUTH_SERVICE_URL:http://auth-service:8101}
 
+tenant:
+  registration:
+    welcome-email:
+      base-domain: ${BASE_DOMAIN:${DOMAIN:1edu.kz}}
+      scheme: ${TENANT_PUBLIC_SCHEME:https}
+  subscription:
+    notifications:
+      enabled: ${TENANT_SUBSCRIPTION_NOTIFICATIONS_ENABLED:true}
+      cron: ${TENANT_SUBSCRIPTION_NOTIFICATIONS_CRON:0 0 * * * *}
+      zone: ${TENANT_SUBSCRIPTION_NOTIFICATIONS_ZONE:UTC}
+
 logging:
   level:
     com.ondeedu: INFO

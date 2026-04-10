@@ -36,22 +36,31 @@ spring:
         max-concurrency: 20
         prefetch: 30
   mail:
-    host: smtp.gmail.com
-    port: 587
-    username: ${MAIL_USERNAME:noreply@ondeedu.com}
-    password: ${MAIL_PASSWORD:changeme}
-    from: ${MAIL_FROM:noreply@ondeedu.com}
+    host: ${SMTP_HOST:${MAIL_HOST:smtp-relay.brevo.com}}
+    port: ${SMTP_PORT:${MAIL_PORT:587}}
+    username: ${SMTP_USERNAME:${MAIL_USERNAME:}}
+    password: ${SMTP_PASSWORD:${MAIL_PASSWORD:}}
+    protocol: smtp
+    default-encoding: UTF-8
     properties:
       mail:
         smtp:
-          auth: true
+          auth: ${SMTP_AUTH:true}
+          connectiontimeout: ${SMTP_CONNECTION_TIMEOUT:5000}
+          timeout: ${SMTP_TIMEOUT:10000}
+          writetimeout: ${SMTP_WRITE_TIMEOUT:10000}
           starttls:
-            enable: true
+            enable: ${SMTP_STARTTLS_ENABLE:true}
   security:
     oauth2:
       resourceserver:
         jwt:
           issuer-uri: http://localhost:8080/auth/realms/ondeedu
+
+notification:
+  mail:
+    from: ${MAIL_FROM:${SMTP_FROM:}}
+    reply-to: ${MAIL_REPLY_TO:}
 
 eureka:
   client:

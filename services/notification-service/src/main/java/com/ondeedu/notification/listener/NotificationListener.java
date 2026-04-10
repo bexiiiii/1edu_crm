@@ -2,6 +2,7 @@ package com.ondeedu.notification.listener;
 
 import com.ondeedu.common.config.RabbitMQConfig;
 import com.ondeedu.common.event.AssignmentNotificationEvent;
+import com.ondeedu.common.event.EmailNotificationEvent;
 import com.ondeedu.common.event.PaymentCompletedEvent;
 import com.ondeedu.common.event.StudentCreatedEvent;
 import com.ondeedu.notification.service.NotificationService;
@@ -38,5 +39,16 @@ public class NotificationListener {
     @RabbitListener(queues = RabbitMQConfig.NOTIFICATION_ASSIGNMENT_QUEUE)
     public void onAssignmentNotification(AssignmentNotificationEvent event) {
         notificationService.createInAppNotification(event);
+    }
+
+    @RabbitListener(queues = RabbitMQConfig.NOTIFICATION_EMAIL_QUEUE)
+    public void onEmailNotification(EmailNotificationEvent event) {
+        notificationService.sendEmailNotification(
+                event.getTenantId(),
+                event.getEventType(),
+                event.getRecipientEmail(),
+                event.getSubject(),
+                event.getBody()
+        );
     }
 }
