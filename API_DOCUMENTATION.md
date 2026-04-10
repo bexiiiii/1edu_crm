@@ -2640,6 +2640,66 @@ interface BroadcastNotificationResultDto {
 
 ---
 
+### 15.2 Автоматические SaaS email-уведомления
+
+Отправляются автоматически через RabbitMQ (`notification.exchange` / `notification.email.queue`) и обрабатываются `notification-service` через Brevo SMTP.
+
+#### Welcome-письмо при регистрации
+Отправляется немедленно после успешной регистрации тенанта (`POST /api/v1/register`).
+
+| Поле | Значение |
+|---|---|
+| `eventType` | `tenant.registered.welcome` |
+| Кому | Email регистратора |
+| Содержание | Логин, URL центра (`https://<subdomain>.<BASE_DOMAIN>`), дата окончания пробного периода |
+
+#### Напоминание об оплате (subscription.payment_due)
+Отправляется **за 1 день** до окончания оплаченного периода подписки (`subscriptionEndAt - 1 day`).
+
+| Поле | Значение |
+|---|---|
+| `eventType` | `tenant.subscription.payment_due.<YYYY-MM-DD>` |
+| Кому | Email тенанта |
+| Содержание | Дата окончания, тариф, сумма к оплате |
+
+#### Просроченная оплата (subscription.payment_overdue)
+Отправляется **на следующий день** после окончания оплаченного периода.
+
+| Поле | Значение |
+|---|---|
+| `eventType` | `tenant.subscription.payment_overdue.<YYYY-MM-DD>` |
+| Кому | Email тенанта |
+| Содержание | Тариф, дата окончания, сумма к оплате |
+
+#### Trial expired
+Отправляется **после истечения** пробного периода (`trialEndsAt`).
+
+| Поле | Значение |
+|---|---|
+| `eventType` | `tenant.trial.expired.<YYYY-MM-DD>` |
+| Кому | Email тенанта |
+| Содержание | Дата окончания пробного периода, призыв к действию |
+
+> **De-duplication**: перед отправкой проверяется `system.notification_logs` — если письмо с тем же `eventType` + `tenantId` уже было `SENT`, повторная отправка пропускается.
+>
+> **Расписание**: scheduler запускается каждый час (настраивается через `TENANT_SUBSCRIPTION_NOTIFICATIONS_CRON`). Можно отключить через `TENANT_SUBSCRIPTION_NOTIFICATIONS_ENABLED=false`.
+>
+> **Timezone**: дата сравнивается в часовом поясе тенанта (поле `timezone` в `tenant_settings`), fallback — UTC.
+
+#### SMTP настройка (Brevo)
+
+В `.env` / `.env.production` настроить:
+```env
+SMTP_HOST=smtp-relay.brevo.com
+SMTP_PORT=587
+SMTP_USERNAME=<brevo_login>
+SMTP_PASSWORD=<brevo_smtp_key>
+MAIL_FROM=noreply@1edu.kz       # если пусто — используется SMTP_USERNAME
+MAIL_REPLY_TO=support@1edu.kz   # опционально
+```
+
+---
+
 ## 16. File Service (8118)
 
 ### FileUploadResponse

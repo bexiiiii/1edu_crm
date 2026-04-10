@@ -1063,3 +1063,33 @@ gRPC proto обновлён: `staff.proto` включает salary-поля в `
 
 ### Важно: memory budget
 Notification-service требует увеличенного memory budget в docker-compose — настроено в `docker-compose.prod.yml`.
+
+### Email через Brevo SMTP
+`EmailService` отправляет письма через JavaMailSender. SMTP-вызов — `@Async` (не блокирует listener thread).
+
+Настройка через env-переменные:
+```
+SMTP_HOST=smtp-relay.brevo.com
+SMTP_PORT=587
+SMTP_USERNAME=<brevo_login>
+SMTP_PASSWORD=<brevo_smtp_key>
+MAIL_FROM=noreply@1edu.kz      # fallback → SMTP_USERNAME
+MAIL_REPLY_TO=support@1edu.kz  # опционально
+```
+
+`EmailNotificationEvent` (в common-модуле) — dedicated event для прямой доставки email через `notification.exchange` / `notification.email.queue`. Поля: `recipientEmail`, `subject`, `body`.
+
+### SaaS lifecycle emails (tenant-service)
+`TenantSubscriptionNotificationService` отправляет три типа писем владельцам тенантов:
+
+| Событие | Триггер | `eventType` |
+|---|---|---|
+| Welcome | Сразу после регистрации | `tenant.registered.welcome` |
+| Payment due | За 1 день до `subscriptionEndAt` | `tenant.subscription.payment_due.<date>` |
+| Payment overdue | На следующий день после `subscriptionEndAt` | `tenant.subscription.payment_overdue.<date>` |
+| Trial expired | После истечения `trialEndsAt` | `tenant.trial.expired.<date>` |
+
+- **De-dup**: проверяется `system.notification_logs` перед отправкой — повторная отправка пропускается если `eventType + tenantId` уже `SENT`
+- **Scheduler**: `TenantSubscriptionNotificationScheduler` — hourly cron (настраивается `TENANT_SUBSCRIPTION_NOTIFICATIONS_CRON`), отключается `TENANT_SUBSCRIPTION_NOTIFICATIONS_ENABLED=false`
+- **Timezone**: дата сравнивается в timezone тенанта (`tenant_settings.timezone`), fallback UTC
+- **`@EnableScheduling` + `@EnableAsync`** на `TenantServiceApplication`
