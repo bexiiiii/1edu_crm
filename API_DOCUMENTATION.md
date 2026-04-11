@@ -1805,11 +1805,20 @@ interface PriceListDto {
   "paidAt": "2026-02-15",
   "paymentMonth": "2026-02",
   "method": "CASH",
+  "amountChangeReasonCode": "MANUAL_CORRECTION",
+  "amountChangeReasonOther": null,
   "notes": "Первый взнос"
 }
 ```
 
 **Методы оплаты:** `CASH | CARD | TRANSFER | OTHER`
+
+**Коды причины изменения суммы платежа (optional):**
+`PARTIAL_PAYMENT | DISCOUNT_APPLIED | DEBT_REPAYMENT | MANUAL_CORRECTION | OTHER`
+
+**Правила валидации:**
+- если `amountChangeReasonCode=OTHER`, поле `amountChangeReasonOther` обязательно;
+- если `amountChangeReasonCode != OTHER`, `amountChangeReasonOther` передавать нельзя.
 
 **Response:** `ApiResponse<StudentPaymentDto>`
 
@@ -1931,12 +1940,21 @@ interface TransactionDto {
   description: string | null;
   transactionDate: string;       // "YYYY-MM-DD"
   studentId: string | null;
+  amountChangeReasonCode: AmountChangeReasonCode | null;
+  amountChangeReasonOther: string | null;
   staffId: string | null;
   salaryMonth: string | null;    // YYYY-MM, только для зарплатных выплат
   notes: string | null;
   createdAt: string;
   updatedAt: string;
 }
+
+type AmountChangeReasonCode =
+  | 'DISCOUNT'
+  | 'PENALTY'
+  | 'REFUND_ADJUSTMENT'
+  | 'MANUAL_CORRECTION'
+  | 'OTHER';
 ```
 
 ---
@@ -1956,6 +1974,8 @@ interface TransactionDto {
   "description": "Оплата абонемента Алисы",
   "transactionDate": "2026-02-15",
   "studentId": "uuid",
+  "amountChangeReasonCode": "MANUAL_CORRECTION",
+  "amountChangeReasonOther": null,
   "notes": "Наличными"
 }
 ```
@@ -1984,6 +2004,16 @@ interface TransactionDto {
 
 #### `PUT /api/v1/finance/transactions/{id}` — Обновить транзакцию
 **Доступ:** `TENANT_ADMIN` | `FINANCE_EDIT`
+
+**Правила валидации суммы при обновлении:**
+- если `amount` изменяется относительно текущего значения, `amountChangeReasonCode` обязателен;
+- если `amountChangeReasonCode=OTHER`, поле `amountChangeReasonOther` обязательно;
+- если `amountChangeReasonCode != OTHER`, `amountChangeReasonOther` передавать нельзя.
+
+**Ошибки:**
+- `TRANSACTION_AMOUNT_REASON_REQUIRED`
+- `TRANSACTION_AMOUNT_REASON_OTHER_REQUIRED`
+- `TRANSACTION_AMOUNT_REASON_OTHER_FORBIDDEN`
 
 **Response:** `ApiResponse<TransactionDto>`
 

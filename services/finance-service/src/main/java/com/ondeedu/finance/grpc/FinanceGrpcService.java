@@ -6,7 +6,7 @@ import com.ondeedu.grpc.common.ApiResponse;
 import com.ondeedu.grpc.finance.*;
 import com.ondeedu.finance.dto.CreateTransactionRequest;
 import com.ondeedu.finance.dto.TransactionDto;
-import com.ondeedu.finance.dto.UpdateTransactionRequest;
+import com.ondeedu.finance.entity.AmountChangeReasonCode;
 import com.ondeedu.finance.entity.TransactionType;
 import com.ondeedu.finance.service.FinanceService;
 import io.grpc.stub.StreamObserver;
@@ -38,6 +38,10 @@ public class FinanceGrpcService extends FinanceServiceGrpc.FinanceServiceImplBas
                 .transactionDate(request.hasTransactionDate() ?
                     GrpcUtils.fromTimestamp(request.getTransactionDate()).atZone(java.time.ZoneId.systemDefault()).toLocalDate() : LocalDate.now())
                 .studentId(request.hasStudentId() ? UUID.fromString(request.getStudentId().getValue()) : null)
+                .amountChangeReasonCode(request.hasAmountChangeReasonCode()
+                    ? AmountChangeReasonCode.valueOf(request.getAmountChangeReasonCode().getValue()) : null)
+                .amountChangeReasonOther(request.hasAmountChangeReasonOther()
+                    ? request.getAmountChangeReasonOther().getValue() : null)
                 .notes(request.hasNotes() ? request.getNotes().getValue() : null)
                 .build();
 
@@ -222,6 +226,12 @@ public class FinanceGrpcService extends FinanceServiceGrpc.FinanceServiceImplBas
         if (dto.getTransactionDate() != null) builder.setTransactionDate(GrpcUtils.toTimestamp(
             dto.getTransactionDate().atStartOfDay(java.time.ZoneId.systemDefault()).toInstant()));
         if (dto.getStudentId() != null) builder.setStudentId(StringValue.of(dto.getStudentId().toString()));
+        if (dto.getAmountChangeReasonCode() != null) {
+            builder.setAmountChangeReasonCode(StringValue.of(dto.getAmountChangeReasonCode().name()));
+        }
+        if (dto.getAmountChangeReasonOther() != null) {
+            builder.setAmountChangeReasonOther(StringValue.of(dto.getAmountChangeReasonOther()));
+        }
         if (dto.getNotes() != null) builder.setNotes(StringValue.of(dto.getNotes()));
         if (dto.getCreatedAt() != null) builder.setCreatedAt(GrpcUtils.toTimestamp(dto.getCreatedAt()));
         if (dto.getUpdatedAt() != null) builder.setUpdatedAt(GrpcUtils.toTimestamp(dto.getUpdatedAt()));

@@ -32,6 +32,13 @@ public class Transaction extends BaseEntity {
     @Column(name = "amount", nullable = false, precision = 15, scale = 2)
     private BigDecimal amount;
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "amount_change_reason_code", length = 40)
+    private AmountChangeReasonCode amountChangeReasonCode;
+
+    @Column(name = "amount_change_reason_other", columnDefinition = "TEXT")
+    private String amountChangeReasonOther;
+
     @Column(name = "currency", nullable = false, length = 3)
     @Builder.Default
     private String currency = "UZS";

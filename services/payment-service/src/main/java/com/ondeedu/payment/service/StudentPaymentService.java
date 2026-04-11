@@ -11,6 +11,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -56,6 +57,8 @@ public class StudentPaymentService {
             }
         }
 
+            validateReasonConsistency(request.getAmountChangeReasonCode(), request.getAmountChangeReasonOther());
+
         StudentPayment payment = StudentPayment.builder()
                 .studentId(request.getStudentId())
                 .subscriptionId(request.getSubscriptionId())
@@ -63,6 +66,8 @@ public class StudentPaymentService {
                 .paidAt(request.getPaidAt() != null ? request.getPaidAt() : LocalDate.now())
                 .paymentMonth(paymentMonth)
                 .method(request.getMethod() != null ? request.getMethod() : PaymentMethod.CASH)
+                .amountChangeReasonCode(request.getAmountChangeReasonCode())
+                .amountChangeReasonOther(request.getAmountChangeReasonOther())
                 .notes(request.getNotes())
                 .build();
 
@@ -392,8 +397,26 @@ public class StudentPaymentService {
                 .paidAt(p.getPaidAt())
                 .paymentMonth(p.getPaymentMonth())
                 .method(p.getMethod())
+                .amountChangeReasonCode(p.getAmountChangeReasonCode())
+                .amountChangeReasonOther(p.getAmountChangeReasonOther())
                 .notes(p.getNotes())
                 .createdAt(p.getCreatedAt())
                 .build();
+    }
+
+    private void validateReasonConsistency(PaymentAmountChangeReasonCode code, String otherReason) {
+        if (code == PaymentAmountChangeReasonCode.OTHER && !StringUtils.hasText(otherReason)) {
+            throw new BusinessException(
+                    "PAYMENT_AMOUNT_REASON_OTHER_REQUIRED",
+                    "amountChangeReasonOther is required when amountChangeReasonCode is OTHER"
+            );
+        }
+
+        if (code != null && code != PaymentAmountChangeReasonCode.OTHER && StringUtils.hasText(otherReason)) {
+            throw new BusinessException(
+                    "PAYMENT_AMOUNT_REASON_OTHER_FORBIDDEN",
+                    "amountChangeReasonOther is allowed only when amountChangeReasonCode is OTHER"
+            );
+        }
     }
 }

@@ -31,9 +31,11 @@ message Transaction {
   google.protobuf.StringValue description = 6;
   google.protobuf.Timestamp transaction_date = 7;
   google.protobuf.StringValue student_id = 8;
-  google.protobuf.StringValue notes = 9;
-  google.protobuf.Timestamp created_at = 10;
-  google.protobuf.Timestamp updated_at = 11;
+  google.protobuf.StringValue amount_change_reason_code = 9;
+  google.protobuf.StringValue amount_change_reason_other = 10;
+  google.protobuf.StringValue notes = 11;
+  google.protobuf.Timestamp created_at = 12;
+  google.protobuf.Timestamp updated_at = 13;
 }
 
 message CreateTransactionRequest {
@@ -44,7 +46,9 @@ message CreateTransactionRequest {
   google.protobuf.StringValue description = 5;
   google.protobuf.Timestamp transaction_date = 6;
   google.protobuf.StringValue student_id = 7;
-  google.protobuf.StringValue notes = 8;
+  google.protobuf.StringValue amount_change_reason_code = 8;
+  google.protobuf.StringValue amount_change_reason_other = 9;
+  google.protobuf.StringValue notes = 10;
 }
 
 message GetTransactionRequest {
@@ -62,7 +66,9 @@ message UpdateTransactionRequest {
   google.protobuf.StringValue description = 7;
   google.protobuf.Timestamp transaction_date = 8;
   google.protobuf.StringValue student_id = 9;
-  google.protobuf.StringValue notes = 10;
+  google.protobuf.StringValue amount_change_reason_code = 10;
+  google.protobuf.StringValue amount_change_reason_other = 11;
+  google.protobuf.StringValue notes = 12;
 }
 
 message DeleteTransactionRequest {

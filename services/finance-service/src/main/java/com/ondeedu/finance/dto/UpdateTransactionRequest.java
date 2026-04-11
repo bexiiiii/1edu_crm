@@ -2,6 +2,7 @@ package com.ondeedu.finance.dto;
 
 import com.ondeedu.finance.entity.TransactionStatus;
 import com.ondeedu.finance.entity.TransactionType;
+import com.ondeedu.finance.entity.AmountChangeReasonCode;
 import lombok.*;
 
 import java.math.BigDecimal;
@@ -21,5 +22,7 @@ public class UpdateTransactionRequest {
     private String description;
     private LocalDate transactionDate;
     private UUID studentId;
+    private AmountChangeReasonCode amountChangeReasonCode;
+    private String amountChangeReasonOther;
     private String notes;
 }

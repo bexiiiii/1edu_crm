@@ -1150,3 +1150,18 @@ MAIL_REPLY_TO=support@1edu.kz  # опционально
   - преподаватель должен быть `staff.status = ACTIVE` (`COURSE_TEACHER_NOT_ACTIVE`)
   - студенты должны быть `students.status = ACTIVE` (`COURSE_STUDENT_NOT_ACTIVE`)
 - Валидация применяется в `createCourse` и `updateCourse`; для студентов — на добавляемом подмножестве.
+
+### Finance + Payment — amount change reason codes
+- В `transactions` и `student_payments` добавлены поля:
+  - `amount_change_reason_code`
+  - `amount_change_reason_other`
+- Для `FinanceService.updateTransaction()` при изменении `amount` теперь обязателен `amountChangeReasonCode`:
+  - `TRANSACTION_AMOUNT_REASON_REQUIRED`
+- Общие правила валидации reason-полей:
+  - `...ReasonCode=OTHER` требует `...ReasonOther` (`*_OTHER_REQUIRED`)
+  - `...ReasonOther` запрещён для кодов кроме `OTHER` (`*_OTHER_FORBIDDEN`)
+- В `StudentPaymentService.recordPayment()` поддержаны reason-поля с той же логикой `OTHER`.
+- Новая миграция `tenant-service` `V19__ensure_amount_change_reason_schema.sql`:
+  - добавляет поля во все существующие tenant-схемы;
+  - обновляет CHECK constraints по допустимым кодам;
+  - для новых тенантов вызывается `system.ensure_amount_change_reason_schema(:schemaName)` в `TenantService.createTenant()`.

@@ -1,10 +1,12 @@
 package com.ondeedu.finance.service;
 
 import com.ondeedu.common.dto.PageResponse;
+import com.ondeedu.common.exception.BusinessException;
 import com.ondeedu.common.exception.ResourceNotFoundException;
 import com.ondeedu.finance.dto.CreateTransactionRequest;
 import com.ondeedu.finance.dto.TransactionDto;
 import com.ondeedu.finance.dto.UpdateTransactionRequest;
+import com.ondeedu.finance.entity.AmountChangeReasonCode;
 import com.ondeedu.finance.entity.Transaction;
 import com.ondeedu.finance.entity.TransactionType;
 import com.ondeedu.finance.mapper.TransactionMapper;
@@ -15,7 +17,9 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.UUID;
 
@@ -29,6 +33,7 @@ public class FinanceService {
 
     @Transactional
     public TransactionDto createTransaction(CreateTransactionRequest request) {
+        validateReasonConsistency(request.getAmountChangeReasonCode(), request.getAmountChangeReasonOther());
         Transaction transaction = transactionMapper.toEntity(request);
         transaction = transactionRepository.save(transaction);
         log.info("Created transaction: {} {} {}", transaction.getType(), transaction.getAmount(), transaction.getCurrency());
@@ -46,6 +51,16 @@ public class FinanceService {
     public TransactionDto updateTransaction(UUID id, UpdateTransactionRequest request) {
         Transaction transaction = transactionRepository.findById(id)
             .orElseThrow(() -> new ResourceNotFoundException("Transaction", "id", id));
+
+        boolean amountChanged = request.getAmount() != null && isAmountChanged(transaction.getAmount(), request.getAmount());
+        if (amountChanged && request.getAmountChangeReasonCode() == null) {
+            throw new BusinessException(
+                "TRANSACTION_AMOUNT_REASON_REQUIRED",
+                "Amount change reason code is required when transaction amount is changed"
+            );
+        }
+        validateReasonConsistency(request.getAmountChangeReasonCode(), request.getAmountChangeReasonOther());
+
         transactionMapper.updateEntity(transaction, request);
         transaction = transactionRepository.save(transaction);
         log.info("Updated transaction: {}", id);
@@ -82,5 +97,28 @@ public class FinanceService {
     public PageResponse<TransactionDto> listByStudent(UUID studentId, Pageable pageable) {
         Page<Transaction> page = transactionRepository.findByStudentId(studentId, pageable);
         return PageResponse.from(page, transactionMapper::toDto);
+    }
+
+    private boolean isAmountChanged(BigDecimal currentAmount, BigDecimal requestedAmount) {
+        if (currentAmount == null) {
+            return requestedAmount != null;
+        }
+        return currentAmount.compareTo(requestedAmount) != 0;
+    }
+
+    private void validateReasonConsistency(AmountChangeReasonCode code, String otherReason) {
+        if (code == AmountChangeReasonCode.OTHER && !StringUtils.hasText(otherReason)) {
+            throw new BusinessException(
+                "TRANSACTION_AMOUNT_REASON_OTHER_REQUIRED",
+                "amountChangeReasonOther is required when amountChangeReasonCode is OTHER"
+            );
+        }
+
+        if (code != null && code != AmountChangeReasonCode.OTHER && StringUtils.hasText(otherReason)) {
+            throw new BusinessException(
+                "TRANSACTION_AMOUNT_REASON_OTHER_FORBIDDEN",
+                "amountChangeReasonOther is allowed only when amountChangeReasonCode is OTHER"
+            );
+        }
     }
 }

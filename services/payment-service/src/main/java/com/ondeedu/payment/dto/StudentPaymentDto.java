@@ -1,6 +1,7 @@
 package com.ondeedu.payment.dto;
 
 import com.ondeedu.payment.entity.PaymentMethod;
+import com.ondeedu.payment.entity.PaymentAmountChangeReasonCode;
 import lombok.Builder;
 import lombok.Data;
 
@@ -19,6 +20,8 @@ public class StudentPaymentDto {
     private LocalDate paidAt;
     private String paymentMonth;
     private PaymentMethod method;
+    private PaymentAmountChangeReasonCode amountChangeReasonCode;
+    private String amountChangeReasonOther;
     private String notes;
     private Instant createdAt;
 }

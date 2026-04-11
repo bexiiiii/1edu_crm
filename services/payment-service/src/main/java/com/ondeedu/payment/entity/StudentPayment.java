@@ -43,6 +43,13 @@ public class StudentPayment extends BaseEntity {
     @Column(nullable = false, length = 20)
     private PaymentMethod method = PaymentMethod.CASH;
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "amount_change_reason_code", length = 40)
+    private PaymentAmountChangeReasonCode amountChangeReasonCode;
+
+    @Column(name = "amount_change_reason_other", columnDefinition = "TEXT")
+    private String amountChangeReasonOther;
+
     @Column(columnDefinition = "TEXT")
     private String notes;
 }

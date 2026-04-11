@@ -1,6 +1,7 @@
 package com.ondeedu.finance.dto;
 
 import com.ondeedu.finance.entity.TransactionType;
+import com.ondeedu.finance.entity.AmountChangeReasonCode;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
 import lombok.*;
@@ -25,5 +26,7 @@ public class CreateTransactionRequest {
     @NotNull
     private LocalDate transactionDate;
     private UUID studentId;
+    private AmountChangeReasonCode amountChangeReasonCode;
+    private String amountChangeReasonOther;
     private String notes;
 }

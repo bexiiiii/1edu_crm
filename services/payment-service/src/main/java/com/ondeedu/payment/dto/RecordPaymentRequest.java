@@ -1,6 +1,7 @@
 package com.ondeedu.payment.dto;
 
 import com.ondeedu.payment.entity.PaymentMethod;
+import com.ondeedu.payment.entity.PaymentAmountChangeReasonCode;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -42,6 +43,10 @@ public class RecordPaymentRequest {
     private String paymentMonth;
 
     private PaymentMethod method;
+
+    private PaymentAmountChangeReasonCode amountChangeReasonCode;
+
+    private String amountChangeReasonOther;
 
     private String notes;
 }
