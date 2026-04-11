@@ -1114,6 +1114,7 @@ MAIL_REPLY_TO=support@1edu.kz  # опционально
 - При 3-м пропуске (`ABSENT`) за неделю (Mon-Sun) публикуется IN_APP событие:
   - `eventType = STUDENT_ABSENCE_3X_WEEK`
   - exchange/key: `notification.exchange` / `notification.assignment`
+  - tenant-level просмотр события доступен ролям `MANAGER` и `RECEPTIONIST` (и `SUPER_ADMIN`), но не как общий поток для `TENANT_ADMIN`
 
 ### Schedule Service — tenant settings constraints enforcement
 - `ScheduleService` на `create/update` теперь применяет ограничения из `tenant_settings`:
@@ -1125,6 +1126,9 @@ MAIL_REPLY_TO=support@1edu.kz  # опционально
 - Добавлена валидация активности преподавателя при создании/изменении расписания:
   - `staff.status` должен быть `ACTIVE`
   - ошибка: `SCHEDULE_TEACHER_NOT_ACTIVE`
+- Добавлена проверка конфликта кабинета по времени:
+  - для `ACTIVE` расписаний в одном `room_id` нельзя иметь пересечение по диапазону дат + `daysOfWeek` + интервалу `startTime..endTime`
+  - ошибка: `SCHEDULE_ROOM_TIME_CONFLICT`
 
 ### Auth Service — staff linkage for account provisioning
 - В `CreateUserRequest`/`UpdateUserRequest` добавлено поле `staffId` (optional).

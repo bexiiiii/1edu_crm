@@ -77,6 +77,7 @@ public class ScheduleService {
         }
 
         scheduleSettingsConstraintsService.validate(schedule);
+        validateRoomTimeConflict(schedule, null);
 
         // Validate room capacity: block if maxStudents > capacity, notify if at capacity
         if (schedule.getRoomId() != null) {
@@ -130,6 +131,7 @@ public class ScheduleService {
         scheduleSettingsConstraintsService.validate(schedule);
 
         validateScheduleRange(schedule.getStartDate(), schedule.getEndDate());
+        validateRoomTimeConflict(schedule, id);
 
         // Validate room capacity after applying all changes
         if (schedule.getRoomId() != null) {
@@ -480,6 +482,97 @@ public class ScheduleService {
                 publishRoomAtCapacityNotification(room, scheduleName, maxStudents);
             }
         });
+    }
+
+    private void validateRoomTimeConflict(Schedule candidate, UUID excludeScheduleId) {
+        if (candidate.getStatus() != null && candidate.getStatus() != ScheduleStatus.ACTIVE) {
+            return;
+        }
+        if (candidate.getRoomId() == null
+                || candidate.getStartDate() == null
+                || candidate.getStartTime() == null
+                || candidate.getEndTime() == null) {
+            return;
+        }
+
+        Set<DayOfWeek> candidateDays = resolveEffectiveDays(candidate);
+        if (candidateDays.isEmpty()) {
+            return;
+        }
+
+        LocalDate candidateRangeStart = candidate.getStartDate();
+        LocalDate candidateRangeEnd = resolveEffectiveRangeEnd(candidate);
+
+        List<Schedule> roomSchedules = scheduleRepository.findByRoomIdAndStatus(
+                candidate.getRoomId(),
+                ScheduleStatus.ACTIVE
+        );
+
+        for (Schedule existing : roomSchedules) {
+            if (excludeScheduleId != null && existing.getId().equals(excludeScheduleId)) {
+                continue;
+            }
+
+            if (!dateRangesOverlap(
+                    candidateRangeStart,
+                    candidateRangeEnd,
+                    existing.getStartDate(),
+                    resolveEffectiveRangeEnd(existing)
+            )) {
+                continue;
+            }
+
+            if (!daysOverlap(candidateDays, resolveEffectiveDays(existing))) {
+                continue;
+            }
+
+            if (!timeRangesOverlap(
+                    candidate.getStartTime(),
+                    candidate.getEndTime(),
+                    existing.getStartTime(),
+                    existing.getEndTime()
+            )) {
+                continue;
+            }
+
+            throw new BusinessException(
+                    "SCHEDULE_ROOM_TIME_CONFLICT",
+                    "Room is already occupied at this time by schedule '" + existing.getName() + "'"
+            );
+        }
+    }
+
+    private Set<DayOfWeek> resolveEffectiveDays(Schedule schedule) {
+        Set<DayOfWeek> days = schedule.getDaysOfWeek();
+        if (days == null || days.isEmpty()) {
+            return Set.of(schedule.getStartDate().getDayOfWeek());
+        }
+        return days;
+    }
+
+    private LocalDate resolveEffectiveRangeEnd(Schedule schedule) {
+        Set<DayOfWeek> days = schedule.getDaysOfWeek();
+        if (days == null || days.isEmpty()) {
+            return schedule.getStartDate();
+        }
+        return schedule.getEndDate() != null ? schedule.getEndDate() : LocalDate.MAX;
+    }
+
+    private boolean dateRangesOverlap(LocalDate startA, LocalDate endA, LocalDate startB, LocalDate endB) {
+        return !endA.isBefore(startB) && !endB.isBefore(startA);
+    }
+
+    private boolean daysOverlap(Set<DayOfWeek> daysA, Set<DayOfWeek> daysB) {
+        return daysA.stream().anyMatch(daysB::contains);
+    }
+
+    private boolean timeRangesOverlap(
+            java.time.LocalTime startA,
+            java.time.LocalTime endA,
+            java.time.LocalTime startB,
+            java.time.LocalTime endB
+    ) {
+        return startA.isBefore(endB) && startB.isBefore(endA);
     }
 
     private void publishRoomAtCapacityNotification(Room room, String scheduleName, int maxStudents) {

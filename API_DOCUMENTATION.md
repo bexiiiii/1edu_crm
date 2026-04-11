@@ -1512,7 +1512,8 @@ interface ScheduleDto {
 > - если `endTime <= startTime` → `400 INVALID_SCHEDULE_TIME_RANGE`;
 > - если длительность не кратна `slotDurationMin` → `400 SCHEDULE_SLOT_DURATION_VIOLATION`;
 > - если `daysOfWeek` содержит нерабочие дни → `400 SCHEDULE_OUTSIDE_WORKING_DAYS`;
-> - если `maxStudents > maxGroupSize` → `400 SCHEDULE_MAX_GROUP_SIZE_EXCEEDED`.
+> - если `maxStudents > maxGroupSize` → `400 SCHEDULE_MAX_GROUP_SIZE_EXCEEDED`;
+> - если в этом кабинете уже есть активное расписание с пересечением по датам/дням/времени → `400 SCHEDULE_ROOM_TIME_CONFLICT`.
 >
 > После создания расписания backend автоматически создаёт записи в `lesson-service`:
 > - если `endDate` задан, создаётся серия занятий по всем датам в диапазоне `startDate..endDate`, которые входят в `daysOfWeek`;
@@ -1568,6 +1569,8 @@ interface ScheduleDto {
 > **Проверка вместимости**: при изменении `roomId` или `maxStudents` также применяется проверка вместимости аудитории (аналогично созданию).
 >
 > **Проверки tenant settings и teacher status** применяются также на update (те же error codes, что и при создании).
+>
+> **Проверка пересечения по кабинету** также применяется на update: если после изменений расписание пересекается по времени с другим активным расписанием в том же кабинете, backend вернёт `400 SCHEDULE_ROOM_TIME_CONFLICT`.
 >
 > Backend автоматически синхронизирует связанные занятия в `lesson-service`:
 > - для дат, которые остались в расписании, `PLANNED` занятия обновляются по новым `startTime`, `endTime`, `teacherId`, `roomId`, `maxStudents`;
@@ -3261,7 +3264,8 @@ interface AttendanceDto {
 > - окно редактирования посещаемости контролируется `settings.attendanceWindowDays`;
 > - после истечения окна API возвращает ошибку `ATTENDANCE_EDIT_WINDOW_EXPIRED`;
 > - attendance-операции запрещены для неактивных студентов (`STUDENT_NOT_ACTIVE`);
-> - при 3-м пропуске за неделю автоматически создаётся IN_APP уведомление в tenant notification log.
+> - при 3-м пропуске за неделю автоматически создаётся IN_APP уведомление в tenant notification log;
+> - такие tenant-level уведомления доступны ролям `MANAGER` и `RECEPTIONIST` (а также `SUPER_ADMIN`), но не выдаются как общий поток для `TENANT_ADMIN`.
 
 #### `POST /api/v1/lessons/{lessonId}/attendance` — Отметить посещение
 **Доступ:** `TENANT_ADMIN` | `LESSONS_MARK_ATTENDANCE`

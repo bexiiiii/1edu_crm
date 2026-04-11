@@ -10,6 +10,7 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.util.UUID;
+import java.util.List;
 
 @Repository
 public interface ScheduleRepository extends JpaRepository<Schedule, UUID> {
@@ -21,6 +22,8 @@ public interface ScheduleRepository extends JpaRepository<Schedule, UUID> {
     Page<Schedule> findByTeacherId(UUID teacherId, Pageable pageable);
 
     Page<Schedule> findByRoomId(UUID roomId, Pageable pageable);
+
+    List<Schedule> findByRoomIdAndStatus(UUID roomId, ScheduleStatus status);
 
     @Query("""
         SELECT s FROM Schedule s
