@@ -5,6 +5,7 @@ import lombok.Builder;
 import lombok.Data;
 
 import java.util.List;
+import java.util.UUID;
 
 @Data
 @Builder
@@ -18,6 +19,9 @@ public class UpdateUserRequest {
     private String lastName;
 
     private String role;
+
+    /** Optional: link auth account to staff profile in staff-service */
+    private UUID staffId;
 
     /** Optional: replace all permissions for this user */
     private List<String> permissions;

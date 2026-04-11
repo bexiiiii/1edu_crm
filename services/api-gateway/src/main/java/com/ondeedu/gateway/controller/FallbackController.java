@@ -1,5 +1,6 @@
 package com.ondeedu.gateway.controller;
 
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.server.reactive.ServerHttpRequest;
@@ -12,6 +13,7 @@ import java.util.Map;
 
 @RestController
 @RequestMapping("/fallback")
+@Slf4j
 public class FallbackController {
 
     private static final Map<String, String> SERVICE_NAMES = Map.ofEntries(
@@ -46,6 +48,13 @@ public class FallbackController {
             String message,
             String service,
             ServerHttpRequest request) {
+        String tenantId = request.getHeaders().getFirst("X-Tenant-ID");
+        log.warn("Gateway fallback: service={}, tenant={}, method={}, path={}",
+                service,
+                tenantId,
+                request.getMethod() != null ? request.getMethod().name() : "UNKNOWN",
+                request.getPath().value());
+
         return Mono.just(ResponseEntity
             .status(HttpStatus.SERVICE_UNAVAILABLE)
             .body(Map.of(

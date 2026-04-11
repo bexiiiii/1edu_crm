@@ -38,6 +38,14 @@ public interface AttendanceRepository extends JpaRepository<Attendance, UUID> {
     Integer findAttendanceWindowDays();
 
     @Query(value = """
+            SELECT auto_mark_attendance
+            FROM tenant_settings
+            ORDER BY created_at ASC
+            LIMIT 1
+            """, nativeQuery = true)
+    Boolean findAutoMarkAttendance();
+
+    @Query(value = """
             SELECT COUNT(*)
             FROM students s
             WHERE s.id = :studentId

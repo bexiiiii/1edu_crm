@@ -7,6 +7,7 @@ import lombok.Builder;
 import lombok.Data;
 
 import java.util.List;
+import java.util.UUID;
 
 @Data
 @Builder
@@ -31,6 +32,9 @@ public class CreateUserRequest {
 
     @NotBlank(message = "Role is required")
     private String role;
+
+    /** Optional: link auth account to staff profile in staff-service */
+    private UUID staffId;
 
     private String tenantId;
 

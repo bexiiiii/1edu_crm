@@ -80,6 +80,7 @@ public class LessonGrpcService extends LessonServiceGrpc.LessonServiceImplBase {
             if (request.hasStartTime()) dto.setStartTime(LocalTime.parse(request.getStartTime().getValue()));
             if (request.hasEndTime()) dto.setEndTime(LocalTime.parse(request.getEndTime().getValue()));
             if (request.hasGroupId()) dto.setGroupId(UUID.fromString(request.getGroupId().getValue()));
+            if (request.hasServiceId()) dto.setServiceId(UUID.fromString(request.getServiceId().getValue()));
             if (request.hasTeacherId()) dto.setTeacherId(UUID.fromString(request.getTeacherId().getValue()));
             if (request.hasRoomId()) dto.setRoomId(UUID.fromString(request.getRoomId().getValue()));
             if (request.hasCapacity()) dto.setCapacity(request.getCapacity().getValue());

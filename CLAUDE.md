@@ -1100,16 +1100,44 @@ MAIL_REPLY_TO=support@1edu.kz  # опционально
 - `AttendanceService` теперь применяет окно редактирования посещаемости из `tenant_settings.attendance_window_days`.
   - Ошибка: `ATTENDANCE_EDIT_WINDOW_EXPIRED`
   - Поведение: изменение посещаемости запрещено для уроков старше configured window.
+  - Fix off-by-one: `attendance_window_days=1` разрешает редактирование только «сегодня», со следующего дня изменения блокируются.
 - Любые attendance-операции (`mark`, `bulk`, `mark-all`) теперь блокируют неактивных студентов.
   - Ошибка: `STUDENT_NOT_ACTIVE`
 - Для `GET /api/v1/lessons/{lessonId}/attendance` список теперь формируется из:
   - уже сохранённых записей `attendances`
   - активных записей `student_groups` на дату урока
-  - активных `course_students` (через `schedules.course_id`) на дату урока
+  - активных `course_students` (через `lesson.service_id` и fallback через `schedules.course_id`) на дату урока
 - Это закрывает кейс: новый студент, добавленный в уже существующий курс, отображается в attendance-листе без ручного пересохранения расписания.
+- Дефолтный статус в attendance-листе для ещё не сохранённых записей теперь учитывает `tenant_settings.auto_mark_attendance`:
+  - `true` → `ATTENDED`
+  - `false` → `PLANNED`
 - При 3-м пропуске (`ABSENT`) за неделю (Mon-Sun) публикуется IN_APP событие:
   - `eventType = STUDENT_ABSENCE_3X_WEEK`
   - exchange/key: `notification.exchange` / `notification.assignment`
+
+### Schedule Service — tenant settings constraints enforcement
+- `ScheduleService` на `create/update` теперь применяет ограничения из `tenant_settings`:
+  - рабочие часы (`working_hours_start`, `working_hours_end`) → `SCHEDULE_OUTSIDE_WORKING_HOURS`
+  - валидный диапазон времени (`end > start`) → `INVALID_SCHEDULE_TIME_RANGE`
+  - кратность длительности слоту (`slot_duration_min`) → `SCHEDULE_SLOT_DURATION_VIOLATION`
+  - допустимые дни недели (`working_days`) → `SCHEDULE_OUTSIDE_WORKING_DAYS`
+  - лимит размера группы (`max_group_size`) → `SCHEDULE_MAX_GROUP_SIZE_EXCEEDED`
+- Добавлена валидация активности преподавателя при создании/изменении расписания:
+  - `staff.status` должен быть `ACTIVE`
+  - ошибка: `SCHEDULE_TEACHER_NOT_ACTIVE`
+
+### Auth Service — staff linkage for account provisioning
+- В `CreateUserRequest`/`UpdateUserRequest` добавлено поле `staffId` (optional).
+- `KeycloakUserService` сохраняет связку в Keycloak attribute `staff_id` и возвращает её в `UserDto.staffId`.
+- Это поддерживает frontend flow «выбрать сотрудника → создать логин/пароль/роль» без отдельного endpoint.
+
+### API Gateway — fallback observability
+- `FallbackController` теперь пишет `WARN` лог на каждый fallback с полями:
+  - `service`
+  - `tenant` (из `X-Tenant-ID`)
+  - `method`
+  - `path`
+- Это упрощает диагностику кейсов `"<Service> service is temporarily unavailable"`.
 
 ### Course Service — constraints and active-status checks
 - В `CourseService` добавлена валидация ограничения группы через tenant settings:

@@ -4,6 +4,7 @@ import lombok.Builder;
 import lombok.Data;
 
 import java.util.List;
+import java.util.UUID;
 
 @Data
 @Builder
@@ -18,6 +19,8 @@ public class UserDto {
     private String firstName;
 
     private String lastName;
+
+    private UUID staffId;
 
     private List<String> roles;
 

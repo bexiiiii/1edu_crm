@@ -95,6 +95,8 @@ public class AttendanceService {
     public List<AttendanceDto> getLessonAttendance(UUID lessonId) {
         Lesson lesson = getLessonOrThrow(lessonId);
         List<Attendance> attendances = attendanceRepository.findByLessonId(lessonId);
+        Boolean autoMarkAttendanceSetting = attendanceRepository.findAutoMarkAttendance();
+        boolean autoMarkAttendance = Boolean.TRUE.equals(autoMarkAttendanceSetting);
 
         if (lesson.getGroupId() == null) {
             return attendances.stream()
@@ -106,7 +108,11 @@ public class AttendanceService {
                 attendanceRepository.findActiveStudentIdsByGroupAndDate(lesson.getGroupId(), lesson.getLessonDate())
         );
 
-        UUID courseId = attendanceRepository.findCourseIdByGroupId(lesson.getGroupId());
+        UUID courseId = lesson.getServiceId();
+        if (courseId == null) {
+            courseId = attendanceRepository.findCourseIdByGroupId(lesson.getGroupId());
+        }
+
         if (courseId != null) {
             candidateStudentIds.addAll(
                     attendanceRepository.findActiveStudentIdsByCourseAndDate(courseId, lesson.getLessonDate())
@@ -129,7 +135,7 @@ public class AttendanceService {
                     .id(null)
                     .lessonId(lessonId)
                     .studentId(studentId)
-                    .status(AttendanceStatus.PLANNED)
+                    .status(autoMarkAttendance ? AttendanceStatus.ATTENDED : AttendanceStatus.PLANNED)
                     .notes(null)
                     .createdAt(null)
                     .updatedAt(null)
@@ -193,10 +199,11 @@ public class AttendanceService {
 
     private void validateAttendanceEditWindow(Lesson lesson) {
         Integer configuredDays = attendanceRepository.findAttendanceWindowDays();
-        int windowDays = configuredDays != null ? Math.max(configuredDays, 0) : 7;
+        int windowDays = configuredDays != null ? Math.max(configuredDays, 1) : 7;
 
-        LocalDate cutoff = LocalDate.now().minusDays(windowDays);
-        if (lesson.getLessonDate().isBefore(cutoff)) {
+        // windowDays=1 means only today's lessons can be edited.
+        LocalDate oldestEditableDate = LocalDate.now().minusDays(windowDays - 1L);
+        if (lesson.getLessonDate().isBefore(oldestEditableDate)) {
             throw new BusinessException(
                     "ATTENDANCE_EDIT_WINDOW_EXPIRED",
                     "Attendance edit window expired for this lesson"

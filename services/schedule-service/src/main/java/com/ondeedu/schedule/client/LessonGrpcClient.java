@@ -42,6 +42,10 @@ public class LessonGrpcClient {
                 .setGroupId(StringValue.of(schedule.getId().toString()))
                 .setLessonType("GROUP");
 
+        if (schedule.getCourseId() != null) {
+            builder.setServiceId(StringValue.of(schedule.getCourseId().toString()));
+        }
+
         if (schedule.getTeacherId() != null) {
             builder.setTeacherId(StringValue.of(schedule.getTeacherId().toString()));
         }
@@ -70,6 +74,10 @@ public class LessonGrpcClient {
                 .setEndTime(lesson.endTime().toString())
                 .setGroupId(StringValue.of(scheduleId.toString()))
                 .setLessonType("GROUP");
+
+        if (lesson.serviceId() != null) {
+            builder.setServiceId(StringValue.of(lesson.serviceId().toString()));
+        }
 
         if (lesson.teacherId() != null) {
             builder.setTeacherId(StringValue.of(lesson.teacherId().toString()));
@@ -101,6 +109,10 @@ public class LessonGrpcClient {
                 .setEndTime(StringValue.of(schedule.getEndTime().toString()))
                 .setGroupId(StringValue.of(schedule.getId().toString()));
 
+        if (schedule.getCourseId() != null) {
+            builder.setServiceId(StringValue.of(schedule.getCourseId().toString()));
+        }
+
         if (schedule.getTeacherId() != null) {
             builder.setTeacherId(StringValue.of(schedule.getTeacherId().toString()));
         }
@@ -121,6 +133,10 @@ public class LessonGrpcClient {
                 .setStartTime(StringValue.of(lesson.startTime().toString()))
                 .setEndTime(StringValue.of(lesson.endTime().toString()))
                 .setGroupId(StringValue.of(scheduleId.toString()));
+
+        if (lesson.serviceId() != null) {
+            builder.setServiceId(StringValue.of(lesson.serviceId().toString()));
+        }
 
         if (lesson.teacherId() != null) {
             builder.setTeacherId(StringValue.of(lesson.teacherId().toString()));
@@ -243,6 +259,7 @@ public class LessonGrpcClient {
     private ManagedLesson toManagedLesson(Lesson lesson) {
         return new ManagedLesson(
                 UUID.fromString(lesson.getId()),
+                lesson.hasServiceId() ? UUID.fromString(lesson.getServiceId().getValue()) : null,
                 LocalDate.parse(lesson.getLessonDate()),
                 LocalTime.parse(lesson.getStartTime()),
                 LocalTime.parse(lesson.getEndTime()),
@@ -258,6 +275,7 @@ public class LessonGrpcClient {
 
     public record ManagedLesson(
             UUID id,
+            UUID serviceId,
             LocalDate lessonDate,
             LocalTime startTime,
             LocalTime endTime,

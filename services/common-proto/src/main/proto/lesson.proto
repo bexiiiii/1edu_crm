@@ -91,6 +91,7 @@ message UpdateLessonRequest {
   google.protobuf.StringValue start_time = 4;
   google.protobuf.StringValue end_time = 5;
   google.protobuf.StringValue group_id = 6;
+  google.protobuf.StringValue service_id = 14;
   google.protobuf.StringValue teacher_id = 7;
   google.protobuf.StringValue room_id = 8;
   google.protobuf.StringValue status = 9;

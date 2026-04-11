@@ -63,6 +63,7 @@ public class ScheduleService {
     private final CourseGrpcClient courseGrpcClient;
     private final RoomRepository roomRepository;
     private final RabbitTemplate rabbitTemplate;
+    private final ScheduleSettingsConstraintsService scheduleSettingsConstraintsService;
 
     @Transactional
     @CacheEvict(value = "schedules", allEntries = true)
@@ -74,6 +75,8 @@ public class ScheduleService {
         if (request.getCourseId() != null) {
             applyCourseDerivedFields(schedule, request.getCourseId());
         }
+
+        scheduleSettingsConstraintsService.validate(schedule);
 
         // Validate room capacity: block if maxStudents > capacity, notify if at capacity
         if (schedule.getRoomId() != null) {
@@ -123,6 +126,8 @@ public class ScheduleService {
         if (effectiveCourseId != null) {
             applyCourseDerivedFields(schedule, effectiveCourseId);
         }
+
+        scheduleSettingsConstraintsService.validate(schedule);
 
         validateScheduleRange(schedule.getStartDate(), schedule.getEndDate());
 

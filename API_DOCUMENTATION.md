@@ -769,6 +769,7 @@ interface UserDto {
   "lastName": "Иванов",
   "password": "password123",
   "role": "TEACHER",
+  "staffId": "staff-uuid",
   "tenantId": "uuid",
   "permissions": ["STUDENTS_VIEW", "LESSONS_CREATE"]
 }
@@ -781,7 +782,7 @@ interface UserDto {
 
 > Текущий backend-flow для выдачи доступа сотруднику такой:
 > 1. создаёшь или выбираешь сотрудника через `/api/v1/staff`
-> 2. создаёшь ему логин/пароль через `/api/v1/auth/users`
+> 2. создаёшь ему логин/пароль через `/api/v1/auth/users` и передаёшь `staffId`
 > 3. роль и granular permissions назначаются здесь же
 >
 > Отдельного endpoint вида `POST /api/v1/auth/users/from-staff` сейчас нет.
@@ -821,6 +822,7 @@ interface UserDto {
   "email": "new@email.com",
   "firstName": "Иван",
   "lastName": "Петров",
+  "staffId": "staff-uuid",
   "role": "MANAGER",
   "permissions": ["STUDENTS_VIEW", "LEADS_CREATE"]
 }
@@ -829,6 +831,7 @@ interface UserDto {
 **Response:** `ApiResponse<UserDto>`
 
 > Обновление разрешено только для пользователей текущего tenant.
+> `staffId` хранится как связка auth account → staff profile (атрибут `staff_id` в Keycloak).
 
 ---
 
@@ -1401,6 +1404,12 @@ interface ScheduleDto {
 }
 ```
 
+> Backend применяет ограничения из `tenant_settings` при create/update расписания:
+> - `workingHoursStart/workingHoursEnd` — время занятия должно попадать в рабочий диапазон;
+> - `slotDurationMin` — длительность занятия должна быть кратна слоту;
+> - `workingDays` — `daysOfWeek` должны входить в рабочие дни;
+> - `maxGroupSize` — `maxStudents` не может превышать лимит.
+
 ---
 
 ### 11.1 Аудитории (`/api/v1/rooms`)
@@ -1497,6 +1506,14 @@ interface ScheduleDto {
 > - если `maxStudents > room.capacity` → `400 ROOM_CAPACITY_EXCEEDED`
 > - если `maxStudents == room.capacity` → создание пройдёт успешно, но создателю придёт уведомление «аудитория заполнена до предела»
 >
+> **Проверки настроек и активности преподавателя**:
+> - если `teacherId` (или teacher из `courseId`) не активен → `400 SCHEDULE_TEACHER_NOT_ACTIVE`;
+> - если время вне `workingHoursStart..workingHoursEnd` → `400 SCHEDULE_OUTSIDE_WORKING_HOURS`;
+> - если `endTime <= startTime` → `400 INVALID_SCHEDULE_TIME_RANGE`;
+> - если длительность не кратна `slotDurationMin` → `400 SCHEDULE_SLOT_DURATION_VIOLATION`;
+> - если `daysOfWeek` содержит нерабочие дни → `400 SCHEDULE_OUTSIDE_WORKING_DAYS`;
+> - если `maxStudents > maxGroupSize` → `400 SCHEDULE_MAX_GROUP_SIZE_EXCEEDED`.
+>
 > После создания расписания backend автоматически создаёт записи в `lesson-service`:
 > - если `endDate` задан, создаётся серия занятий по всем датам в диапазоне `startDate..endDate`, которые входят в `daysOfWeek`;
 > - если `endDate` не задан, создаётся только первое подходящее занятие;
@@ -1549,6 +1566,8 @@ interface ScheduleDto {
 > **Ограничение**: если у расписания задан `courseId`, поля `teacherId` и `maxStudents` нельзя изменить напрямую — они управляются курсом. Попытка изменить вернёт `400 COURSE_BOUND_FIELD_IMMUTABLE`.
 >
 > **Проверка вместимости**: при изменении `roomId` или `maxStudents` также применяется проверка вместимости аудитории (аналогично созданию).
+>
+> **Проверки tenant settings и teacher status** применяются также на update (те же error codes, что и при создании).
 >
 > Backend автоматически синхронизирует связанные занятия в `lesson-service`:
 > - для дат, которые остались в расписании, `PLANNED` занятия обновляются по новым `startTime`, `endTime`, `teacherId`, `roomId`, `maxStudents`;
@@ -3273,9 +3292,13 @@ interface AttendanceDto {
 > В ответ включаются:
 > - уже сохранённые attendance-записи урока;
 > - активные студенты группы на дату урока;
-> - активные студенты курса (по `schedule.courseId`) на дату урока.
+> - активные студенты курса (по `lesson.serviceId` или `schedule.courseId`) на дату урока.
 >
 > Это позволяет видеть новых студентов курса в attendance-листе без ручного пересохранения расписания.
+>
+> Дефолтный статус для ещё не сохранённых записей в списке:
+> - `ATTENDED`, если в tenant settings включено `autoMarkAttendance=true`;
+> - `PLANNED`, если `autoMarkAttendance=false`.
 
 ---
 

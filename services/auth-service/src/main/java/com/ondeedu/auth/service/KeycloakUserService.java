@@ -79,6 +79,13 @@ public class KeycloakUserService {
         if (tenantId != null && !tenantId.isBlank()) {
             Map<String, List<String>> attrs = new HashMap<>();
             attrs.put("tenant_id", List.of(tenantId));
+            if (request.getStaffId() != null) {
+                attrs.put("staff_id", List.of(request.getStaffId().toString()));
+            }
+            user.setAttributes(attrs);
+        } else if (request.getStaffId() != null) {
+            Map<String, List<String>> attrs = new HashMap<>();
+            attrs.put("staff_id", List.of(request.getStaffId().toString()));
             user.setAttributes(attrs);
         }
 
@@ -105,9 +112,20 @@ public class KeycloakUserService {
                 Map<String, List<String>> attrs = createdUser.getAttributes() != null
                         ? new HashMap<>(createdUser.getAttributes()) : new HashMap<>();
                 attrs.put("tenant_id", List.of(tenantId));
+                if (request.getStaffId() != null) {
+                    attrs.put("staff_id", List.of(request.getStaffId().toString()));
+                }
                 createdUser.setAttributes(attrs);
                 userResource.update(createdUser);
                 log.info("Set tenant_id={} for user: {}", tenantId, userId);
+            } else if (request.getStaffId() != null) {
+                UserResource userResource = keycloak.realm(realm).users().get(userId);
+                UserRepresentation createdUser = userResource.toRepresentation();
+                Map<String, List<String>> attrs = createdUser.getAttributes() != null
+                        ? new HashMap<>(createdUser.getAttributes()) : new HashMap<>();
+                attrs.put("staff_id", List.of(request.getStaffId().toString()));
+                createdUser.setAttributes(attrs);
+                userResource.update(createdUser);
             }
 
             // Assign realm role
@@ -157,6 +175,12 @@ public class KeycloakUserService {
             }
             if (request.getLastName() != null) {
                 user.setLastName(request.getLastName());
+            }
+            if (request.getStaffId() != null) {
+                Map<String, List<String>> attrs = user.getAttributes() != null
+                        ? new HashMap<>(user.getAttributes()) : new HashMap<>();
+                attrs.put("staff_id", List.of(request.getStaffId().toString()));
+                user.setAttributes(attrs);
             }
 
             userResource.update(user);
@@ -503,6 +527,8 @@ public class KeycloakUserService {
                 ? attrs.get("photoUrl").get(0) : null;
         String language = attrs != null && attrs.containsKey("language")
                 ? attrs.get("language").get(0) : null;
+        String staffIdRaw = attrs != null && attrs.containsKey("staff_id")
+            ? attrs.get("staff_id").get(0) : null;
 
         return UserDto.builder()
             .id(user.getId() != null ? user.getId() : userId)
@@ -510,11 +536,25 @@ public class KeycloakUserService {
             .email(user.getEmail())
             .firstName(user.getFirstName())
             .lastName(user.getLastName())
+            .staffId(parseOptionalUuid(staffIdRaw))
             .roles(roles)
             .enabled(Boolean.TRUE.equals(user.isEnabled()))
             .photoUrl(photoUrl)
             .language(language)
             .build();
+    }
+
+    private java.util.UUID parseOptionalUuid(String raw) {
+        if (!StringUtils.hasText(raw)) {
+            return null;
+        }
+
+        try {
+            return java.util.UUID.fromString(raw);
+        } catch (IllegalArgumentException ex) {
+            log.warn("Ignoring malformed staff_id attribute: {}", raw);
+            return null;
+        }
     }
 
     private void applyRoleAndPermissions(String userId, String keycloakRoleName, List<String> explicitPermissions) {
