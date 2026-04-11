@@ -1093,3 +1093,32 @@ MAIL_REPLY_TO=support@1edu.kz  # опционально
 - **Scheduler**: `TenantSubscriptionNotificationScheduler` — hourly cron (настраивается `TENANT_SUBSCRIPTION_NOTIFICATIONS_CRON`), отключается `TENANT_SUBSCRIPTION_NOTIFICATIONS_ENABLED=false`
 - **Timezone**: дата сравнивается в timezone тенанта (`tenant_settings.timezone`), fallback UTC
 - **`@EnableScheduling` + `@EnableAsync`** на `TenantServiceApplication`
+
+## Backend Updates (2026-04-11)
+
+### Lesson Service — attendance business rules
+- `AttendanceService` теперь применяет окно редактирования посещаемости из `tenant_settings.attendance_window_days`.
+  - Ошибка: `ATTENDANCE_EDIT_WINDOW_EXPIRED`
+  - Поведение: изменение посещаемости запрещено для уроков старше configured window.
+- Любые attendance-операции (`mark`, `bulk`, `mark-all`) теперь блокируют неактивных студентов.
+  - Ошибка: `STUDENT_NOT_ACTIVE`
+- Для `GET /api/v1/lessons/{lessonId}/attendance` список теперь формируется из:
+  - уже сохранённых записей `attendances`
+  - активных записей `student_groups` на дату урока
+  - активных `course_students` (через `schedules.course_id`) на дату урока
+- Это закрывает кейс: новый студент, добавленный в уже существующий курс, отображается в attendance-листе без ручного пересохранения расписания.
+- При 3-м пропуске (`ABSENT`) за неделю (Mon-Sun) публикуется IN_APP событие:
+  - `eventType = STUDENT_ABSENCE_3X_WEEK`
+  - exchange/key: `notification.exchange` / `notification.assignment`
+
+### Course Service — constraints and active-status checks
+- В `CourseService` добавлена валидация ограничения группы через tenant settings:
+  - `enrollmentLimit <= tenant_settings.max_group_size`
+  - Ошибка: `COURSE_MAX_GROUP_SIZE_EXCEEDED`
+- Валидация количества назначенных студентов:
+  - `studentIds.size() <= enrollmentLimit` (если enrollmentLimit задан)
+  - Ошибка: `COURSE_ENROLLMENT_LIMIT_EXCEEDED`
+- Валидация активности участников перед назначением:
+  - преподаватель должен быть `staff.status = ACTIVE` (`COURSE_TEACHER_NOT_ACTIVE`)
+  - студенты должны быть `students.status = ACTIVE` (`COURSE_STUDENT_NOT_ACTIVE`)
+- Валидация применяется в `createCourse` и `updateCourse`; для студентов — на добавляемом подмножестве.

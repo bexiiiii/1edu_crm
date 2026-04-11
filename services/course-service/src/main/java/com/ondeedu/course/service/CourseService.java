@@ -1,6 +1,7 @@
 package com.ondeedu.course.service;
 
 import com.ondeedu.common.dto.PageResponse;
+import com.ondeedu.common.exception.BusinessException;
 import com.ondeedu.common.exception.ResourceNotFoundException;
 import com.ondeedu.course.client.PaymentGrpcClient;
 import com.ondeedu.course.dto.CourseDto;
@@ -40,13 +41,21 @@ public class CourseService {
     private final CourseStudentRepository courseStudentRepository;
     private final CourseMapper courseMapper;
     private final PaymentGrpcClient paymentGrpcClient;
+    private final CourseConstraintsService courseConstraintsService;
 
     @Transactional
     @CacheEvict(value = "courses", allEntries = true)
     public CourseDto createCourse(CreateCourseRequest request) {
         Course course = courseMapper.toEntity(request);
+        courseConstraintsService.validateTeacherIsActive(course.getTeacherId());
+        courseConstraintsService.validateEnrollmentLimitAgainstTenantSettings(course.getEnrollmentLimit());
+
+        List<UUID> targetStudentIds = normalizeStudentIds(request.getStudentIds());
+        validateEnrollmentLimit(course, targetStudentIds);
+        courseConstraintsService.validateStudentsAreActive(targetStudentIds);
+
         course = courseRepository.save(course);
-        syncCourseStudents(course, List.of(), normalizeStudentIds(request.getStudentIds()));
+        syncCourseStudents(course, List.of(), targetStudentIds);
         log.info("Created course: {} ({})", course.getName(), course.getId());
         return toDto(course);
     }
@@ -66,10 +75,16 @@ public class CourseService {
             .orElseThrow(() -> new ResourceNotFoundException("Course", "id", id));
         List<UUID> existingStudentIds = getStudentIds(course.getId());
         courseMapper.updateEntity(course, request);
+
+        courseConstraintsService.validateTeacherIsActive(course.getTeacherId());
+        courseConstraintsService.validateEnrollmentLimitAgainstTenantSettings(course.getEnrollmentLimit());
+
         course = courseRepository.save(course);
         List<UUID> targetStudentIds = request.getStudentIds() != null
                 ? normalizeStudentIds(request.getStudentIds())
                 : existingStudentIds;
+
+        validateEnrollmentLimit(course, targetStudentIds);
         syncCourseStudents(course, existingStudentIds, targetStudentIds);
         log.info("Updated course: {}", id);
         return toDto(course);
@@ -141,6 +156,8 @@ public class CourseService {
                 .filter(studentId -> !targetStudentIdSet.contains(studentId))
                 .toList();
 
+        courseConstraintsService.validateStudentsAreActive(addedStudentIds);
+
         syncCourseSubscriptions(course, targetStudentIds, removedStudentIds);
 
         if (!removedStudentIds.isEmpty()) {
@@ -207,5 +224,20 @@ public class CourseService {
                         Collectors.toCollection(LinkedHashSet::new),
                         List::copyOf
                 ));
+    }
+
+    private void validateEnrollmentLimit(Course course, List<UUID> targetStudentIds) {
+        Integer enrollmentLimit = course.getEnrollmentLimit();
+        if (enrollmentLimit == null) {
+            return;
+        }
+
+        int targetSize = targetStudentIds != null ? targetStudentIds.size() : 0;
+        if (targetSize > enrollmentLimit) {
+            throw new BusinessException(
+                    "COURSE_ENROLLMENT_LIMIT_EXCEEDED",
+                    "Student count exceeds course enrollment limit: " + enrollmentLimit
+            );
+        }
     }
 }

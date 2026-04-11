@@ -1277,6 +1277,12 @@ interface CourseDto {
 > - автоматически создаёт для каждого студента `subscription` в `payment-service`, если для пары `studentId + courseId` ещё нет активной подписки;
 > - выставляет сумму подписки равной `basePrice` курса.
 >
+> Дополнительные backend-ограничения:
+> - в курс можно назначать только студентов со статусом `ACTIVE`;
+> - `teacherId` должен ссылаться на сотрудника со статусом `ACTIVE`;
+> - если задан `enrollmentLimit`, то количество `studentIds` не может его превышать;
+> - `enrollmentLimit` не может быть больше `settings.maxGroupSize` текущего тенанта.
+>
 > Это не автоматическая запись в `schedule/group`. Для уроков/посещаемости по-прежнему нужен `schedule`.
 
 **Response:** `ApiResponse<CourseDto>`
@@ -1318,6 +1324,11 @@ interface CourseDto {
 > Если в `PUT /api/v1/courses/{id}` передать `studentIds: []`, все текущие привязки студентов к курсу будут очищены, а auto-created course subscriptions для этих студентов будут отменены.
 >
 > Если в `PUT /api/v1/courses/{id}` изменить `basePrice` или `name`, backend пересинхронизирует auto-created course subscriptions текущих студентов курса.
+>
+> При update действуют те же ограничения, что и на create:
+> - только `ACTIVE` студенты/преподаватель;
+> - `studentIds.size() <= enrollmentLimit` (если лимит задан);
+> - `enrollmentLimit <= settings.maxGroupSize`.
 
 **Response:** `ApiResponse<CourseDto>`
 
@@ -3196,6 +3207,12 @@ interface AttendanceDto {
 
 > Для конкретного урока используй вложенные routes `/api/v1/lessons/{lessonId}/attendance/...`.
 > Отдельный route `/api/v1/attendance/student/{studentId}` существует только для истории посещений студента.
+>
+> Backend-правила:
+> - окно редактирования посещаемости контролируется `settings.attendanceWindowDays`;
+> - после истечения окна API возвращает ошибку `ATTENDANCE_EDIT_WINDOW_EXPIRED`;
+> - attendance-операции запрещены для неактивных студентов (`STUDENT_NOT_ACTIVE`);
+> - при 3-м пропуске за неделю автоматически создаётся IN_APP уведомление в tenant notification log.
 
 #### `POST /api/v1/lessons/{lessonId}/attendance` — Отметить посещение
 **Доступ:** `TENANT_ADMIN` | `LESSONS_MARK_ATTENDANCE`
@@ -3252,6 +3269,13 @@ interface AttendanceDto {
 **Доступ:** `TENANT_ADMIN` | `LESSONS_VIEW`
 
 **Response:** `ApiResponse<List<AttendanceDto>>`
+
+> В ответ включаются:
+> - уже сохранённые attendance-записи урока;
+> - активные студенты группы на дату урока;
+> - активные студенты курса (по `schedule.courseId`) на дату урока.
+>
+> Это позволяет видеть новых студентов курса в attendance-листе без ручного пересохранения расписания.
 
 ---
 
@@ -3335,6 +3359,8 @@ interface SettingsDto {
 **Доступ:** `TENANT_ADMIN`, `MANAGER`, `RECEPTIONIST`, `TEACHER` или permission `SETTINGS_VIEW`
 
 **Response:** `ApiResponse<SettingsDto>`
+
+> Поле `attendanceWindowDays` применяется сервером в Lesson Service и ограничивает период, в который можно редактировать посещаемость.
 
 > Если настройки ещё не созданы, возвращает объект с дефолтными значениями (не сохраняет в БД).
 
