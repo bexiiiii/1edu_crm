@@ -1,8 +1,10 @@
 package com.ondeedu.finance.repository;
 
+import com.ondeedu.common.exception.BusinessException;
 import com.ondeedu.common.tenant.TenantContext;
 import jakarta.persistence.EntityManager;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
@@ -14,7 +16,6 @@ import java.util.regex.Pattern;
 @RequiredArgsConstructor
 public class SalarySchemaResolver {
 
-    private static final String DEFAULT_SCHEMA = "tenant_default";
     private static final Pattern SAFE_SCHEMA = Pattern.compile("^[a-zA-Z0-9_]+$");
 
     private final EntityManager entityManager;
@@ -28,7 +29,7 @@ public class SalarySchemaResolver {
             }
         }
 
-        return validateSchema(TenantContext.getSchemaName());
+        return validateSchema(TenantContext.getSchemaNameOrNull());
     }
 
     private String findSchemaByTenantId(String tenantId) {
@@ -53,7 +54,11 @@ public class SalarySchemaResolver {
 
     private String validateSchema(String schema) {
         if (!StringUtils.hasText(schema)) {
-            return DEFAULT_SCHEMA;
+            throw new BusinessException(
+                    "TENANT_CONTEXT_REQUIRED",
+                    "Tenant context is required for salary operations",
+                    HttpStatus.BAD_REQUEST
+            );
         }
         if (!SAFE_SCHEMA.matcher(schema).matches()) {
             throw new IllegalArgumentException("Invalid tenant schema: " + schema);

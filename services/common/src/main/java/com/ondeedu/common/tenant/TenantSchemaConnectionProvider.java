@@ -1,6 +1,9 @@
 package com.ondeedu.common.tenant;
 
+import com.ondeedu.common.exception.BusinessException;
 import org.hibernate.engine.jdbc.connections.spi.MultiTenantConnectionProvider;
+import org.springframework.http.HttpStatus;
+import org.springframework.util.StringUtils;
 
 import javax.sql.DataSource;
 import java.sql.Connection;
@@ -28,8 +31,16 @@ public class TenantSchemaConnectionProvider implements MultiTenantConnectionProv
 
     @Override
     public Connection getConnection(String tenantIdentifier) throws SQLException {
+        if (!StringUtils.hasText(tenantIdentifier)) {
+            throw new BusinessException(
+                    "TENANT_CONTEXT_REQUIRED",
+                    "Tenant context is required for this operation",
+                    HttpStatus.BAD_REQUEST
+            );
+        }
+
         Connection connection = getAnyConnection();
-        connection.setSchema(tenantIdentifier != null ? tenantIdentifier : TenantSchemaResolver.defaultSchema());
+        connection.setSchema(tenantIdentifier);
         return connection;
     }
 

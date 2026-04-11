@@ -1,7 +1,10 @@
 package com.ondeedu.common.tenant;
 
+import com.ondeedu.common.exception.BusinessException;
 import lombok.AccessLevel;
 import lombok.NoArgsConstructor;
+import org.springframework.http.HttpStatus;
+import org.springframework.util.StringUtils;
 
 @NoArgsConstructor(access = AccessLevel.PRIVATE)
 public final class TenantContext {
@@ -24,7 +27,18 @@ public final class TenantContext {
 
     public static String getSchemaName() {
         String schema = CURRENT_SCHEMA.get();
-        return schema != null ? schema : TenantSchemaResolver.defaultSchema();
+        if (!StringUtils.hasText(schema)) {
+            throw new BusinessException(
+                    "TENANT_CONTEXT_REQUIRED",
+                    "Tenant context is required for this operation",
+                    HttpStatus.BAD_REQUEST
+            );
+        }
+        return schema;
+    }
+
+    public static String getSchemaNameOrNull() {
+        return CURRENT_SCHEMA.get();
     }
 
     public static void setUserId(String userId) {
