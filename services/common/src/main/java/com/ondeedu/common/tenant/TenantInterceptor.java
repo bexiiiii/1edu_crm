@@ -1,9 +1,12 @@
 package com.ondeedu.common.tenant;
 
+import com.ondeedu.common.exception.BusinessException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.lang.NonNull;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.oauth2.jwt.Jwt;
@@ -18,6 +21,9 @@ public class TenantInterceptor implements HandlerInterceptor {
     private static final String TENANT_HEADER = "X-Tenant-ID";
     private static final String TENANT_CLAIM = "tenant_id";
 
+    @Value("${ondeedu.multitenancy.enabled:true}")
+    private boolean multitenancyEnabled;
+
     @Override
     public boolean preHandle(@NonNull HttpServletRequest request,
                              @NonNull HttpServletResponse response,
@@ -27,13 +33,31 @@ public class TenantInterceptor implements HandlerInterceptor {
 
         if (tenantId != null) {
             TenantContext.setTenantId(tenantId);
-            String schemaName = TenantSchemaResolver.schemaNameForTenantId(tenantId);
-            if (schemaName != null) {
-                TenantContext.setSchemaName(schemaName);
-                log.debug("Set tenant context: {} -> {}", tenantId, schemaName);
-            } else {
-                log.warn("Ignoring invalid tenant id for schema resolution: {}", tenantId);
+        }
+
+        String schemaName = TenantSchemaResolver.schemaNameForTenantId(tenantId);
+        if (multitenancyEnabled) {
+            if (!StringUtils.hasText(tenantId)) {
+                throw new BusinessException(
+                        "TENANT_CONTEXT_REQUIRED",
+                        "Tenant context is required for this operation",
+                        HttpStatus.BAD_REQUEST
+                );
             }
+            if (!StringUtils.hasText(schemaName)) {
+                throw new BusinessException(
+                        "INVALID_TENANT_ID",
+                        "Invalid tenant identifier",
+                        HttpStatus.BAD_REQUEST
+                );
+            }
+
+            TenantContext.setSchemaName(schemaName);
+            log.debug("Set tenant context: {} -> {}", tenantId, schemaName);
+        } else if (StringUtils.hasText(schemaName)) {
+            TenantContext.setSchemaName(schemaName);
+        } else if (StringUtils.hasText(tenantId)) {
+            log.warn("Ignoring invalid tenant id for schema resolution: {}", tenantId);
         }
 
         String userId = extractUserId();

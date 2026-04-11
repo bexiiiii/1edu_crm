@@ -5,6 +5,8 @@ import com.ondeedu.common.tenant.TenantSchemaResolver;
 import io.grpc.*;
 import lombok.extern.slf4j.Slf4j;
 import net.devh.boot.grpc.server.interceptor.GrpcGlobalServerInterceptor;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.util.StringUtils;
 
 @Slf4j
 @GrpcGlobalServerInterceptor
@@ -16,6 +18,9 @@ public class GrpcTenantInterceptor implements ServerInterceptor {
     public static final Metadata.Key<String> USER_ID_KEY =
         Metadata.Key.of("X-User-ID", Metadata.ASCII_STRING_MARSHALLER);
 
+    @Value("${ondeedu.multitenancy.enabled:true}")
+    private boolean multitenancyEnabled;
+
     @Override
     public <ReqT, RespT> ServerCall.Listener<ReqT> interceptCall(
             ServerCall<ReqT, RespT> call,
@@ -24,11 +29,21 @@ public class GrpcTenantInterceptor implements ServerInterceptor {
 
         String tenantId = headers.get(TENANT_ID_KEY);
         String userId = headers.get(USER_ID_KEY);
+        String schemaName = TenantSchemaResolver.schemaNameForTenantId(tenantId);
 
-        if (tenantId != null) {
+        if (multitenancyEnabled && !StringUtils.hasText(tenantId)) {
+            call.close(Status.INVALID_ARGUMENT.withDescription("Tenant context is required"), new Metadata());
+            return new ServerCall.Listener<>() {};
+        }
+
+        if (multitenancyEnabled && !StringUtils.hasText(schemaName)) {
+            call.close(Status.INVALID_ARGUMENT.withDescription("Invalid tenant identifier"), new Metadata());
+            return new ServerCall.Listener<>() {};
+        }
+
+        if (StringUtils.hasText(tenantId)) {
             TenantContext.setTenantId(tenantId);
-            String schemaName = TenantSchemaResolver.schemaNameForTenantId(tenantId);
-            if (schemaName != null) {
+            if (StringUtils.hasText(schemaName)) {
                 TenantContext.setSchemaName(schemaName);
             } else {
                 log.warn("Ignoring invalid tenant id for schema resolution: {}", tenantId);
