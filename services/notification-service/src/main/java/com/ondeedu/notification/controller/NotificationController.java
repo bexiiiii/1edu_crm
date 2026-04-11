@@ -30,8 +30,8 @@ import java.util.UUID;
 public class NotificationController {
 
     private static final Set<String> ELEVATED_AUTHORITIES = Set.of(
-            "ROLE_TENANT_ADMIN",
             "ROLE_MANAGER",
+            "ROLE_RECEPTIONIST",
             "ROLE_SUPER_ADMIN"
     );
 
