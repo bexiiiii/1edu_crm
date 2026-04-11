@@ -2599,6 +2599,36 @@ interface RoomLoadResponse {
 
 ### 14.12 Посещаемость группы
 
+#### `GET /api/v1/analytics/group-attendance`
+
+**Доступ:** `TENANT_ADMIN`, `MANAGER`, `TEACHER` или permission `ANALYTICS_VIEW` / `LESSONS_VIEW`
+
+**Query Params:**
+- `groupId`: UUID группы (обязательно)
+- `months` (optional): `6` или `12` (быстрый фильтр периода)
+- `from` (optional): `YYYY-MM-DD`
+- `to` (optional): `YYYY-MM-DD`
+
+Правила:
+- если передан `months`, используются последние `months` месяцев (включая текущий), `from/to` игнорируются;
+- если `months` не передан, обязательно передать оба параметра `from` и `to`.
+
+**Примеры:**
+- `/api/v1/analytics/group-attendance?groupId=<uuid>&months=6`
+- `/api/v1/analytics/group-attendance?groupId=<uuid>&months=12`
+
+**Response:**
+```typescript
+interface GroupAttendanceResponse {
+  groupId: string;
+  groupName: string;
+  avgAttendanceRate: number;
+  monthly: { month: string; rate: number }[];
+}
+```
+
+---
+
 #### `GET /api/v1/analytics/group-attendance/{groupId}`
 
 **Доступ:** `TENANT_ADMIN`, `MANAGER`, `TEACHER` или permission `ANALYTICS_VIEW` / `LESSONS_VIEW`
