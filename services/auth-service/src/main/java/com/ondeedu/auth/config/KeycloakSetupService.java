@@ -8,7 +8,15 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Service;
+import org.springframework.http.HttpHeaders;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -22,13 +30,19 @@ import java.util.Objects;
 public class KeycloakSetupService {
 
     private final Keycloak keycloak;
+    private final ObjectMapper objectMapper;
     private final String realm;
     private final String frontendClientId;
 
+    @Value("${keycloak.server-url}")
+    private String keycloakServerUrl;
+
     public KeycloakSetupService(Keycloak keycloak,
+                                ObjectMapper objectMapper,
                                 @Value("${keycloak.realm}") String realm,
                                 @Value("${keycloak.frontend-client-id:1edu-web-app}") String frontendClientId) {
         this.keycloak = keycloak;
+        this.objectMapper = objectMapper;
         this.realm = realm;
         this.frontendClientId = frontendClientId;
     }
@@ -36,6 +50,7 @@ public class KeycloakSetupService {
     @EventListener(ApplicationReadyEvent.class)
     public void ensureMappers() {
         ensureFrontendClientSettings();
+        ensureUserProfileAttributes();
         ensureUserAttributeMapper("tenant_id-mapper", "tenant_id", "tenant_id", false);
         ensureUserAttributeMapper("permissions-mapper", "permissions", "permissions", true);
         ensureRealmAccessRolesMapper();
@@ -192,5 +207,105 @@ public class KeycloakSetupService {
             return null;
         }
         return clients.get(0);
+    }
+
+    @SuppressWarnings("unchecked")
+    private void ensureUserProfileAttributes() {
+        try {
+            String endpoint = normalizeServerUrl(keycloakServerUrl)
+                    + "/admin/realms/" + realm + "/users/profile";
+
+            HttpClient client = HttpClient.newHttpClient();
+            HttpRequest getRequest = HttpRequest.newBuilder()
+                    .uri(URI.create(endpoint))
+                    .header(HttpHeaders.AUTHORIZATION, "Bearer " + keycloak.tokenManager().getAccessTokenString())
+                    .header(HttpHeaders.ACCEPT, "application/json")
+                    .GET()
+                    .build();
+
+            HttpResponse<String> getResponse = client.send(getRequest, HttpResponse.BodyHandlers.ofString());
+            if (getResponse.statusCode() < 200 || getResponse.statusCode() >= 300) {
+                log.warn("Could not read Keycloak user profile config. status={}", getResponse.statusCode());
+                return;
+            }
+
+            Map<String, Object> profile = objectMapper.readValue(
+                    getResponse.body(),
+                    new TypeReference<>() {
+                    }
+            );
+
+            List<Map<String, Object>> attributes = (List<Map<String, Object>>) profile.get("attributes");
+            if (attributes == null) {
+                attributes = new ArrayList<>();
+                profile.put("attributes", attributes);
+            }
+
+            boolean changed = false;
+            changed |= ensureUserProfileAttribute(attributes, "tenant_id", false);
+            changed |= ensureUserProfileAttribute(attributes, "permissions", true);
+            changed |= ensureUserProfileAttribute(attributes, "permissions_source", false);
+            changed |= ensureUserProfileAttribute(attributes, "staff_id", false);
+            changed |= ensureUserProfileAttribute(attributes, "photoUrl", false);
+            changed |= ensureUserProfileAttribute(attributes, "language", false);
+
+            if (!changed) {
+                log.info("Keycloak user profile attributes already configured");
+                return;
+            }
+
+            String payload = objectMapper.writeValueAsString(profile);
+            HttpRequest putRequest = HttpRequest.newBuilder()
+                    .uri(URI.create(endpoint))
+                    .header(HttpHeaders.AUTHORIZATION, "Bearer " + keycloak.tokenManager().getAccessTokenString())
+                    .header(HttpHeaders.CONTENT_TYPE, "application/json")
+                    .PUT(HttpRequest.BodyPublishers.ofString(payload))
+                    .build();
+
+            HttpResponse<String> putResponse = client.send(putRequest, HttpResponse.BodyHandlers.ofString());
+            if (putResponse.statusCode() >= 200 && putResponse.statusCode() < 300) {
+                log.info("Updated Keycloak user profile schema with custom attributes");
+            } else {
+                log.warn("Could not update Keycloak user profile schema. status={} body={}",
+                        putResponse.statusCode(), putResponse.body());
+            }
+        } catch (Exception e) {
+            log.warn("Could not ensure Keycloak user profile attributes: {}", e.getMessage());
+        }
+    }
+
+    private boolean ensureUserProfileAttribute(List<Map<String, Object>> attributes,
+                                               String attributeName,
+                                               boolean multivalued) {
+        Map<String, Object> existing = attributes.stream()
+                .filter(attr -> attributeName.equals(attr.get("name")))
+                .findFirst()
+                .orElse(null);
+
+        if (existing != null) {
+            Object currentMultivalued = existing.get("multivalued");
+            if (!Objects.equals(currentMultivalued, multivalued)) {
+                existing.put("multivalued", multivalued);
+                return true;
+            }
+            return false;
+        }
+
+        Map<String, Object> attribute = new HashMap<>();
+        attribute.put("name", attributeName);
+        attribute.put("displayName", attributeName);
+        attribute.put("validations", Map.of());
+        attribute.put("annotations", Map.of());
+        attribute.put("permissions", Map.of("view", List.of("admin"), "edit", List.of("admin")));
+        attribute.put("multivalued", multivalued);
+        attributes.add(attribute);
+        return true;
+    }
+
+    private String normalizeServerUrl(String serverUrl) {
+        if (serverUrl == null) {
+            return "";
+        }
+        return serverUrl.endsWith("/") ? serverUrl.substring(0, serverUrl.length() - 1) : serverUrl;
     }
 }
