@@ -170,6 +170,24 @@ BEGIN
             version BIGINT DEFAULT 0
         )', tenant_schema);
 
+    -- Lead activities table
+    EXECUTE format('
+        CREATE TABLE IF NOT EXISTS %I.lead_activities (
+            id          UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+            lead_id     UUID NOT NULL,
+            action_type VARCHAR(50),
+            description TEXT,
+            manager     VARCHAR(255),
+            created_at  TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+            updated_at  TIMESTAMP WITH TIME ZONE,
+            created_by  VARCHAR(255),
+            updated_by  VARCHAR(255),
+            version     BIGINT DEFAULT 0
+        )', tenant_schema);
+
+    EXECUTE format('CREATE INDEX IF NOT EXISTS idx_lead_activities_lead ON %I.lead_activities (lead_id)', tenant_schema);
+    EXECUTE format('CREATE INDEX IF NOT EXISTS idx_lead_activities_created_at ON %I.lead_activities (created_at)', tenant_schema);
+
     -- Rooms table
     EXECUTE format('
         CREATE TABLE IF NOT EXISTS %I.rooms (

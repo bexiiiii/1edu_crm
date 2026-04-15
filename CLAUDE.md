@@ -308,6 +308,14 @@ spring.cloud.loadbalancer.cache.caffeine.spec: maximumSize=2048,expireAfterWrite
 
 #### GlobalExceptionHandler — NoResourceFoundException
 Добавлен обработчик `NoResourceFoundException` → возвращает `404 RESOURCE_NOT_FOUND` вместо `500`. Без него Spring Boot 3 возвращал 500 при запросе на несуществующий ресурс статики.
+
+#### GlobalExceptionHandler — file upload / missing parts
+Добавлены обработчики для ошибок при загрузке файлов, которые раньше давали 500 INTERNAL_ERROR:
+- `MaxUploadSizeExceededException` → **413 PAYLOAD_TOO_LARGE** `FILE_TOO_LARGE`
+- `MissingServletRequestPartException` → **400 MISSING_FILE** (когда part `file` не передан)
+- `MissingServletRequestParameterException` → **400 MISSING_PARAMETER**
+
+Эти исключения бросаются до входа в метод контроллера, поэтому try-catch в `FileService` их не ловил.
 #### Docker — сеть при пересборке контейнера
 При пересборке отдельного контейнера (`docker compose up -d --build auth-service`) новый контейнер подключается к **текущей** сети проекта (`1edu_crm_1edu-network`). Если старые сервисы работают на другой сети (например, `1edu_1edu-network` от предыдущего запуска), нужно явно подключить контейнер:
 ```bash

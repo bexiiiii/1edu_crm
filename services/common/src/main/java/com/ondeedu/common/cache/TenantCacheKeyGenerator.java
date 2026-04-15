@@ -1,13 +1,16 @@
 package com.ondeedu.common.cache;
 
 import com.ondeedu.common.tenant.TenantContext;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.cache.interceptor.KeyGenerator;
 import org.springframework.stereotype.Component;
 
 import java.lang.reflect.Method;
 import java.util.Arrays;
 import java.util.StringJoiner;
+import java.util.UUID;
 
+@Slf4j
 @Component("tenantCacheKeyGenerator")
 public class TenantCacheKeyGenerator implements KeyGenerator {
 
@@ -15,7 +18,12 @@ public class TenantCacheKeyGenerator implements KeyGenerator {
     public Object generate(Object target, Method method, Object... params) {
         String tenantId = TenantContext.getTenantId();
         if (tenantId == null || tenantId.isBlank()) {
-            tenantId = "default";
+            // CRITICAL: no tenant context — generate a random key so cache is always missed
+            // and no cross-tenant data leakage occurs via shared cache entries.
+            // Log at ERROR level so this is easily detectable in production.
+            log.error("TenantCacheKeyGenerator: tenantId is null for {}.{}() — cache bypassed to prevent cross-tenant data leak",
+                    target.getClass().getSimpleName(), method.getName());
+            return "no-tenant::" + UUID.randomUUID();
         }
 
         StringJoiner joiner = new StringJoiner("::");
