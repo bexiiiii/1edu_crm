@@ -1,9 +1,13 @@
 package com.ondeedu.staff.service;
 
+import com.ondeedu.common.audit.AuditAction;
+import com.ondeedu.common.audit.AuditLogPublisher;
+import com.ondeedu.common.audit.TenantAuditEvent;
 import com.ondeedu.common.exception.BusinessException;
 import com.ondeedu.common.payroll.SalaryType;
 import com.ondeedu.common.dto.PageResponse;
 import com.ondeedu.common.exception.ResourceNotFoundException;
+import com.ondeedu.common.tenant.TenantContext;
 import com.ondeedu.staff.dto.CreateStaffRequest;
 import com.ondeedu.staff.dto.StaffDto;
 import com.ondeedu.staff.dto.UpdateStaffRequest;
@@ -29,6 +33,7 @@ public class StaffService {
 
     private final StaffRepository staffRepository;
     private final StaffMapper staffMapper;
+    private final AuditLogPublisher auditLogPublisher;
 
     @Transactional
     public StaffDto createStaff(CreateStaffRequest request) {
@@ -36,6 +41,15 @@ public class StaffService {
         Staff staff = staffMapper.toEntity(request);
         staff = staffRepository.save(staff);
         log.info("Created staff: {} {}", staff.getFirstName(), staff.getLastName());
+        auditLogPublisher.publishTenant(TenantAuditEvent.builder()
+                .tenantId(TenantContext.getTenantId())
+                .action(AuditAction.STAFF_CREATED)
+                .category("STAFF")
+                .actorId(TenantContext.getUserId())
+                .targetType("STAFF")
+                .targetId(staff.getId().toString())
+                .targetName(staff.getFirstName() + " " + staff.getLastName())
+                .build());
         return staffMapper.toDto(staff);
     }
 
@@ -54,6 +68,15 @@ public class StaffService {
         staffMapper.updateEntity(staff, request);
         staff = staffRepository.save(staff);
         log.info("Updated staff: {}", id);
+        auditLogPublisher.publishTenant(TenantAuditEvent.builder()
+                .tenantId(TenantContext.getTenantId())
+                .action(AuditAction.STAFF_UPDATED)
+                .category("STAFF")
+                .actorId(TenantContext.getUserId())
+                .targetType("STAFF")
+                .targetId(id.toString())
+                .targetName(staff.getFirstName() + " " + staff.getLastName())
+                .build());
         return staffMapper.toDto(staff);
     }
 
@@ -64,6 +87,14 @@ public class StaffService {
         }
         staffRepository.deleteById(id);
         log.info("Deleted staff: {}", id);
+        auditLogPublisher.publishTenant(TenantAuditEvent.builder()
+                .tenantId(TenantContext.getTenantId())
+                .action(AuditAction.STAFF_DELETED)
+                .category("STAFF")
+                .actorId(TenantContext.getUserId())
+                .targetType("STAFF")
+                .targetId(id.toString())
+                .build());
     }
 
     @Transactional(readOnly = true)

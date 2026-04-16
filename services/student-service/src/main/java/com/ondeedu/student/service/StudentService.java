@@ -1,6 +1,9 @@
 package com.ondeedu.student.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.ondeedu.common.audit.AuditAction;
+import com.ondeedu.common.audit.AuditLogPublisher;
+import com.ondeedu.common.audit.TenantAuditEvent;
 import com.ondeedu.common.config.RabbitMQConfig;
 import com.ondeedu.common.dto.PageResponse;
 import com.ondeedu.common.event.StudentCreatedEvent;
@@ -52,6 +55,7 @@ public class StudentService {
     private final RabbitTemplate rabbitTemplate;
     private final ObjectMapper objectMapper;
     private final Optional<StudentSearchService> studentSearchService;
+    private final AuditLogPublisher auditLogPublisher;
 
     @Transactional
     @CacheEvict(value = {"students", "student-stats"}, allEntries = true)
@@ -75,6 +79,15 @@ public class StudentService {
 
         publishStudentCreatedEvent(student);
         indexStudent(student);
+        auditLogPublisher.publishTenant(TenantAuditEvent.builder()
+                .tenantId(TenantContext.getTenantId())
+                .action(AuditAction.STUDENT_CREATED)
+                .category("STUDENTS")
+                .actorId(TenantContext.getUserId())
+                .targetType("STUDENT")
+                .targetId(student.getId().toString())
+                .targetName(student.getFirstName() + " " + student.getLastName())
+                .build());
 
         return toDto(student);
     }
@@ -116,6 +129,15 @@ public class StudentService {
         indexStudent(student);
 
         log.info("Updated student: {}", id);
+        auditLogPublisher.publishTenant(TenantAuditEvent.builder()
+                .tenantId(TenantContext.getTenantId())
+                .action(AuditAction.STUDENT_UPDATED)
+                .category("STUDENTS")
+                .actorId(TenantContext.getUserId())
+                .targetType("STUDENT")
+                .targetId(id.toString())
+                .targetName(student.getFirstName() + " " + student.getLastName())
+                .build());
         return toDto(student);
     }
 
@@ -131,6 +153,14 @@ public class StudentService {
         studentRepository.deleteById(id);
         deleteStudentFromIndex(id);
         log.info("Deleted student: {}", id);
+        auditLogPublisher.publishTenant(TenantAuditEvent.builder()
+                .tenantId(TenantContext.getTenantId())
+                .action(AuditAction.STUDENT_DELETED)
+                .category("STUDENTS")
+                .actorId(TenantContext.getUserId())
+                .targetType("STUDENT")
+                .targetId(id.toString())
+                .build());
     }
 
     @Transactional(readOnly = true)

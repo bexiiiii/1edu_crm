@@ -1,7 +1,11 @@
 package com.ondeedu.task.service;
 
+import com.ondeedu.common.audit.AuditAction;
+import com.ondeedu.common.audit.AuditLogPublisher;
+import com.ondeedu.common.audit.TenantAuditEvent;
 import com.ondeedu.common.dto.PageResponse;
 import com.ondeedu.common.exception.ResourceNotFoundException;
+import com.ondeedu.common.tenant.TenantContext;
 import com.ondeedu.task.dto.CreateTaskRequest;
 import com.ondeedu.task.dto.TaskDto;
 import com.ondeedu.task.dto.UpdateTaskRequest;
@@ -27,6 +31,7 @@ public class TaskService {
     private final TaskRepository taskRepository;
     private final TaskMapper taskMapper;
     private final TaskAssignmentNotificationService taskAssignmentNotificationService;
+    private final AuditLogPublisher auditLogPublisher;
 
     @Transactional
     public TaskDto createTask(CreateTaskRequest request) {
@@ -34,6 +39,15 @@ public class TaskService {
         task = taskRepository.save(task);
         taskAssignmentNotificationService.notifyIfAssigned(null, task);
         log.info("Created task: {}", task.getTitle());
+        auditLogPublisher.publishTenant(TenantAuditEvent.builder()
+                .tenantId(TenantContext.getTenantId())
+                .action(AuditAction.TASK_CREATED)
+                .category("TASKS")
+                .actorId(TenantContext.getUserId())
+                .targetType("TASK")
+                .targetId(task.getId().toString())
+                .targetName(task.getTitle())
+                .build());
         return taskMapper.toDto(task);
     }
 
@@ -53,6 +67,17 @@ public class TaskService {
         task = taskRepository.save(task);
         taskAssignmentNotificationService.notifyIfAssigned(previousAssignedTo, task);
         log.info("Updated task: {}", id);
+        if (task.getStatus() == TaskStatus.DONE) {
+            auditLogPublisher.publishTenant(TenantAuditEvent.builder()
+                    .tenantId(TenantContext.getTenantId())
+                    .action(AuditAction.TASK_COMPLETED)
+                    .category("TASKS")
+                    .actorId(TenantContext.getUserId())
+                    .targetType("TASK")
+                    .targetId(id.toString())
+                    .targetName(task.getTitle())
+                    .build());
+        }
         return taskMapper.toDto(task);
     }
 
@@ -63,6 +88,14 @@ public class TaskService {
         }
         taskRepository.deleteById(id);
         log.info("Deleted task: {}", id);
+        auditLogPublisher.publishTenant(TenantAuditEvent.builder()
+                .tenantId(TenantContext.getTenantId())
+                .action(AuditAction.TASK_DELETED)
+                .category("TASKS")
+                .actorId(TenantContext.getUserId())
+                .targetType("TASK")
+                .targetId(id.toString())
+                .build());
     }
 
     @Transactional(readOnly = true)

@@ -3,6 +3,9 @@ package com.ondeedu.settings.service;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.ondeedu.common.audit.AuditAction;
+import com.ondeedu.common.audit.AuditLogPublisher;
+import com.ondeedu.common.audit.TenantAuditEvent;
 import com.ondeedu.common.exception.BusinessException;
 import com.ondeedu.common.exception.ResourceNotFoundException;
 import com.ondeedu.common.security.PermissionUtils;
@@ -34,6 +37,7 @@ public class RoleConfigService {
     private final RoleConfigRepository repository;
     private final ObjectMapper objectMapper;
     private final AuthRoleClient authRoleClient;
+    private final AuditLogPublisher auditLogPublisher;
 
     @Transactional(readOnly = true)
     @Cacheable(value = "role-configs", key = "T(com.ondeedu.common.cache.TenantCacheKeys).fixed('all')")
@@ -74,8 +78,18 @@ public class RoleConfigService {
                 .permissions(toJson(normalizedPermissions))
                 .build();
         entity = repository.save(entity);
-        authRoleClient.syncRole(requireTenantId(), entity.getName(), entity.getDescription(), fromJson(entity.getPermissions()));
+        String tenantId = requireTenantId();
+        authRoleClient.syncRole(tenantId, entity.getName(), entity.getDescription(), fromJson(entity.getPermissions()));
         log.info("Created role config: {}", entity.getName());
+        auditLogPublisher.publishTenant(TenantAuditEvent.builder()
+                .tenantId(tenantId)
+                .action(AuditAction.ROLE_CREATED)
+                .category("SETTINGS")
+                .actorId(TenantContext.getUserId())
+                .targetType("ROLE")
+                .targetId(entity.getId().toString())
+                .targetName(entity.getName())
+                .build());
         return toDto(entity);
     }
 
@@ -106,8 +120,18 @@ public class RoleConfigService {
             entity.setPermissions(toJson(normalizedPermissions));
         }
         entity = repository.save(entity);
-        authRoleClient.syncRole(requireTenantId(), entity.getName(), entity.getDescription(), fromJson(entity.getPermissions()));
+        String tenantId = requireTenantId();
+        authRoleClient.syncRole(tenantId, entity.getName(), entity.getDescription(), fromJson(entity.getPermissions()));
         log.info("Updated role config: {}", id);
+        auditLogPublisher.publishTenant(TenantAuditEvent.builder()
+                .tenantId(tenantId)
+                .action(AuditAction.ROLE_UPDATED)
+                .category("SETTINGS")
+                .actorId(TenantContext.getUserId())
+                .targetType("ROLE")
+                .targetId(id.toString())
+                .targetName(entity.getName())
+                .build());
         return toDto(entity);
     }
 

@@ -1,7 +1,11 @@
 package com.ondeedu.lesson.service;
 
+import com.ondeedu.common.audit.AuditAction;
+import com.ondeedu.common.audit.AuditLogPublisher;
+import com.ondeedu.common.audit.TenantAuditEvent;
 import com.ondeedu.common.dto.PageResponse;
 import com.ondeedu.common.exception.ResourceNotFoundException;
+import com.ondeedu.common.tenant.TenantContext;
 import com.ondeedu.lesson.dto.CreateLessonRequest;
 import com.ondeedu.lesson.dto.LessonDto;
 import com.ondeedu.lesson.dto.RescheduleLessonRequest;
@@ -32,6 +36,7 @@ public class LessonService {
 
     private final LessonRepository lessonRepository;
     private final LessonMapper lessonMapper;
+    private final AuditLogPublisher auditLogPublisher;
 
     @Transactional
     @CacheEvict(value = "lessons", allEntries = true)
@@ -39,6 +44,15 @@ public class LessonService {
         Lesson lesson = lessonMapper.toEntity(request);
         lesson = lessonRepository.save(lesson);
         log.info("Created lesson: {} on {}", lesson.getId(), lesson.getLessonDate());
+        auditLogPublisher.publishTenant(TenantAuditEvent.builder()
+                .tenantId(TenantContext.getTenantId())
+                .action(AuditAction.LESSON_CREATED)
+                .category("LESSONS")
+                .actorId(TenantContext.getUserId())
+                .targetType("LESSON")
+                .targetId(lesson.getId().toString())
+                .targetName(lesson.getLessonDate().toString())
+                .build());
         return lessonMapper.toDto(lesson);
     }
 
@@ -60,6 +74,14 @@ public class LessonService {
         lesson = lessonRepository.save(lesson);
 
         log.info("Updated lesson: {}", id);
+        auditLogPublisher.publishTenant(TenantAuditEvent.builder()
+                .tenantId(TenantContext.getTenantId())
+                .action(AuditAction.LESSON_UPDATED)
+                .category("LESSONS")
+                .actorId(TenantContext.getUserId())
+                .targetType("LESSON")
+                .targetId(id.toString())
+                .build());
         return lessonMapper.toDto(lesson);
     }
 
@@ -89,6 +111,14 @@ public class LessonService {
         lesson = lessonRepository.save(lesson);
 
         log.info("Completed lesson: {}", id);
+        auditLogPublisher.publishTenant(TenantAuditEvent.builder()
+                .tenantId(TenantContext.getTenantId())
+                .action(AuditAction.LESSON_COMPLETED)
+                .category("LESSONS")
+                .actorId(TenantContext.getUserId())
+                .targetType("LESSON")
+                .targetId(id.toString())
+                .build());
         return lessonMapper.toDto(lesson);
     }
 
@@ -102,6 +132,14 @@ public class LessonService {
         lesson = lessonRepository.save(lesson);
 
         log.info("Cancelled lesson: {}", id);
+        auditLogPublisher.publishTenant(TenantAuditEvent.builder()
+                .tenantId(TenantContext.getTenantId())
+                .action(AuditAction.LESSON_CANCELLED)
+                .category("LESSONS")
+                .actorId(TenantContext.getUserId())
+                .targetType("LESSON")
+                .targetId(id.toString())
+                .build());
         return lessonMapper.toDto(lesson);
     }
 

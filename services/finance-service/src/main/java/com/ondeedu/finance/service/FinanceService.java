@@ -1,8 +1,12 @@
 package com.ondeedu.finance.service;
 
+import com.ondeedu.common.audit.AuditAction;
+import com.ondeedu.common.audit.AuditLogPublisher;
+import com.ondeedu.common.audit.TenantAuditEvent;
 import com.ondeedu.common.dto.PageResponse;
 import com.ondeedu.common.exception.BusinessException;
 import com.ondeedu.common.exception.ResourceNotFoundException;
+import com.ondeedu.common.tenant.TenantContext;
 import com.ondeedu.finance.dto.CreateTransactionRequest;
 import com.ondeedu.finance.dto.TransactionDto;
 import com.ondeedu.finance.dto.UpdateTransactionRequest;
@@ -30,6 +34,7 @@ public class FinanceService {
 
     private final TransactionRepository transactionRepository;
     private final TransactionMapper transactionMapper;
+    private final AuditLogPublisher auditLogPublisher;
 
     @Transactional
     public TransactionDto createTransaction(CreateTransactionRequest request) {
@@ -37,6 +42,17 @@ public class FinanceService {
         Transaction transaction = transactionMapper.toEntity(request);
         transaction = transactionRepository.save(transaction);
         log.info("Created transaction: {} {} {}", transaction.getType(), transaction.getAmount(), transaction.getCurrency());
+        AuditAction auditAction = transaction.getType() == TransactionType.INCOME
+                ? AuditAction.PAYMENT_CREATED : AuditAction.EXPENSE_CREATED;
+        auditLogPublisher.publishTenant(TenantAuditEvent.builder()
+                .tenantId(TenantContext.getTenantId())
+                .action(auditAction)
+                .category("FINANCE")
+                .actorId(TenantContext.getUserId())
+                .targetType("TRANSACTION")
+                .targetId(transaction.getId().toString())
+                .targetName(transaction.getType() + " " + transaction.getAmount())
+                .build());
         return transactionMapper.toDto(transaction);
     }
 
@@ -64,6 +80,14 @@ public class FinanceService {
         transactionMapper.updateEntity(transaction, request);
         transaction = transactionRepository.save(transaction);
         log.info("Updated transaction: {}", id);
+        auditLogPublisher.publishTenant(TenantAuditEvent.builder()
+                .tenantId(TenantContext.getTenantId())
+                .action(AuditAction.PAYMENT_UPDATED)
+                .category("FINANCE")
+                .actorId(TenantContext.getUserId())
+                .targetType("TRANSACTION")
+                .targetId(id.toString())
+                .build());
         return transactionMapper.toDto(transaction);
     }
 
@@ -74,6 +98,14 @@ public class FinanceService {
         }
         transactionRepository.deleteById(id);
         log.info("Deleted transaction: {}", id);
+        auditLogPublisher.publishTenant(TenantAuditEvent.builder()
+                .tenantId(TenantContext.getTenantId())
+                .action(AuditAction.EXPENSE_DELETED)
+                .category("FINANCE")
+                .actorId(TenantContext.getUserId())
+                .targetType("TRANSACTION")
+                .targetId(id.toString())
+                .build());
     }
 
     @Transactional(readOnly = true)

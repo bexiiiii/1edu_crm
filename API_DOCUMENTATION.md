@@ -156,6 +156,12 @@ grant_type=password&client_id=1edu-web-app&username=<login>&password=<pass>
 > `permissions` — гранулярные права (через `permissions-mapper` клиента `1edu-web-app`).
 > `realm_access.roles` — роли пользователя; именно их backend использует в `@PreAuthorize("hasRole(...)")`.
 
+> Для кастомных ролей `permissions` в JWT формируется из:
+> - role-backed permissions (из `RoleConfig` / Keycloak role attributes), либо
+> - user override (`PUT /api/v1/auth/users/{id}/permissions`).
+>
+> В `auth-service` при старте автоматически провижинятся нужные Keycloak User Profile attributes (`permissions`, `permissions_source`, `tenant_id`, `staff_id`, `photoUrl`, `language`), чтобы custom-role permissions стабильно попадали в токен и корректно работал `hasAuthority(...)`.
+
 ---
 
 ## 3. Общие форматы
@@ -289,6 +295,19 @@ grant_type=password&client_id=1edu-web-app&username=<login>&password=<pass>
 > `RoleConfig` в Settings Service хранит tenant-scoped custom roles и синкает их в реальные Keycloak realm roles.
 > Built-in names (`SUPER_ADMIN`, `TENANT_ADMIN`, `MANAGER`, `TEACHER`, `RECEPTIONIST`, `ACCOUNTANT`) зарезервированы и не создаются через `RoleConfig`.
 > При создании и обновлении пользователя список `permissions` может передаваться отдельно от роли как прямой override.
+
+### Поведение custom roles в runtime
+
+- Создание/обновление `RoleConfig` синкает permissions в tenant-scoped Keycloak role.
+- Пользователь с такой ролью получает эти permissions в JWT claim `permissions` (если у него нет user override).
+- Если у пользователя задан явный override через `PUT /api/v1/auth/users/{id}/permissions`, источником становится `USER`, и role-backed автообновления для него не применяются.
+- Проверки доступа по большинству CRUD эндпоинтов работают как `hasRole('TENANT_ADMIN') OR hasAuthority('<PERMISSION>')`.
+
+Короткая проверка после настройки роли:
+1. Назначить пользователю custom role с `STUDENTS_VIEW`.
+2. Получить новый access token (re-login / refresh).
+3. Убедиться, что в JWT есть `permissions: ["STUDENTS_VIEW", ...]`.
+4. Проверить API: `GET /api/v1/students` -> `200`, а endpoint без выданного permission (например finance) -> `403`.
 
 ---
 
@@ -3513,6 +3532,11 @@ interface RoleConfigDto {
 
 > Это уже не просто UI-шаблоны: backend синкает `RoleConfig` в реальные tenant-scoped Keycloak realm roles.
 
+> После создания/обновления роли:
+> - permissions сохраняются в attributes соответствующей Keycloak role;
+> - пользователям этой роли обновляется inherited permission-набор, если их `permissions_source` не `USER`;
+> - для применения на клиенте нужен новый access token (refresh/re-login).
+
 ---
 
 #### `GET /api/v1/settings/roles/{id}` — Получить конфигурацию роли
@@ -3538,6 +3562,7 @@ interface RoleConfigDto {
 
 > `name` должен быть в формате `UPPERCASE_WITH_UNDERSCORES`.
 > Built-in names (`SUPER_ADMIN`, `TENANT_ADMIN`, `MANAGER`, `TEACHER`, `RECEPTIONIST`, `ACCOUNTANT`) зарезервированы.
+> Пример эффекта: роль с `permissions = ["STUDENTS_VIEW"]` должна давать доступ к `GET /api/v1/students` без `TENANT_ADMIN`.
 
 ---
 
@@ -3547,6 +3572,7 @@ interface RoleConfigDto {
 **Response:** `ApiResponse<RoleConfigDto>`
 
 > Rename роли не поддерживается. Для нового имени создай новую роль и мигрируй пользователей.
+> Если нужен новый permission-набор, изменение делается через update роли; существующие пользователи без user override получат обновление автоматически.
 
 ---
 

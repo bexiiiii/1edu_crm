@@ -6,8 +6,12 @@ import com.ondeedu.auth.dto.CreateUserRequest;
 import com.ondeedu.auth.dto.UpdateProfileRequest;
 import com.ondeedu.auth.dto.UpdateUserRequest;
 import com.ondeedu.auth.dto.UserDto;
+import com.ondeedu.common.audit.AuditAction;
+import com.ondeedu.common.audit.AuditLogPublisher;
+import com.ondeedu.common.audit.TenantAuditEvent;
 import com.ondeedu.common.exception.BusinessException;
 import com.ondeedu.common.exception.ResourceNotFoundException;
+import com.ondeedu.common.security.DefaultRolePermissions;
 import com.ondeedu.common.security.PermissionUtils;
 import com.ondeedu.common.security.RoleNameUtils;
 import jakarta.ws.rs.core.Response;
@@ -42,6 +46,7 @@ public class KeycloakUserService {
 
     private final Keycloak keycloak;
     private final KeycloakRoleService keycloakRoleService;
+    private final AuditLogPublisher auditLogPublisher;
     private final String realm;
     private final String frontendClientId;
 
@@ -50,10 +55,12 @@ public class KeycloakUserService {
 
     public KeycloakUserService(Keycloak keycloak,
                                KeycloakRoleService keycloakRoleService,
+                               AuditLogPublisher auditLogPublisher,
                                @Value("${keycloak.realm}") String realm,
                                @Value("${keycloak.frontend-client-id:1edu-web-app}") String frontendClientId) {
         this.keycloak = keycloak;
         this.keycloakRoleService = keycloakRoleService;
+        this.auditLogPublisher = auditLogPublisher;
         this.realm = realm;
         this.frontendClientId = frontendClientId;
     }
@@ -133,6 +140,16 @@ public class KeycloakUserService {
 
             applyRoleAndPermissions(userId, keycloakRoleName, request.getPermissions());
 
+            auditLogPublisher.publishTenant(TenantAuditEvent.builder()
+                    .tenantId(tenantId)
+                    .action(AuditAction.USER_CREATED)
+                    .category("USERS")
+                    .actorId(currentTenantId())
+                    .targetType("USER")
+                    .targetId(userId)
+                    .targetName(request.getFirstName() + " " + request.getLastName())
+                    .build());
+
             return getUser(userId);
         } catch (BusinessException e) {
             throw e;
@@ -185,6 +202,14 @@ public class KeycloakUserService {
 
             userResource.update(user);
             log.info("Updated Keycloak user: {}", userId);
+            auditLogPublisher.publishTenant(TenantAuditEvent.builder()
+                    .tenantId(currentTenantId())
+                    .action(AuditAction.USER_UPDATED)
+                    .category("USERS")
+                    .actorId(currentTenantId())
+                    .targetType("USER")
+                    .targetId(userId)
+                    .build());
 
             if (request.getRole() != null) {
                 String tenantId = resolveTenantIdForExistingUser(user);
@@ -529,6 +554,10 @@ public class KeycloakUserService {
                 ? attrs.get("language").get(0) : null;
         String staffIdRaw = attrs != null && attrs.containsKey("staff_id")
             ? attrs.get("staff_id").get(0) : null;
+        List<String> permissions = attrs != null && attrs.containsKey(PERMISSIONS_ATTRIBUTE)
+                ? attrs.get(PERMISSIONS_ATTRIBUTE) : List.of();
+        String permissionsSource = attrs != null && attrs.containsKey(PERMISSIONS_SOURCE_ATTRIBUTE)
+                ? attrs.get(PERMISSIONS_SOURCE_ATTRIBUTE).get(0) : null;
 
         return UserDto.builder()
             .id(user.getId() != null ? user.getId() : userId)
@@ -538,6 +567,8 @@ public class KeycloakUserService {
             .lastName(user.getLastName())
             .staffId(parseOptionalUuid(staffIdRaw))
             .roles(roles)
+            .permissions(permissions)
+            .permissionsSource(permissionsSource)
             .enabled(Boolean.TRUE.equals(user.isEnabled()))
             .photoUrl(photoUrl)
             .language(language)
@@ -563,8 +594,22 @@ public class KeycloakUserService {
             return;
         }
 
+        // Try role-stored permissions first (custom roles have these in Keycloak attributes)
         List<String> rolePermissions = keycloakRoleService.getRolePermissions(keycloakRoleName);
-        storePermissionsAttribute(userId, rolePermissions, rolePermissionsSource(keycloakRoleName));
+        if (!rolePermissions.isEmpty()) {
+            storePermissionsAttribute(userId, rolePermissions, rolePermissionsSource(keycloakRoleName));
+            return;
+        }
+
+        // Fall back to built-in default permissions for system roles (MANAGER, RECEPTIONIST, etc.)
+        String displayRoleName = RoleNameUtils.toDisplayRoleName(null, keycloakRoleName);
+        List<String> defaultPermissions = DefaultRolePermissions.forRole(displayRoleName);
+        if (!defaultPermissions.isEmpty()) {
+            log.info("Applying default permissions for system role '{}' to user {}", displayRoleName, userId);
+            storePermissionsAttribute(userId, defaultPermissions, rolePermissionsSource(keycloakRoleName));
+        } else {
+            storePermissionsAttribute(userId, List.of(), rolePermissionsSource(keycloakRoleName));
+        }
     }
 
     private String resolveTenantId(String requestedTenantId) {

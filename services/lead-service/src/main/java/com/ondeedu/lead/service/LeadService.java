@@ -1,5 +1,8 @@
 package com.ondeedu.lead.service;
 
+import com.ondeedu.common.audit.AuditAction;
+import com.ondeedu.common.audit.AuditLogPublisher;
+import com.ondeedu.common.audit.TenantAuditEvent;
 import com.ondeedu.common.dto.PageResponse;
 import com.ondeedu.common.exception.ResourceNotFoundException;
 import com.ondeedu.common.tenant.TenantContext;
@@ -33,6 +36,7 @@ public class LeadService {
     private final LeadMapper leadMapper;
     private final Optional<LeadSearchService> leadSearchService;
     private final LeadAssignmentNotificationService leadAssignmentNotificationService;
+    private final AuditLogPublisher auditLogPublisher;
 
     @Transactional
     public LeadDto createLead(CreateLeadRequest request) {
@@ -41,6 +45,15 @@ public class LeadService {
         leadAssignmentNotificationService.notifyIfAssigned(null, lead);
         indexLead(lead);
         log.info("Created lead: {} {}", lead.getFirstName(), lead.getLastName());
+        auditLogPublisher.publishTenant(TenantAuditEvent.builder()
+                .tenantId(TenantContext.getTenantId())
+                .action(AuditAction.LEAD_CREATED)
+                .category("LEADS")
+                .actorId(TenantContext.getUserId())
+                .targetType("LEAD")
+                .targetId(lead.getId().toString())
+                .targetName(lead.getFullName())
+                .build());
         return leadMapper.toDto(lead);
     }
 
@@ -61,6 +74,15 @@ public class LeadService {
         leadAssignmentNotificationService.notifyIfAssigned(previousAssignedTo, lead);
         indexLead(lead);
         log.info("Updated lead: {}", id);
+        auditLogPublisher.publishTenant(TenantAuditEvent.builder()
+                .tenantId(TenantContext.getTenantId())
+                .action(AuditAction.LEAD_UPDATED)
+                .category("LEADS")
+                .actorId(TenantContext.getUserId())
+                .targetType("LEAD")
+                .targetId(id.toString())
+                .targetName(lead.getFullName())
+                .build());
         return leadMapper.toDto(lead);
     }
 
@@ -72,6 +94,16 @@ public class LeadService {
         lead = leadRepository.save(lead);
         indexLead(lead);
         log.info("Moved lead {} to stage {}", id, newStage);
+        AuditAction stageAction = newStage == LeadStage.WON ? AuditAction.LEAD_CONVERTED : AuditAction.LEAD_UPDATED;
+        auditLogPublisher.publishTenant(TenantAuditEvent.builder()
+                .tenantId(TenantContext.getTenantId())
+                .action(stageAction)
+                .category("LEADS")
+                .actorId(TenantContext.getUserId())
+                .targetType("LEAD")
+                .targetId(id.toString())
+                .targetName(lead.getFullName())
+                .build());
         return leadMapper.toDto(lead);
     }
 
@@ -83,6 +115,14 @@ public class LeadService {
         leadRepository.deleteById(id);
         deleteLeadFromIndex(id);
         log.info("Deleted lead: {}", id);
+        auditLogPublisher.publishTenant(TenantAuditEvent.builder()
+                .tenantId(TenantContext.getTenantId())
+                .action(AuditAction.LEAD_DELETED)
+                .category("LEADS")
+                .actorId(TenantContext.getUserId())
+                .targetType("LEAD")
+                .targetId(id.toString())
+                .build());
     }
 
     @Transactional(readOnly = true)

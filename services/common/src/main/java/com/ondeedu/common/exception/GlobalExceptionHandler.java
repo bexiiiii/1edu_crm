@@ -5,8 +5,11 @@ import jakarta.validation.ConstraintViolationException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.validation.FieldError;
+import org.springframework.web.HttpMediaTypeNotSupportedException;
+import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -100,6 +103,34 @@ public class GlobalExceptionHandler {
         return ResponseEntity
             .status(HttpStatus.BAD_REQUEST)
             .body(ApiResponse.error("MISSING_PARAMETER", "Required parameter '" + ex.getParameterName() + "' is missing"));
+    }
+
+    @ExceptionHandler(HttpMediaTypeNotSupportedException.class)
+    public ResponseEntity<ApiResponse<Void>> handleHttpMediaTypeNotSupportedException(HttpMediaTypeNotSupportedException ex) {
+        log.warn("Unsupported media type: {}", ex.getContentType());
+        String supported = ex.getSupportedMediaTypes().isEmpty() ? "" :
+                " Supported types: " + ex.getSupportedMediaTypes();
+        return ResponseEntity
+            .status(HttpStatus.UNSUPPORTED_MEDIA_TYPE)
+            .body(ApiResponse.error("UNSUPPORTED_MEDIA_TYPE",
+                    "Content type '" + ex.getContentType() + "' is not supported." + supported));
+    }
+
+    @ExceptionHandler(HttpRequestMethodNotSupportedException.class)
+    public ResponseEntity<ApiResponse<Void>> handleHttpRequestMethodNotSupportedException(HttpRequestMethodNotSupportedException ex) {
+        log.warn("Method not allowed: {}", ex.getMethod());
+        return ResponseEntity
+            .status(HttpStatus.METHOD_NOT_ALLOWED)
+            .body(ApiResponse.error("METHOD_NOT_ALLOWED",
+                    "HTTP method '" + ex.getMethod() + "' is not supported for this endpoint"));
+    }
+
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ResponseEntity<ApiResponse<Void>> handleHttpMessageNotReadableException(HttpMessageNotReadableException ex) {
+        log.warn("Malformed request body: {}", ex.getMessage());
+        return ResponseEntity
+            .status(HttpStatus.BAD_REQUEST)
+            .body(ApiResponse.error("MALFORMED_REQUEST", "Request body is malformed or missing"));
     }
 
     @ExceptionHandler(Exception.class)

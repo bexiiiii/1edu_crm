@@ -1,7 +1,11 @@
 package com.ondeedu.payment.service;
 
+import com.ondeedu.common.audit.AuditAction;
+import com.ondeedu.common.audit.AuditLogPublisher;
+import com.ondeedu.common.audit.TenantAuditEvent;
 import com.ondeedu.common.dto.PageResponse;
 import com.ondeedu.common.exception.ResourceNotFoundException;
+import com.ondeedu.common.tenant.TenantContext;
 import com.ondeedu.payment.dto.CreateSubscriptionRequest;
 import com.ondeedu.payment.dto.SubscriptionDto;
 import com.ondeedu.payment.dto.UpdateSubscriptionRequest;
@@ -36,6 +40,7 @@ public class SubscriptionService {
     private final SubscriptionRepository subscriptionRepository;
     private final PriceListRepository priceListRepository;
     private final SubscriptionMapper subscriptionMapper;
+    private final AuditLogPublisher auditLogPublisher;
 
     @Transactional
     @CacheEvict(value = "subscriptions", allEntries = true)
@@ -56,6 +61,15 @@ public class SubscriptionService {
 
         subscription = subscriptionRepository.save(subscription);
         log.info("Created subscription {} for student {}", subscription.getId(), subscription.getStudentId());
+        auditLogPublisher.publishTenant(TenantAuditEvent.builder()
+                .tenantId(TenantContext.getTenantId())
+                .action(AuditAction.SUBSCRIPTION_CREATED)
+                .category("FINANCE")
+                .actorId(TenantContext.getUserId())
+                .targetType("SUBSCRIPTION")
+                .targetId(subscription.getId().toString())
+                .targetName("Student " + subscription.getStudentId())
+                .build());
         return subscriptionMapper.toDto(subscription);
     }
 
