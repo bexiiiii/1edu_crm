@@ -2,6 +2,7 @@
 
 ## Содержание
 
+0. [Release Notes (2026-04-17)](#0-release-notes-2026-04-17)
 1. [Общая информация](#1-общая-информация)
 2. [Аутентификация](#2-аутентификация)
 3. [Общие форматы](#3-общие-форматы)
@@ -25,6 +26,15 @@
 21. [Settings Service (8128)](#21-settings-service-8128)
 22. [Audit Service (8130)](#22-audit-service-8130)
 23. [Справочник Enum-ов](#23-справочник-enum-ов)
+
+---
+
+## 0. Release Notes (2026-04-17)
+
+- **Finance amount change reason**: reason-поля и их валидация зафиксированы для операций в `payment-service` и `finance-service`; для `TENANT_ADMIN`/`FINANCE_VIEW` поля видимы в API-ответах чтения.
+- **Audit logs**: уточнена работа `/api/v1/audit/system` и `/api/v1/audit/tenant`, добавлены tenant-context требования, порядок фильтров, формат записей и TTL по коллекциям.
+- **Default role permissions**: добавлены default permission-наборы для встроенных ролей `MANAGER`, `RECEPTIONIST`, `TEACHER`, `ACCOUNTANT` и fallback-логика назначения.
+- **Auth user edit**: зафиксировано, что `username` в `PUT /api/v1/auth/users/{id}` read-only, а загрузка permissions работает через `permissionsSource` (`USER` или `ROLE:*`) с обновлением claims после refresh/re-login.
 
 ---
 
@@ -107,6 +117,10 @@ Content-Type: application/json
 > Передавай `X-Tenant-ID` явно только в специальных сценариях:
 > - запросы от `SUPER_ADMIN`
 > - ручное переключение tenant context в админском интерфейсе
+>
+> Если tenant context не удалось определить, backend вернёт `400`:
+> - `TENANT_CONTEXT_REQUIRED` — tenant context отсутствует;
+> - `INVALID_TENANT_ID` — передан некорректный `X-Tenant-ID`.
 
 ### Как получить токен
 
@@ -217,6 +231,16 @@ grant_type=password&client_id=1edu-web-app&username=<login>&password=<pass>
 | `size` | int | 20 | Размер страницы |
 | `sort` | string | — | Поле и направление (e.g. `createdAt,desc`) |
 
+### Типовые `errorCode` (GlobalExceptionHandler)
+
+| HTTP | errorCode | Когда возвращается |
+|------|-----------|--------------------|
+| 404 | `RESOURCE_NOT_FOUND` | Запрошенный путь/ресурс не существует |
+| 413 | `FILE_TOO_LARGE` | Загружаемый файл превышает лимит |
+| 400 | `MISSING_FILE` | В `multipart/form-data` отсутствует обязательный part `file` |
+| 400 | `MISSING_PARAMETER` | Отсутствует обязательный query/form параметр |
+| 400 | `MALFORMED_REQUEST` | Тело запроса повреждено, невалидный JSON или пустое body там, где оно обязательно |
+
 ---
 
 ## 4. Роли и права доступа
@@ -291,6 +315,24 @@ grant_type=password&client_id=1edu-web-app&username=<login>&password=<pass>
 | `REPORTS_VIEW` | Просмотр и генерация отчётов |
 | `SETTINGS_VIEW` | Просмотр tenant settings |
 | `SETTINGS_EDIT` | Изменение tenant settings |
+
+### Default permissions для встроенных ролей
+
+Если при создании/обновлении пользователя явный список `permissions` не передан, backend применяет fallback:
+1. permissions из role attributes (для tenant custom roles);
+2. если role attributes пусты и роль встроенная (`MANAGER`, `RECEPTIONIST`, `TEACHER`, `ACCOUNTANT`) — применяется встроенный default permission-набор.
+
+**MANAGER (default):**
+`STUDENTS_VIEW`, `STUDENTS_CREATE`, `STUDENTS_EDIT`, `GROUPS_VIEW`, `GROUPS_CREATE`, `GROUPS_EDIT`, `ROOMS_VIEW`, `LESSONS_VIEW`, `LESSONS_CREATE`, `LESSONS_EDIT`, `LESSONS_MARK_ATTENDANCE`, `LEADS_VIEW`, `LEADS_CREATE`, `LEADS_EDIT`, `SUBSCRIPTIONS_VIEW`, `SUBSCRIPTIONS_CREATE`, `SUBSCRIPTIONS_EDIT`, `PRICE_LISTS_VIEW`, `TASKS_VIEW`, `TASKS_CREATE`, `TASKS_EDIT`, `STAFF_VIEW`, `FINANCE_VIEW`, `ANALYTICS_VIEW`, `SETTINGS_VIEW`.
+
+**RECEPTIONIST (default):**
+`STUDENTS_VIEW`, `STUDENTS_CREATE`, `STUDENTS_EDIT`, `GROUPS_VIEW`, `ROOMS_VIEW`, `LESSONS_VIEW`, `LESSONS_MARK_ATTENDANCE`, `LEADS_VIEW`, `LEADS_CREATE`, `LEADS_EDIT`, `SUBSCRIPTIONS_VIEW`, `SUBSCRIPTIONS_CREATE`, `PRICE_LISTS_VIEW`, `TASKS_VIEW`, `TASKS_CREATE`, `FINANCE_VIEW`, `SETTINGS_VIEW`.
+
+**TEACHER (default):**
+`STUDENTS_VIEW`, `GROUPS_VIEW`, `ROOMS_VIEW`, `LESSONS_VIEW`, `LESSONS_MARK_ATTENDANCE`, `TASKS_VIEW`, `ANALYTICS_VIEW`.
+
+**ACCOUNTANT (default):**
+`STUDENTS_VIEW`, `SUBSCRIPTIONS_VIEW`, `SUBSCRIPTIONS_CREATE`, `SUBSCRIPTIONS_EDIT`, `PRICE_LISTS_VIEW`, `PRICE_LISTS_CREATE`, `PRICE_LISTS_EDIT`, `FINANCE_VIEW`, `FINANCE_CREATE`, `FINANCE_EDIT`, `ANALYTICS_VIEW`, `REPORTS_VIEW`.
 
 > `RoleConfig` в Settings Service хранит tenant-scoped custom roles и синкает их в реальные Keycloak realm roles.
 > Built-in names (`SUPER_ADMIN`, `TENANT_ADMIN`, `MANAGER`, `TEACHER`, `RECEPTIONIST`, `ACCOUNTANT`) зарезервированы и не создаются через `RoleConfig`.
@@ -396,7 +438,7 @@ interface TenantDto {
   email: string;
   phone: string;
   status: TenantStatus;      // TRIAL | ACTIVE | INACTIVE | SUSPENDED | BANNED
-  plan: TenantPlan;          // BASIC | PROFESSIONAL | ENTERPRISE
+  plan: TenantPlan;          // BASIC | EXTENDED | EXTENDED_PLUS
   schemaName: string;
   timezone: string;
   maxStudents: number;
@@ -497,7 +539,7 @@ interface TenantStatsDto {
   "email": "new@email.com",
   "phone": "+998901234567",
   "status": "ACTIVE",
-  "plan": "PROFESSIONAL",
+  "plan": "EXTENDED",
   "timezone": "Asia/Tashkent",
   "maxStudents": 1000,
   "maxStaff": 50,
@@ -543,8 +585,8 @@ interface AdminDashboardResponse {
   suspendedTenants: number;
   inactiveTenants: number;
   basicPlanCount: number;
-  professionalPlanCount: number;
-  enterprisePlanCount: number;
+  extendedPlanCount: number;
+  extendedPlusPlanCount: number;
   totalStudentsAllTenants: number;
   totalStaffAllTenants: number;
   totalActiveSubscriptions: number;
@@ -599,7 +641,7 @@ interface AdminDashboardResponse {
 **Request Body:**
 ```json
 {
-  "plan": "PROFESSIONAL",
+  "plan": "EXTENDED",
   "maxStudents": 1000,
   "maxStaff": 50
 }
@@ -692,8 +734,8 @@ interface PlatformKpiResponse {
   totalActiveSubs: number;
   avgStudentsPerTenant: number;
   basicCount: number;
-  professionalCount: number;
-  enterpriseCount: number;
+  extendedCount: number;
+  extendedPlusCount: number;
 }
 ```
 
@@ -765,7 +807,10 @@ interface UserDto {
   email: string;
   firstName: string;
   lastName: string;
+  staffId: string | null;
   roles: string[];
+  permissions: string[];
+  permissionsSource: string | null;   // USER | ROLE:<keycloakRoleName>
   enabled: boolean;
   photoUrl: string | null;
   language: string | null;
@@ -798,6 +843,11 @@ interface UserDto {
 
 > Tenant scope берётся из JWT claim `tenant_id`.
 > Если запрос идёт от обычного `TENANT_ADMIN`, backend привязывает нового пользователя к текущему tenant context и не позволяет создать пользователя в другом tenant через произвольный `tenantId` в body.
+>
+> При назначении роли backend наполняет `permissions` и `permissionsSource` так:
+> - если в запросе передан `permissions`, source = `USER`;
+> - иначе берутся permissions роли (role-backed);
+> - если роль встроенная и у неё нет role-backed permissions, применяется default permission-набор для этой роли.
 
 > Текущий backend-flow для выдачи доступа сотруднику такой:
 > 1. создаёшь или выбираешь сотрудника через `/api/v1/staff`
@@ -851,6 +901,9 @@ interface UserDto {
 
 > Обновление разрешено только для пользователей текущего tenant.
 > `staffId` хранится как связка auth account → staff profile (атрибут `staff_id` в Keycloak).
+> Поле `username` (логин) через этот endpoint не редактируется и считается read-only.
+> Для смены логина используй сценарий: создать нового пользователя с нужным `username` и деактивировать старого.
+> После смены роли/permissions на фронте нужен refresh/re-login, чтобы новый access token получил актуальные claims.
 
 ---
 
@@ -1815,6 +1868,29 @@ interface PriceListDto {
 
 ### 12.3 Платежи студентов (`/api/v1/payments/student-payments`)
 
+```typescript
+interface StudentPaymentDto {
+  id: string;
+  studentId: string;
+  subscriptionId: string;
+  amount: number;
+  paidAt: string;                    // YYYY-MM-DD
+  paymentMonth: string;              // YYYY-MM
+  method: PaymentMethod;
+  amountChangeReasonCode: PaymentAmountChangeReasonCode | null;
+  amountChangeReasonOther: string | null;
+  notes: string | null;
+  createdAt: string;
+}
+
+type PaymentAmountChangeReasonCode =
+  | 'PARTIAL_PAYMENT'
+  | 'DISCOUNT_APPLIED'
+  | 'DEBT_REPAYMENT'
+  | 'MANUAL_CORRECTION'
+  | 'OTHER';
+```
+
 #### `POST /api/v1/payments/student-payments` — Записать платёж
 **Доступ:** `TENANT_ADMIN` | `FINANCE_CREATE`
 
@@ -1842,7 +1918,13 @@ interface PriceListDto {
 - если `amountChangeReasonCode=OTHER`, поле `amountChangeReasonOther` обязательно;
 - если `amountChangeReasonCode != OTHER`, `amountChangeReasonOther` передавать нельзя.
 
+**Ошибки:**
+- `PAYMENT_AMOUNT_REASON_OTHER_REQUIRED`
+- `PAYMENT_AMOUNT_REASON_OTHER_FORBIDDEN`
+
 **Response:** `ApiResponse<StudentPaymentDto>`
+
+> Поля `amountChangeReasonCode` и `amountChangeReasonOther` возвращаются в `POST` response и в истории платежей (`GET /student/{studentId}` внутри `MonthlyBreakdownDto.payments[]`).
 
 ---
 
@@ -2002,7 +2084,17 @@ type AmountChangeReasonCode =
 }
 ```
 
+**Правила валидации для reason-полей:**
+- если `amountChangeReasonCode=OTHER`, поле `amountChangeReasonOther` обязательно;
+- если `amountChangeReasonCode != OTHER`, `amountChangeReasonOther` передавать нельзя.
+
+**Ошибки:**
+- `TRANSACTION_AMOUNT_REASON_OTHER_REQUIRED`
+- `TRANSACTION_AMOUNT_REASON_OTHER_FORBIDDEN`
+
 **Response:** `ApiResponse<TransactionDto>`
+
+> Поля `amountChangeReasonCode` и `amountChangeReasonOther` видны `TENANT_ADMIN`/`FINANCE_VIEW` во всех чтениях транзакций: list, by-id, by-date, by-student.
 
 ---
 
@@ -2703,7 +2795,7 @@ interface NotificationDto {
 > Это intentional exception к общей permission-модели: доступ определяется аутентификацией и elevated built-in roles, а не кастомными permissions.
 
 > Для обычного tenant user backend автоматически ограничивает выборку текущим пользователем по `email` / `preferred_username` из JWT.
-> `TENANT_ADMIN`, `MANAGER`, `SUPER_ADMIN` могут получать общую tenant-выборку; для просмотра только своих уведомлений передай `mine=true`.
+> `MANAGER`, `RECEPTIONIST`, `SUPER_ADMIN` могут получать общую tenant-выборку; для просмотра только своих уведомлений передай `mine=true`.
 > `SUPER_ADMIN` без `X-Tenant-ID` видит общую выборку, с `X-Tenant-ID` получает уведомления конкретного тенанта.
 
 **Query Params:**
@@ -2720,7 +2812,7 @@ interface NotificationDto {
 **Доступ:** любой аутентифицированный пользователь tenant
 
 > Для обычного tenant user доступно только собственное уведомление.
-> `TENANT_ADMIN`, `MANAGER`, `SUPER_ADMIN` могут открыть любое tenant-уведомление; `mine=true` принудительно ограничивает доступ своими уведомлениями.
+> `MANAGER`, `RECEPTIONIST`, `SUPER_ADMIN` могут открыть любое tenant-уведомление; `mine=true` принудительно ограничивает доступ своими уведомлениями.
 
 **Response:** `ApiResponse<NotificationDto>`
 
@@ -3817,27 +3909,36 @@ interface FinanceCategoryConfigDto {
 
 ## 22. Audit Service (8130)
 
+`audit-service` принимает события из RabbitMQ и сохраняет их в MongoDB:
+- `system_audit_logs` (TTL 365 дней) — системные действия `SUPER_ADMIN`;
+- `tenant_audit_logs` (TTL 90 дней) — tenant-level действия по бизнес-модулям.
+
 ### 22.1 Аудит-лог (`/api/v1/audit`)
 
 #### `GET /api/v1/audit/system` — Системный лог
 **Доступ:** `SUPER_ADMIN`
 
 **Query Params:**
-- `action` (optional): строка действия
+- `action` (optional): `AuditAction`
 - `targetId` (optional): UUID цели
 - `actorId` (optional): UUID актора
 - `from` (optional): ISO datetime
 - `to` (optional): ISO datetime
-- `page`, `size`
+- `page` (default `0`), `size` (default `50`)
+
+> Порядок применения фильтров: `from+to` → `action` → `targetId` → `actorId`.
 
 **Response:** `ApiResponse<PageResponse<SystemAuditLog>>`
 
 ```typescript
 interface SystemAuditLog {
   id: string;           // MongoDB ObjectId
-  action: string;       // e.g. "BAN_TENANT", "CHANGE_PLAN"
+  action: string;       // AuditAction
   targetId: string;
+  targetType: string;
+  targetName: string | null;
   actorId: string;
+  actorName: string | null;
   details: Record<string, any>;
   timestamp: string;
 }
@@ -3850,28 +3951,51 @@ interface SystemAuditLog {
 
 > Для tenant user tenant определяется из JWT claim `tenant_id`.
 > `SUPER_ADMIN` может явно выбрать tenant через `X-Tenant-ID`.
+> Если tenant context не определён, endpoint возвращает `400 TENANT_CONTEXT_MISSING`.
 
 **Query Params:**
 - `category` (optional): категория события
-- `action` (optional): строка действия
+- `action` (optional): `AuditAction`
 - `actorId` (optional): UUID
 - `from` (optional): ISO datetime
 - `to` (optional): ISO datetime
-- `page`, `size`
+- `page` (default `0`), `size` (default `50`)
+
+> Порядок применения фильтров: `from+to` → `category` → `action` → `actorId`.
 
 **Response:** `ApiResponse<PageResponse<TenantAuditLog>>`
 
 ```typescript
 interface TenantAuditLog {
   id: string;
-  category: string;     // STUDENTS | PAYMENTS | LESSONS | STAFF | ...
-  action: string;       // CREATE | UPDATE | DELETE | ...
+  tenantId: string;
+  category: string;     // STUDENTS | FINANCE | LESSONS | STAFF | ...
+  action: string;       // AuditAction
   actorId: string;
+  actorName: string | null;
+  targetType: string;
   targetId: string;
+  targetName: string | null;
   details: Record<string, any>;
   timestamp: string;
 }
 ```
+
+### 22.2 Текущее покрытие аудит-логирования
+
+На текущий момент backend публикует audit events минимум для следующих операций:
+- `students`: create/update/delete;
+- `leads`: create/update/move-stage/delete;
+- `lessons`: create/update/complete/cancel;
+- `tasks`: create/complete/delete;
+- `staff`: create/update/delete;
+- `finance transactions`: create/update/delete;
+- `subscriptions`: create;
+- `auth users`: create/update;
+- `settings roles`: create/update;
+- `tenant admin (system-level)`: status/plan change, ban/unban, soft-delete/restore/hard-delete.
+
+> Публикация выполняется fire-and-forget через RabbitMQ; ошибки отправки событий не блокируют основной бизнес-операции.
 
 ---
 
@@ -3924,7 +4048,7 @@ enum AttendanceStatus { PLANNED, ATTENDED, ABSENT, SICK, VACATION, AUTO_ATTENDED
 
 // Тенант
 enum TenantStatus { TRIAL, ACTIVE, INACTIVE, SUSPENDED, BANNED }
-enum TenantPlan { BASIC, PROFESSIONAL, ENTERPRISE }
+enum TenantPlan { BASIC, EXTENDED, EXTENDED_PLUS }
 ```
 
 ---
