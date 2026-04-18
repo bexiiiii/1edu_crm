@@ -204,6 +204,18 @@ public class StudentGrpcService extends StudentServiceGrpc.StudentServiceImplBas
         if (dto.getPhone() != null) {
             builder.setPhone(dto.getPhone());
         }
+        if (dto.getParentName() != null) {
+            builder.setParentName(StringValue.of(dto.getParentName()));
+        }
+        if (dto.getParentPhone() != null) {
+            builder.setParentPhone(StringValue.of(dto.getParentPhone()));
+        }
+        if (dto.getStudentPhone() != null) {
+            builder.setStudentPhone(StringValue.of(dto.getStudentPhone()));
+        }
+        if (dto.getAdditionalPhones() != null && !dto.getAdditionalPhones().isEmpty()) {
+            builder.addAllAdditionalPhones(dto.getAdditionalPhones());
+        }
         if (dto.getCreatedAt() != null) {
             builder.setCreatedAt(GrpcUtils.toTimestamp(dto.getCreatedAt()));
         }

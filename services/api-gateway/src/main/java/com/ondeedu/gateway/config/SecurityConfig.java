@@ -18,6 +18,9 @@ public class SecurityConfig {
                 .pathMatchers(
                     "/actuator/**",
                     "/fallback/**",
+                    "/internal/aisar/**",
+                    "/internal/ftelecom/**",
+                    "/internal/zadarma/**",
                     "/v3/api-docs/**",
                     "/swagger-ui/**",
                     "/swagger-ui.html",

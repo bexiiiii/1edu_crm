@@ -807,7 +807,7 @@ public class AnalyticsRepository {
                 LEFT JOIN (
                     SELECT student_id, SUM(amount) AS total
                     FROM :schema.subscriptions
-                    WHERE status IN ('ACTIVE', 'COMPLETED')
+                    WHERE status IN ('ACTIVE', 'EXPIRED', 'COMPLETED', 'FROZEN')
                     GROUP BY student_id
                 ) subs ON subs.student_id = s.id
                 WHERE s.status = 'ACTIVE'
@@ -880,10 +880,8 @@ public class AnalyticsRepository {
         String sql = ("""
                 SELECT
                     id,
-                    first_name,
-                    last_name,
-                    birth_date,
-                    CAST(EXTRACT(YEAR FROM AGE(:today, birth_date)) AS INTEGER) + 1 AS turns_age
+                                        CONCAT(COALESCE(first_name, ''), ' ', COALESCE(last_name, '')) AS full_name,
+                                        birth_date
                 FROM :schema.students
                 WHERE status = 'ACTIVE'
                   AND birth_date IS NOT NULL

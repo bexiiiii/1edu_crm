@@ -4,7 +4,6 @@ import com.ondeedu.common.exception.BusinessException;
 import com.ondeedu.file.dto.FileUploadResponse;
 import io.minio.*;
 import io.minio.http.Method;
-import io.minio.messages.Bucket;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -26,6 +25,9 @@ public class FileService {
     @Value("${minio.url}")
     private String minioUrl;
 
+    @Value("${minio.public-url:}")
+    private String minioPublicUrl;
+
     @Value("${minio.bucket}")
     private String bucket;
 
@@ -34,7 +36,8 @@ public class FileService {
             String originalFilename = file.getOriginalFilename() != null
                     ? file.getOriginalFilename()
                     : "unknown";
-            String objectName = folder + "/" + UUID.randomUUID() + "_" + originalFilename;
+            String safeFolder = normalizeFolder(folder);
+            String objectName = safeFolder + "/" + UUID.randomUUID() + "_" + originalFilename;
 
             // Ensure bucket exists
             boolean bucketExists = minioClient.bucketExists(
@@ -54,7 +57,7 @@ public class FileService {
                         .build());
             }
 
-            String url = minioUrl + "/" + bucket + "/" + objectName;
+            String url = buildObjectUrl(objectName);
             log.debug("File uploaded to MinIO: {}", url);
 
             return FileUploadResponse.builder()
@@ -98,5 +101,18 @@ public class FileService {
             log.error("Failed to delete file {} from MinIO: {}", objectName, e.getMessage());
             throw new BusinessException("FILE_DELETE_FAILED", "Failed to delete file: " + e.getMessage());
         }
+    }
+
+    private String normalizeFolder(String folder) {
+        if (folder == null || folder.isBlank()) {
+            return "general";
+        }
+        return folder.replaceAll("^/+", "").replaceAll("/+$", "");
+    }
+
+    private String buildObjectUrl(String objectName) {
+        String base = (minioPublicUrl != null && !minioPublicUrl.isBlank()) ? minioPublicUrl : minioUrl;
+        String normalizedBase = base.endsWith("/") ? base.substring(0, base.length() - 1) : base;
+        return normalizedBase + "/" + bucket + "/" + objectName;
     }
 }

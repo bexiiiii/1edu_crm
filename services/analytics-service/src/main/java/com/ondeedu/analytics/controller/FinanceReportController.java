@@ -1,12 +1,14 @@
 package com.ondeedu.analytics.controller;
 
 import com.ondeedu.analytics.dto.response.FinanceReportResponse;
+import com.ondeedu.analytics.export.AnalyticsExcelExportService;
 import com.ondeedu.analytics.service.FinanceReportService;
 import com.ondeedu.common.dto.ApiResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -22,6 +24,7 @@ import java.time.LocalDate;
 public class FinanceReportController {
 
     private final FinanceReportService financeReportService;
+    private final AnalyticsExcelExportService excelExportService;
 
     @GetMapping
     @PreAuthorize("hasAnyRole('TENANT_ADMIN', 'MANAGER') or hasAuthority('ANALYTICS_VIEW')")
@@ -32,5 +35,19 @@ public class FinanceReportController {
         if (from == null) from = LocalDate.now().withDayOfMonth(1);
         if (to == null) to = LocalDate.now();
         return ApiResponse.success(financeReportService.getReport(from, to));
+    }
+
+    @GetMapping("/export")
+    @PreAuthorize("hasAnyRole('TENANT_ADMIN', 'MANAGER') or hasAuthority('ANALYTICS_VIEW')")
+    @Operation(summary = "Скачать финансовый отчёт в Excel")
+    public ResponseEntity<byte[]> exportReport(
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to) {
+        if (from == null) from = LocalDate.now().withDayOfMonth(1);
+        if (to == null) to = LocalDate.now();
+
+        FinanceReportResponse report = financeReportService.getReport(from, to);
+        byte[] file = excelExportService.exportFinanceReport(report, from, to);
+        return ExcelResponseFactory.attachment("finance-report.xlsx", file);
     }
 }

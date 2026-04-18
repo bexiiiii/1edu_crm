@@ -13,6 +13,11 @@ import "google/protobuf/wrappers.proto";
 service SettingsService {
   rpc GetSettings(GetSettingsRequest) returns (SettingsResponse);
   rpc UpdateSettings(UpdateSettingsRequest) returns (SettingsResponse);
+  rpc GetKpayConfig(GetKpayConfigRequest) returns (KpayConfigResponse);
+  rpc GetApiPayConfig(GetApiPayConfigRequest) returns (ApiPayConfigResponse);
+  rpc GetAisarConfig(GetAisarConfigRequest) returns (AisarConfigResponse);
+  rpc GetFtelecomConfig(GetFtelecomConfigRequest) returns (FtelecomConfigResponse);
+  rpc GetZadarmaConfig(GetZadarmaConfigRequest) returns (ZadarmaConfigResponse);
 }
 
 message Settings {
@@ -79,4 +84,96 @@ message SettingsResponse {
   bool success = 1;
   google.protobuf.StringValue message = 2;
   Settings settings = 3;
+}
+
+message KpayConfig {
+  bool enabled = 1;
+  bool configured = 2;
+  google.protobuf.StringValue merchant_id = 3;
+  google.protobuf.StringValue api_base_url = 4;
+  google.protobuf.StringValue recipient_field = 5;
+  google.protobuf.StringValue api_key = 6;
+  google.protobuf.StringValue api_secret = 7;
+}
+
+message GetKpayConfigRequest {
+  com.ondeedu.grpc.common.TenantContext context = 1;
+}
+
+message KpayConfigResponse {
+  bool success = 1;
+  google.protobuf.StringValue message = 2;
+  KpayConfig config = 3;
+}
+
+message ApiPayConfig {
+  bool enabled = 1;
+  bool configured = 2;
+  google.protobuf.StringValue api_base_url = 3;
+  google.protobuf.StringValue recipient_field = 4;
+  google.protobuf.StringValue api_key = 5;
+  google.protobuf.StringValue webhook_secret = 6;
+}
+
+message GetApiPayConfigRequest {
+  com.ondeedu.grpc.common.TenantContext context = 1;
+}
+
+message ApiPayConfigResponse {
+  bool success = 1;
+  google.protobuf.StringValue message = 2;
+  ApiPayConfig config = 3;
+}
+
+message AisarConfig {
+  bool enabled = 1;
+  bool configured = 2;
+  google.protobuf.StringValue api_base_url = 3;
+  google.protobuf.StringValue api_key = 4;
+  google.protobuf.StringValue webhook_secret = 5;
+}
+
+message GetAisarConfigRequest {
+  com.ondeedu.grpc.common.TenantContext context = 1;
+}
+
+message AisarConfigResponse {
+  bool success = 1;
+  google.protobuf.StringValue message = 2;
+  AisarConfig config = 3;
+}
+
+message FtelecomConfig {
+  bool enabled = 1;
+  bool configured = 2;
+  google.protobuf.StringValue api_base_url = 3;
+  google.protobuf.StringValue crm_token = 4;
+}
+
+message GetFtelecomConfigRequest {
+  com.ondeedu.grpc.common.TenantContext context = 1;
+}
+
+message FtelecomConfigResponse {
+  bool success = 1;
+  google.protobuf.StringValue message = 2;
+  FtelecomConfig config = 3;
+}
+
+message ZadarmaConfig {
+  bool enabled = 1;
+  bool configured = 2;
+  google.protobuf.StringValue api_base_url = 3;
+  google.protobuf.StringValue user_key = 4;
+  google.protobuf.StringValue user_secret = 5;
+}
+
+message GetZadarmaConfigRequest {
+  com.ondeedu.grpc.common.TenantContext context = 1;
+}
+
+message ZadarmaConfigResponse {
+  bool success = 1;
+  google.protobuf.StringValue message = 2;
+  ZadarmaConfig config = 3;
 }

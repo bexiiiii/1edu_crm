@@ -13,7 +13,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.sql.Date;
 import java.time.LocalDate;
-import java.time.Period;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -96,16 +96,20 @@ public class TodayStatsService {
                 .stream()
                 .map(r -> {
                     LocalDate bd  = toLocalDate(r.get("birth_date"));
-                    int turnsAge  = toInt(r.get("turns_age"));
                     int daysUntil = computeDaysUntil(bd, date);
+                    int turnsAge  = computeTurnsAge(bd, date);
+                    Object fullNameRaw = r.get("full_name");
+                    String fullName = fullNameRaw == null ? "" : fullNameRaw.toString().trim();
                     return BirthdayDto.builder()
                             .studentId(toUuid(r.get("id")))
-                            .fullName(r.get("first_name") + " " + r.get("last_name"))
+                            .fullName(fullName)
                             .birthDate(bd)
                             .daysUntil(daysUntil)
                             .turnsAge(turnsAge)
                             .build();
                 })
+                .sorted(Comparator.comparingInt(BirthdayDto::getDaysUntil)
+                        .thenComparing(BirthdayDto::getFullName, Comparator.nullsLast(String::compareToIgnoreCase)))
                 .collect(Collectors.toList());
 
         return TodayStatsResponse.builder()
@@ -159,12 +163,39 @@ public class TodayStatsService {
     /** Дней до следующего дня рождения (0 = сегодня). */
     private int computeDaysUntil(LocalDate birthDate, LocalDate today) {
         if (birthDate == null) return 0;
-        LocalDate nextBirthday = birthDate.withYear(today.getYear());
+                LocalDate nextBirthday = getBirthdayOccurrence(birthDate, today.getYear());
         if (nextBirthday.isBefore(today)) {
-            nextBirthday = nextBirthday.plusYears(1);
+                        nextBirthday = getBirthdayOccurrence(birthDate, today.getYear() + 1);
         }
         return (int) java.time.temporal.ChronoUnit.DAYS.between(today, nextBirthday);
     }
+
+        /** Возраст, который студент исполнит в ближайший день рождения. */
+        private int computeTurnsAge(LocalDate birthDate, LocalDate today) {
+                if (birthDate == null) return 0;
+
+                int currentAge = today.getYear() - birthDate.getYear();
+                LocalDate birthdayThisYear = getBirthdayOccurrence(birthDate, today.getYear());
+
+                if (birthdayThisYear.isAfter(today)) {
+                        return currentAge;
+        }
+                if (birthdayThisYear.isEqual(today)) {
+                        return currentAge;
+                }
+                return currentAge + 1;
+        }
+
+        /**
+         * Возвращает дату дня рождения для указанного года.
+         * Для 29 февраля в невисокосный год используется 28 февраля.
+         */
+        private LocalDate getBirthdayOccurrence(LocalDate birthDate, int year) {
+                if (birthDate.getMonthValue() == 2 && birthDate.getDayOfMonth() == 29 && !java.time.Year.isLeap(year)) {
+                        return LocalDate.of(year, 2, 28);
+        }
+                return birthDate.withYear(year);
+        }
 
     // ─── type converters ──────────────────────────────────────────────────────
 

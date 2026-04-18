@@ -24,6 +24,7 @@ spring:
 
 minio:
   url: http://localhost:9000
+  public-url: ${MINIO_PUBLIC_URL:}
   access-key: ${MINIO_ACCESS_KEY:ondeedu}
   secret-key: ${MINIO_SECRET_KEY:ondeedu_secret}
   bucket: ${MINIO_BUCKET:ondeedu-crm}

@@ -47,6 +47,8 @@ message Student {
   google.protobuf.Timestamp created_at = 13;
   google.protobuf.Timestamp updated_at = 14;
   map<string, string> metadata = 15;
+  google.protobuf.StringValue student_phone = 16;
+  repeated string additional_phones = 17;
 }
 
 message CreateStudentRequest {

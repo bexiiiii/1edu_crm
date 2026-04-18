@@ -13,6 +13,9 @@ This repository is prepared for a production deployment on `api.1edu.kz` with te
 
 - Public tenant signup is exposed only via `POST https://api.1edu.kz/api/v1/register`.
 - Request path for signup: `nginx /api/* -> api-gateway -> tenant-service`.
+- Public integration webhooks for CRM/telephony use `https://api.1edu.kz/internal/*`.
+- Request path for webhooks: `nginx /internal/* -> api-gateway -> lead-service`.
+- Currently exposed webhook paths in gateway: `/internal/aisar/**`, `/internal/ftelecom/**`, `/internal/zadarma/**`.
 - Keycloak is exposed publicly only under `https://api.1edu.kz/auth/*`.
 - Browser/OIDC login starts at `https://api.1edu.kz/auth/realms/ondeedu/protocol/openid-connect/auth`.
 - Password-grant token exchange uses `https://api.1edu.kz/auth/realms/ondeedu/protocol/openid-connect/token`.
@@ -149,3 +152,7 @@ Expected:
 - `https://api.1edu.kz/grafana/` returns `401` without Basic Auth and `200` after auth
 - `nginx`, `api-gateway`, `auth-service`, `tenant-service`, and `keycloak` are up
 - internal ports stay bound to `127.0.0.1`, only `80/443` are public
+
+Webhook ingress sanity check:
+
+- if `https://api.1edu.kz/internal/aisar/...`, `.../ftelecom/...`, `.../zadarma/...` returns `404` from edge, verify nginx has `location /internal/ { proxy_pass http://api_gateway; ... }` and reload nginx.

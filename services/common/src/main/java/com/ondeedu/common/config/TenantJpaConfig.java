@@ -33,11 +33,14 @@ public class TenantJpaConfig {
             TenantIdentifierResolver tenantIdentifierResolver
     ) {
         return hibernateProperties -> {
+            // Explicitly force SCHEMA multitenancy strategy for Hibernate runtime.
+            // Some environments ignore YAML binding variants, so we set it programmatically.
+            hibernateProperties.put("hibernate.multiTenancy", "SCHEMA");
+            hibernateProperties.put("hibernate.multi_tenant", "SCHEMA");
             hibernateProperties.put(AvailableSettings.MULTI_TENANT_CONNECTION_PROVIDER, connectionProvider);
             hibernateProperties.put(AvailableSettings.MULTI_TENANT_IDENTIFIER_RESOLVER, tenantIdentifierResolver);
             hibernateProperties.put(AvailableSettings.TENANT_IDENTIFIER_TO_USE_FOR_ANY_KEY,
                     TenantSchemaResolver.defaultSchema());
-            hibernateProperties.put(AvailableSettings.DEFAULT_SCHEMA, TenantSchemaResolver.defaultSchema());
         };
     }
 }

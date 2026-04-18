@@ -1,8 +1,12 @@
 package com.ondeedu.settings.entity;
 
 import com.ondeedu.common.dto.BaseEntity;
+import com.ondeedu.common.payment.ApiPayRecipientField;
+import com.ondeedu.common.payment.KpayRecipientField;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.Table;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -10,6 +14,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
+import java.time.Instant;
 import java.time.LocalTime;
 
 @Entity
@@ -141,6 +146,120 @@ public class TenantSettings extends BaseEntity {
     @Column(name = "subscription_expiry_reminder_days")
     @Builder.Default
     private Integer subscriptionExpiryReminderDays = 3;
+
+    // KPAY integration
+    @Column(name = "kpay_enabled")
+    @Builder.Default
+    private Boolean kpayEnabled = false;
+
+    @Column(name = "kpay_merchant_id", length = 255)
+    private String kpayMerchantId;
+
+    @Column(name = "kpay_api_base_url", length = 500)
+    @Builder.Default
+    private String kpayApiBaseUrl = "https://kpayapp.kz/api";
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "kpay_recipient_field", length = 40)
+    @Builder.Default
+    private KpayRecipientField kpayRecipientField = KpayRecipientField.PARENT_PHONE;
+
+    @Column(name = "kpay_api_key", length = 1000)
+    private String kpayApiKey;
+
+    @Column(name = "kpay_api_secret", length = 1000)
+    private String kpayApiSecret;
+
+    // ApiPay integration
+    @Column(name = "apipay_enabled")
+    @Builder.Default
+    private Boolean apipayEnabled = false;
+
+    @Column(name = "apipay_api_base_url", length = 500)
+    @Builder.Default
+    private String apipayApiBaseUrl = "https://bpapi.bazarbay.site/api/v1";
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "apipay_recipient_field", length = 40)
+    @Builder.Default
+    private ApiPayRecipientField apipayRecipientField = ApiPayRecipientField.PARENT_PHONE;
+
+    @Column(name = "apipay_api_key", length = 1000)
+    private String apipayApiKey;
+
+    @Column(name = "apipay_webhook_secret", length = 1000)
+    private String apipayWebhookSecret;
+
+    // AISAR integration
+    @Column(name = "aisar_enabled")
+    @Builder.Default
+    private Boolean aisarEnabled = false;
+
+    @Column(name = "aisar_api_base_url", length = 500)
+    @Builder.Default
+    private String aisarApiBaseUrl = "https://aisar.app";
+
+    @Column(name = "aisar_api_key", length = 1000)
+    private String aisarApiKey;
+
+    @Column(name = "aisar_webhook_secret", length = 1000)
+    private String aisarWebhookSecret;
+
+    // Freedom Telecom integration
+    @Column(name = "ftelecom_enabled")
+    @Builder.Default
+    private Boolean ftelecomEnabled = false;
+
+    @Column(name = "ftelecom_api_base_url", length = 500)
+    @Builder.Default
+    private String ftelecomApiBaseUrl = "https://api.vpbx.ftel.kz";
+
+    @Column(name = "ftelecom_crm_token", length = 1000)
+    private String ftelecomCrmToken;
+
+    // Zadarma integration
+    @Column(name = "zadarma_enabled")
+    @Builder.Default
+    private Boolean zadarmaEnabled = false;
+
+    @Column(name = "zadarma_api_base_url", length = 500)
+    @Builder.Default
+    private String zadarmaApiBaseUrl = "https://api.zadarma.com";
+
+    @Column(name = "zadarma_user_key", length = 500)
+    private String zadarmaUserKey;
+
+    @Column(name = "zadarma_user_secret", length = 1000)
+    private String zadarmaUserSecret;
+
+    // Google Drive backup
+    @Column(name = "google_drive_backup_enabled")
+    @Builder.Default
+    private Boolean googleDriveBackupEnabled = false;
+
+    @Column(name = "google_drive_backup_folder_id", length = 500)
+    private String googleDriveBackupFolderId;
+
+    @Column(name = "google_drive_backup_access_token", length = 2000)
+    private String googleDriveBackupAccessToken;
+
+    @Column(name = "google_drive_last_backup_at")
+    private Instant googleDriveLastBackupAt;
+
+    // Yandex Disk backup
+    @Column(name = "yandex_disk_backup_enabled")
+    @Builder.Default
+    private Boolean yandexDiskBackupEnabled = false;
+
+    @Column(name = "yandex_disk_backup_folder_path", length = 1000)
+    @Builder.Default
+    private String yandexDiskBackupFolderPath = "disk:/1edu-backups";
+
+    @Column(name = "yandex_disk_backup_access_token", length = 2000)
+    private String yandexDiskBackupAccessToken;
+
+    @Column(name = "yandex_disk_last_backup_at")
+    private Instant yandexDiskLastBackupAt;
 
     // Бренд
     @Column(name = "brand_color", length = 50)

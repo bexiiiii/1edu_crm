@@ -213,10 +213,11 @@ deploy_infra() {
     cleanup_macos_metadata "$ROOT/infrastructure/grafana/provisioning"
     log "Starting infrastructure"
     compose up -d \
-        postgres redis postgres-exporter redis-exporter \
+        postgres pgbouncer redis postgres-exporter redis-exporter \
         rabbitmq elasticsearch mongodb minio keycloak zipkin prometheus grafana
 
     wait_healthy postgres 180
+    wait_healthy pgbouncer 120
     wait_healthy redis 90
     wait_healthy rabbitmq 180
     ensure_rabbitmq_topology

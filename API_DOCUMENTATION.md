@@ -2,7 +2,7 @@
 
 ## Содержание
 
-0. [Release Notes (2026-04-17)](#0-release-notes-2026-04-17)
+0. [Release Notes (2026-04-18)](#0-release-notes-2026-04-18)
 1. [Общая информация](#1-общая-информация)
 2. [Аутентификация](#2-аутентификация)
 3. [Общие форматы](#3-общие-форматы)
@@ -29,9 +29,44 @@
 
 ---
 
-## 0. Release Notes (2026-04-17)
+## 0. Release Notes (2026-04-18)
+
+- **Analytics Excel export**: добавлены отдельные download endpoint'ы (`/export`) для 8 аналитических экранов с табличным `.xlsx` (несколько листов, структурированные колонки, без JSON-blob в одной ячейке).
+- **Today analytics data quality**:
+  - в блоке `debtors` долг считается по подпискам со статусами `ACTIVE | EXPIRED | FROZEN` (и legacy `COMPLETED`), что устраняет пропуски должников;
+  - в блоке `upcomingBirthdays` возраст/`daysUntil` считается на backend с корректной обработкой `29 февраля` в невисокосный год.
+- **Analytics cache freshness**: для analytics-кэшей уменьшены TTL (операционные виджеты обновляются быстрее), плюс добавлена tenant-aware инвалидация через RabbitMQ (`audit.tenant`).
+- **File URL for frontend**: `file-service` теперь возвращает URL на основе `MINIO_PUBLIC_URL` (если задан), fallback — `MINIO_URL`; это нужно для корректных ссылок в браузере.
+- **Tenant header guard**: для non-super-admin запросов с `X-Tenant-ID`, не совпадающим с JWT `tenant_id`, backend/gateway возвращает `403 TENANT_MISMATCH`.
 
 - **Finance amount change reason**: reason-поля и их валидация зафиксированы для операций в `payment-service` и `finance-service`; для `TENANT_ADMIN`/`FINANCE_VIEW` поля видимы в API-ответах чтения.
+- **KPAY integration (tenant-scoped)**:
+  - в `settings-service` добавлены endpoints для настройки KPAY (`GET/PUT /api/v1/settings/kpay`) с выбором поля контакта ученика (`PHONE | STUDENT_PHONE | PARENT_PHONE | ADDITIONAL_PHONE_1`);
+  - в `payment-service` добавлены endpoints для генерации и отслеживания KPAY-инвойсов (`/api/v1/payments/kpay/invoices*`) и webhook (`POST /internal/kpay/webhook`);
+  - в конце месяца scheduler автоматически генерирует счета на следующий месяц для тенантов с включенной KPAY-интеграцией.
+- **ApiPay integration (tenant-scoped, separate from KPAY)**:
+  - в `settings-service` добавлены endpoints для настройки ApiPay (`GET/PUT /api/v1/settings/apipay`) c отдельными секретами и полем получателя (`PHONE | STUDENT_PHONE | PARENT_PHONE | ADDITIONAL_PHONE_1`);
+  - в `payment-service` добавлены endpoints `/api/v1/payments/apipay/invoices*` и webhook `POST /internal/apipay/webhook`;
+  - webhook валидирует `X-Webhook-Signature` (HMAC-SHA256) и при статусе оплаты автоматически создаёт запись в `student_payments`.
+- **AISAR integration (tenant-scoped, inbound social/web messenger webhook)**:
+  - в `settings-service` добавлены endpoints `GET/PUT /api/v1/settings/aisar`;
+  - ответ настроек возвращает готовый `webhookUrl`, `signatureHeader` и `signatureAlgorithm`, чтобы tenant admin мог вставить их в AISAR;
+  - в `lead-service` добавлен публичный webhook `POST /internal/aisar/webhook/{tenantId}`, который валидирует `X-AISAR-Signature` (HMAC-SHA256) и создаёт лид из нового контакта без дублей по телефону/email.
+- **Freedom Telecom VPBX integration (tenant-scoped telephony module)**:
+  - в `settings-service` добавлены endpoints `GET/PUT /api/v1/settings/ftelecom`;
+  - ответ настроек возвращает готовый `webhookUrl` и имя токен-поля `crm_token` для настройки CRM callback в Freedom Telecom;
+  - в `lead-service` добавлен публичный webhook `POST /internal/ftelecom/webhook/{tenantId}` c валидацией `crm_token` из payload.
+- **Zadarma PBX integration (tenant-scoped telephony webhook)**:
+  - в `settings-service` добавлены endpoints `GET/PUT /api/v1/settings/zadarma`;
+  - ответ настроек возвращает готовый `webhookUrl`, режим валидации `GET ?zd_echo=...` и параметры подписи `Signature / HMAC-SHA1 (base64)`;
+  - в `lead-service` добавлен публичный webhook `GET/POST /internal/zadarma/webhook/{tenantId}` для echo-валидации и входящих call-событий без дублей по номеру телефона.
+- **Cloud backup destinations (tenant-scoped, manual v1)**:
+  - в `settings-service` добавлены self-service endpoints для `Google Drive` и `Yandex Disk` backup destinations;
+  - `POST /api/v1/settings/google-drive-backup/run` и `POST /api/v1/settings/yandex-disk-backup/run` создают tenant snapshot (`.json.gz`) и загружают его в соответствующее облако по tenant token.
+- **Webhook ingress hardening**:
+  - nginx в production теперь проксирует не только `/api/*`, но и `/internal/*` в `api-gateway`;
+  - публично проброшены и разрешены в gateway/security только webhook-маршруты `AISAR`, `Freedom Telecom`, `Zadarma`;
+  - smoke-проверка публичных webhook URL должна давать бизнес-ответ (`2xx/4xx`), но не `404` от edge.
 - **Audit logs**: уточнена работа `/api/v1/audit/system` и `/api/v1/audit/tenant`, добавлены tenant-context требования, порядок фильтров, формат записей и TTL по коллекциям.
 - **Default role permissions**: добавлены default permission-наборы для встроенных ролей `MANAGER`, `RECEPTIONIST`, `TEACHER`, `ACCOUNTANT` и fallback-логика назначения.
 - **Auth user edit**: зафиксировано, что `username` в `PUT /api/v1/auth/users/{id}` read-only, а загрузка permissions работает через `permissionsSource` (`USER` или `ROLE:*`) с обновлением claims после refresh/re-login.
@@ -96,8 +131,11 @@
 | `/api/v1/tenants/**`, `/api/v1/admin/**` | tenant-service |
 | `/api/v1/notifications/**` | notification-service |
 | `/api/v1/files/**` | file-service |
+| `/internal/aisar/**`, `/internal/ftelecom/**`, `/internal/zadarma/**` | lead-service (public webhook ingress) |
 
 > Gateway также маршрутизирует legacy aliases `/api/v1/groups/**` и `/api/v1/invoices/**`, но для фронта используйте только публичные пути, описанные ниже.
+>
+> В production edge nginx проксирует и `/api/*`, и `/internal/*` в gateway. Для `/internal/*` действуют только явно настроенные в gateway маршруты.
 
 ---
 
@@ -117,6 +155,9 @@ Content-Type: application/json
 > Передавай `X-Tenant-ID` явно только в специальных сценариях:
 > - запросы от `SUPER_ADMIN`
 > - ручное переключение tenant context в админском интерфейсе
+>
+> Если для обычного пользователя (`не SUPER_ADMIN`) передан `X-Tenant-ID`, который не совпадает с JWT claim `tenant_id`, запрос будет отклонён:
+> - `403 TENANT_MISMATCH` / `Authenticated tenant does not match the requested tenant context`.
 >
 > Если tenant context не удалось определить, backend вернёт `400`:
 > - `TENANT_CONTEXT_REQUIRED` — tenant context отсутствует;
@@ -2029,6 +2070,177 @@ interface StudentDebtDto {
 
 ---
 
+### 12.4 KPAY инвойсы (`/api/v1/payments/kpay`)
+
+```typescript
+type KpayInvoiceStatus =
+  | 'CREATED'
+  | 'PENDING'
+  | 'PAID'
+  | 'FAILED'
+  | 'CANCELLED'
+  | 'EXPIRED';
+
+interface KpayInvoiceDto {
+  id: string;
+  studentId: string;
+  subscriptionId: string;
+  paymentMonth: string;         // YYYY-MM
+  recipientField: string;       // PHONE | STUDENT_PHONE | PARENT_PHONE | ADDITIONAL_PHONE_1
+  recipientValue: string;
+  amount: number;
+  currency: string;             // KZT
+  merchantInvoiceId: string;    // tenant-scoped internal invoice id
+  externalInvoiceId: string | null;
+  paymentUrl: string | null;
+  status: KpayInvoiceStatus;
+  externalPaymentMethod: string | null;
+  externalTransactionId: string | null;
+  paidAt: string | null;
+  studentPaymentId: string | null;
+  errorMessage: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+```
+
+#### `POST /api/v1/payments/kpay/invoices/generate` — Сгенерировать KPAY счета за месяц
+**Доступ:** `TENANT_ADMIN` | `FINANCE_CREATE`
+
+**Request Body (optional):**
+```json
+{
+  "month": "2026-05"
+}
+```
+
+Если `month` не передан, используется текущий месяц.
+
+**Response:** `ApiResponse<GenerateKpayInvoicesResponse>`
+
+```typescript
+interface GenerateKpayInvoicesResponse {
+  month: string;
+  totalSubscriptions: number;
+  generated: number;
+  skipped: number;
+  failed: number;
+}
+```
+
+#### `GET /api/v1/payments/kpay/invoices` — Список KPAY счетов
+**Доступ:** `TENANT_ADMIN` | `FINANCE_VIEW`
+
+**Query Params:**
+- `month` (optional): `YYYY-MM`
+- `status` (optional): `CREATED | PENDING | PAID | FAILED | CANCELLED | EXPIRED`
+
+**Response:** `ApiResponse<List<KpayInvoiceDto>>`
+
+#### `GET /api/v1/payments/kpay/invoices/{id}` — Детали KPAY счета
+**Доступ:** `TENANT_ADMIN` | `FINANCE_VIEW`
+
+**Response:** `ApiResponse<KpayInvoiceDto>`
+
+#### `POST /internal/kpay/webhook` — Callback статуса оплаты от KPAY
+**Доступ:** internal callback endpoint (без JWT, internal route)
+
+> Примечание по ingress: endpoint существует в `payment-service`, но в текущем `api-gateway` не настроен публичный маршрут `Path=/internal/kpay/**`. Для внешнего callback требуется отдельный gateway route.
+
+Поведение:
+- webhook обновляет статус `kpay_invoices`;
+- при статусе `PAID` автоматически записывает платеж в `student_payments` и связывает его с `kpay_invoices.studentPaymentId`.
+
+---
+
+### 12.5 ApiPay инвойсы (`/api/v1/payments/apipay`)
+
+```typescript
+type ApiPayInvoiceStatus =
+  | 'CREATED'
+  | 'PENDING'
+  | 'PAID'
+  | 'FAILED'
+  | 'CANCELLED'
+  | 'EXPIRED'
+  | 'REFUNDED';
+
+interface ApiPayInvoiceDto {
+  id: string;
+  studentId: string;
+  subscriptionId: string;
+  paymentMonth: string;         // YYYY-MM
+  recipientField: string;       // PHONE | STUDENT_PHONE | PARENT_PHONE | ADDITIONAL_PHONE_1
+  recipientValue: string;
+  amount: number;
+  currency: string;             // KZT
+  merchantInvoiceId: string;    // tenant-scoped internal invoice id
+  externalInvoiceId: string | null;
+  paymentUrl: string | null;
+  status: ApiPayInvoiceStatus;
+  externalPaymentMethod: string | null;
+  externalTransactionId: string | null;
+  paidAt: string | null;
+  studentPaymentId: string | null;
+  errorMessage: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+```
+
+#### `POST /api/v1/payments/apipay/invoices/generate` — Сгенерировать ApiPay счета за месяц
+**Доступ:** `TENANT_ADMIN` | `FINANCE_CREATE`
+
+**Request Body (optional):**
+```json
+{
+  "month": "2026-05"
+}
+```
+
+Если `month` не передан, используется текущий месяц.
+
+**Response:** `ApiResponse<GenerateApiPayInvoicesResponse>`
+
+```typescript
+interface GenerateApiPayInvoicesResponse {
+  month: string;
+  totalSubscriptions: number;
+  generated: number;
+  skipped: number;
+  failed: number;
+}
+```
+
+#### `GET /api/v1/payments/apipay/invoices` — Список ApiPay счетов
+**Доступ:** `TENANT_ADMIN` | `FINANCE_VIEW`
+
+**Query Params:**
+- `month` (optional): `YYYY-MM`
+- `status` (optional): `CREATED | PENDING | PAID | FAILED | CANCELLED | EXPIRED | REFUNDED`
+
+**Response:** `ApiResponse<List<ApiPayInvoiceDto>>`
+
+#### `GET /api/v1/payments/apipay/invoices/{id}` — Детали ApiPay счета
+**Доступ:** `TENANT_ADMIN` | `FINANCE_VIEW`
+
+**Response:** `ApiResponse<ApiPayInvoiceDto>`
+
+#### `POST /internal/apipay/webhook` — Callback статуса оплаты от ApiPay
+**Доступ:** internal callback endpoint (без JWT, internal route)
+
+> Примечание по ingress: endpoint существует в `payment-service`, но в текущем `api-gateway` не настроен публичный маршрут `Path=/internal/apipay/**`. Для внешнего callback требуется отдельный gateway route.
+
+Headers:
+- `X-Webhook-Signature: sha256=<hex>`
+
+Поведение:
+- webhook обновляет статус `apipay_invoices`;
+- подпись webhook валидируется HMAC-SHA256 (секрет из tenant settings);
+- при статусе `PAID` автоматически записывает платеж в `student_payments` и связывает его с `apipay_invoices.studentPaymentId`.
+
+---
+
 ## 13. Finance Service (8112)
 
 ### TransactionDto
@@ -2275,6 +2487,24 @@ interface SalaryPaymentDto {
 
 Исключение: `group-attendance` также доступен `TEACHER` и ролям с `LESSONS_VIEW`.
 
+### Excel export (новое)
+
+Для ключевых аналитических экранов добавлены отдельные download endpoint'ы в формате `.xlsx`.
+
+- Content-Type: `application/vnd.openxmlformats-officedocument.spreadsheetml.sheet`
+- Response: бинарный файл (`attachment`), без `ApiResponse` wrapper.
+- Имена файлов:
+  - `dashboard-report.xlsx`
+  - `finance-report.xlsx`
+  - `subscriptions-report.xlsx`
+  - `teachers-report.xlsx`
+  - `retention-report.xlsx`
+  - `group-load-report.xlsx`
+  - `room-load-report.xlsx`
+  - `group-attendance-report.xlsx`
+
+> Эти экспортные endpoint'ы используют ту же модель доступа и те же query params, что и соответствующие JSON endpoint'ы.
+
 ---
 
 ### 14.1 Главный дашборд
@@ -2359,6 +2589,10 @@ interface DashboardResponse {
 }
 ```
 
+#### `GET /api/v1/analytics/dashboard/export` — Скачать Excel
+
+**Query Params:** те же, что у `GET /api/v1/analytics/dashboard` (`from`, `to`, `lessonType`)
+
 ---
 
 ### 14.2 Сводка за сегодня
@@ -2420,6 +2654,10 @@ interface ExpiredSubscriptionDto {
 }
 ```
 
+Примечания по расчётам:
+- `debtors` формируется по отрицательному балансу `SUM(payments) - SUM(subscriptions)` с учётом подписок в статусах `ACTIVE | EXPIRED | FROZEN` (и legacy `COMPLETED`).
+- `upcomingBirthdays.daysUntil` и `turnsAge` считаются на backend с корректной обработкой даты рождения `29 февраля`.
+
 ---
 
 ### 14.3 Финансовый отчёт
@@ -2459,6 +2697,10 @@ interface FinanceReportResponse {
 }
 ```
 
+#### `GET /api/v1/analytics/finance-report/export` — Скачать Excel
+
+**Query Params:** те же, что у `GET /api/v1/analytics/finance-report` (`from`, `to`)
+
 ---
 
 ### 14.4 Отчёт по абонементам
@@ -2493,6 +2735,10 @@ interface SubscriptionReportResponse {
   }[];
 }
 ```
+
+#### `GET /api/v1/analytics/subscriptions/export` — Скачать Excel
+
+**Query Params:** те же, что у `GET /api/v1/analytics/subscriptions` (`from`, `to`, `onlySuspicious`)
 
 ---
 
@@ -2626,6 +2872,10 @@ interface TeacherAnalyticsResponse {
 }
 ```
 
+#### `GET /api/v1/analytics/teachers/export` — Скачать Excel
+
+**Query Params:** те же, что у `GET /api/v1/analytics/teachers` (`from`, `to`)
+
 ---
 
 ### 14.9 Когортный анализ удержания
@@ -2654,6 +2904,10 @@ interface RetentionResponse {
 }
 ```
 
+#### `GET /api/v1/analytics/retention/export` — Скачать Excel
+
+**Query Params:** те же, что у `GET /api/v1/analytics/retention` (`from`, `to`, `cohortType`)
+
 ---
 
 ### 14.10 Загрузка групп
@@ -2674,6 +2928,10 @@ interface GroupLoadResponse {
   }[];
 }
 ```
+
+#### `GET /api/v1/analytics/group-load/export` — Скачать Excel
+
+**Query Params:** не требуются
 
 ---
 
@@ -2705,6 +2963,10 @@ interface RoomLoadResponse {
   }[];
 }
 ```
+
+#### `GET /api/v1/analytics/room-load/export` — Скачать Excel
+
+**Query Params:** те же, что у `GET /api/v1/analytics/room-load` (`from`, `to`, `timelineDate`)
 
 ---
 
@@ -2738,6 +3000,10 @@ interface GroupAttendanceResponse {
 }
 ```
 
+#### `GET /api/v1/analytics/group-attendance/export` — Скачать Excel
+
+**Query Params:** те же, что у `GET /api/v1/analytics/group-attendance` (`groupId`, `months` или `from`+`to`)
+
 ---
 
 #### `GET /api/v1/analytics/group-attendance/{groupId}`
@@ -2757,6 +3023,16 @@ interface GroupAttendanceResponse {
   monthly: { month: string; rate: number }[];
 }
 ```
+
+### 14.13 Актуализация данных (cache freshness)
+
+Аналитика использует Redis-кэш с укороченными TTL и tenant-aware invalidation:
+
+- `analytics:today` — ~30 сек
+- `dashboard`, `finance`, `subscriptions`, `funnel`, `lead-conversions`, `managers`, `teachers`, `group-load`, `room-load`, `group-attendance` — ~2 мин
+- `retention` — ~5 мин
+
+Дополнительно при релевантных tenant-аудит событиях (`audit.exchange` / routing key `audit.tenant`) выполняется сброс tenant-ключей аналитики, чтобы dashboard/отчёты обновлялись быстрее после CRUD операций.
 
 ---
 
@@ -2920,6 +3196,12 @@ interface FileUploadResponse {
 }
 ```
 
+Конфигурация URL в ответе `FileUploadResponse.url`:
+- если задан `MINIO_PUBLIC_URL`, ссылка строится от него (рекомендуется для frontend);
+- иначе используется `MINIO_URL`.
+
+Для upload без `folder` backend использует папку `general`.
+
 ---
 
 ### 16.1 Файлы (`/api/v1/files`)
@@ -2932,7 +3214,7 @@ interface FileUploadResponse {
 **Request:** `multipart/form-data`
 ```
 file: <binary>
-folder: "avatars"    // необязательно: avatars | documents | reports
+folder: "avatars"    // необязательное имя папки; если не передано, используется "general"
 ```
 
 **Response:** `ApiResponse<FileUploadResponse>`
@@ -3594,6 +3876,358 @@ interface SettingsDto {
 | `file` | file | да | Изображение логотипа |
 
 **Response:** `ApiResponse<SettingsDto>`
+
+---
+
+### 21.1.1 KPAY интеграция (`/api/v1/settings/kpay`)
+
+```typescript
+type KpayRecipientField =
+  | 'PHONE'
+  | 'STUDENT_PHONE'
+  | 'PARENT_PHONE'
+  | 'ADDITIONAL_PHONE_1';
+
+interface KpaySettingsDto {
+  enabled: boolean;
+  configured: boolean;
+  merchantId: string | null;
+  apiBaseUrl: string | null;
+  recipientField: KpayRecipientField;
+  apiKeyMasked: string | null;
+  apiSecretMasked: string | null;
+}
+```
+
+#### `GET /api/v1/settings/kpay` — Получить настройки KPAY
+**Доступ:** `TENANT_ADMIN` или permission `SETTINGS_EDIT`
+
+**Response:** `ApiResponse<KpaySettingsDto>`
+
+> Секреты в открытом виде не возвращаются: в ответе только masked значения (`apiKeyMasked`, `apiSecretMasked`).
+
+#### `PUT /api/v1/settings/kpay` — Обновить настройки KPAY
+**Доступ:** `TENANT_ADMIN` или permission `SETTINGS_EDIT`
+
+**Request Body:**
+```json
+{
+  "enabled": true,
+  "merchantId": "KPAY-CABINET-001",
+  "apiBaseUrl": "https://kpayapp.kz/api/invoice/create",
+  "recipientField": "PARENT_PHONE",
+  "apiKey": "your-kpay-api-key",
+  "apiSecret": "your-kpay-api-secret"
+}
+```
+
+Правила:
+- при `enabled=true` обязательны `apiKey` и `apiSecret`;
+- `recipientField` определяет, из какого поля студента брать контакт для выставления счета.
+
+---
+
+### 21.1.2 ApiPay интеграция (`/api/v1/settings/apipay`)
+
+```typescript
+type ApiPayRecipientField =
+  | 'PHONE'
+  | 'STUDENT_PHONE'
+  | 'PARENT_PHONE'
+  | 'ADDITIONAL_PHONE_1';
+
+interface ApiPaySettingsDto {
+  enabled: boolean;
+  configured: boolean;
+  apiBaseUrl: string | null;
+  recipientField: ApiPayRecipientField;
+  apiKeyMasked: string | null;
+  webhookSecretMasked: string | null;
+}
+```
+
+#### `GET /api/v1/settings/apipay` — Получить настройки ApiPay
+**Доступ:** `TENANT_ADMIN` или permission `SETTINGS_EDIT`
+
+**Response:** `ApiResponse<ApiPaySettingsDto>`
+
+> Секреты в открытом виде не возвращаются: в ответе только masked значения (`apiKeyMasked`, `webhookSecretMasked`).
+
+#### `PUT /api/v1/settings/apipay` — Обновить настройки ApiPay
+**Доступ:** `TENANT_ADMIN` или permission `SETTINGS_EDIT`
+
+**Request Body:**
+```json
+{
+  "enabled": true,
+  "apiBaseUrl": "https://bpapi.bazarbay.site/api/v1",
+  "recipientField": "PARENT_PHONE",
+  "apiKey": "your-apipay-api-key",
+  "webhookSecret": "your-apipay-webhook-secret"
+}
+```
+
+Правила:
+- при `enabled=true` обязательны `apiKey`, `apiBaseUrl` и `webhookSecret`;
+- `recipientField` определяет, из какого поля студента брать телефон для выставления счета.
+
+---
+
+### 21.1.3 AISAR интеграция (`/api/v1/settings/aisar`)
+
+```typescript
+interface AisarSettingsDto {
+  enabled: boolean;
+  configured: boolean;
+  apiBaseUrl: string | null;
+  apiKeyMasked: string | null;
+  webhookSecretMasked: string | null;
+  webhookUrl: string | null;          // например: https://api.1edu.kz/internal/aisar/webhook/{tenantId}
+  signatureHeader: 'X-AISAR-Signature';
+  signatureAlgorithm: 'HMAC-SHA256';
+}
+```
+
+#### `GET /api/v1/settings/aisar` — Получить настройки AISAR
+**Доступ:** `TENANT_ADMIN` или permission `SETTINGS_EDIT`
+
+**Response:** `ApiResponse<AisarSettingsDto>`
+
+> Секреты в открытом виде не возвращаются: в ответе только masked значения (`apiKeyMasked`, `webhookSecretMasked`).
+
+#### `PUT /api/v1/settings/aisar` — Обновить настройки AISAR
+**Доступ:** `TENANT_ADMIN` или permission `SETTINGS_EDIT`
+
+**Request Body:**
+```json
+{
+  "enabled": true,
+  "apiBaseUrl": "https://aisar.app",
+  "apiKey": "your-aisar-api-key",
+  "webhookSecret": "whsec_..."
+}
+```
+
+Правила:
+- при `enabled=true` обязателен `webhookSecret`;
+- `apiKey` и `apiBaseUrl` сохраняются tenant-scoped и зарезервированы под дальнейшие исходящие вызовы AISAR API;
+- `webhookUrl` нужно вставить в AISAR webhook wizard как `URL endpoint`;
+- `webhookSecret` должен совпадать с секретом, который AISAR показывает при настройке webhook.
+
+#### `POST /internal/aisar/webhook/{tenantId}` — Callback входящих событий от AISAR
+**Доступ:** public webhook endpoint (без JWT, проброшен через gateway)
+
+Headers:
+- `X-AISAR-Signature: <hex | sha256=<hex> | base64>`
+
+Поведение:
+- webhook tenant-scoped по path variable `{tenantId}`;
+- подпись webhook валидируется HMAC-SHA256 по tenant secret из `settings-service`;
+- если в payload найден новый контакт с телефоном или email, создаётся lead с source=`AISAR`;
+- если lead с тем же телефоном или email уже существует, дубль не создаётся.
+
+---
+
+### 21.1.4 Freedom Telecom VPBX интеграция (`/api/v1/settings/ftelecom`)
+
+```typescript
+interface FtelecomSettingsDto {
+  enabled: boolean;
+  configured: boolean;
+  apiBaseUrl: string | null;
+  crmTokenMasked: string | null;
+  webhookUrl: string | null;   // например: https://api.1edu.kz/internal/ftelecom/webhook/{tenantId}
+  tokenField: 'crm_token';
+}
+```
+
+#### `GET /api/v1/settings/ftelecom` — Получить настройки Freedom Telecom
+**Доступ:** `TENANT_ADMIN` или permission `SETTINGS_EDIT`
+
+**Response:** `ApiResponse<FtelecomSettingsDto>`
+
+> Токен в открытом виде не возвращается: только masked (`crmTokenMasked`).
+
+#### `PUT /api/v1/settings/ftelecom` — Обновить настройки Freedom Telecom
+**Доступ:** `TENANT_ADMIN` или permission `SETTINGS_EDIT`
+
+**Request Body:**
+```json
+{
+  "enabled": true,
+  "apiBaseUrl": "https://api.vpbx.ftel.kz",
+  "crmToken": "your-ftelecom-crm-token"
+}
+```
+
+Правила:
+- при `enabled=true` обязателен `crmToken`;
+- `apiBaseUrl` сохраняется tenant-scoped для исходящих вызовов к VPBX API;
+- `webhookUrl` нужно указать в настройках CRM callback на стороне Freedom Telecom.
+
+#### `POST /internal/ftelecom/webhook/{tenantId}` — Callback событий от Freedom Telecom VPBX
+**Доступ:** public webhook endpoint (без JWT, проброшен через gateway)
+
+Требования к payload:
+- должен содержать `crm_token` (или `data.crm_token`);
+- `crm_token` должен совпадать с tenant token из `/api/v1/settings/ftelecom`.
+
+Поведение:
+- webhook tenant-scoped по path variable `{tenantId}`;
+- при валидном токене событие принимается и логируется в `lead-service`.
+
+---
+
+### 21.1.5 Zadarma интеграция (`/api/v1/settings/zadarma`)
+
+```typescript
+interface ZadarmaSettingsDto {
+  enabled: boolean;
+  configured: boolean;
+  apiBaseUrl: string | null;
+  userKeyMasked: string | null;
+  userSecretMasked: string | null;
+  webhookUrl: string | null;          // например: https://api.1edu.kz/internal/zadarma/webhook/{tenantId}
+  validationMode: 'GET ?zd_echo=<random>';
+  signatureHeader: 'Signature';
+  signatureAlgorithm: 'HMAC-SHA1 (base64)';
+}
+```
+
+#### `GET /api/v1/settings/zadarma` — Получить настройки Zadarma
+**Доступ:** `TENANT_ADMIN` или permission `SETTINGS_EDIT`
+
+**Response:** `ApiResponse<ZadarmaSettingsDto>`
+
+> Секреты в открытом виде не возвращаются: только masked значения.
+
+#### `PUT /api/v1/settings/zadarma` — Обновить настройки Zadarma
+**Доступ:** `TENANT_ADMIN` или permission `SETTINGS_EDIT`
+
+**Request Body:**
+```json
+{
+  "enabled": true,
+  "apiBaseUrl": "https://api.zadarma.com",
+  "userKey": "your-zadarma-key",
+  "userSecret": "your-zadarma-secret"
+}
+```
+
+Правила:
+- при `enabled=true` обязательны `userKey` и `userSecret`;
+- `webhookUrl` указывается в Zadarma как PBX notifications URL;
+- для URL validation Zadarma делает `GET ?zd_echo=<random>`, endpoint должен вернуть это значение без обёртки и дополнительных символов.
+
+#### `GET /internal/zadarma/webhook/{tenantId}?zd_echo=123456` — Валидация URL на стороне Zadarma
+**Доступ:** public webhook endpoint (без JWT, проброшен через gateway)
+
+Поведение:
+- backend возвращает raw значение `zd_echo` plain text;
+- tenant определяется по `{tenantId}`.
+
+#### `POST /internal/zadarma/webhook/{tenantId}` — Callback call notifications от Zadarma
+**Доступ:** public webhook endpoint (без JWT, проброшен через gateway)
+
+Headers:
+- `Signature: <base64-hmac-sha1>`
+
+Payload:
+- `application/x-www-form-urlencoded`
+- для входящих call-событий используются поля `event`, `caller_id`, `called_did`, `call_start`, `pbx_call_id`, `duration`, `disposition`, `call_id_with_rec`, `internal`
+
+Поведение:
+- подпись проверяется по tenant `userSecret`;
+- для `NOTIFY_INTERNAL` и `NOTIFY_END` создаётся lead с source=`ZADARMA`, если номер телефона новый;
+- дубликаты по телефону не создаются.
+
+---
+
+### 21.1.6 Google Drive backup (`/api/v1/settings/google-drive-backup`)
+
+```typescript
+interface GoogleDriveBackupSettingsDto {
+  enabled: boolean;
+  configured: boolean;
+  folderId: string | null;
+  accessTokenMasked: string | null;
+  lastBackupAt: string | null;
+}
+```
+
+#### `GET /api/v1/settings/google-drive-backup` — Получить настройки backup в Google Drive
+**Доступ:** `TENANT_ADMIN` или permission `SETTINGS_EDIT`
+
+#### `PUT /api/v1/settings/google-drive-backup` — Обновить настройки backup в Google Drive
+**Доступ:** `TENANT_ADMIN` или permission `SETTINGS_EDIT`
+
+**Request Body:**
+```json
+{
+  "enabled": true,
+  "folderId": "google-drive-folder-id",
+  "accessToken": "ya29...."
+}
+```
+
+Правила:
+- `accessToken` tenant-scoped и в ответах masked;
+- если `folderId` не указан, файл загружается в root Google Drive пользователя;
+- v1 — manual backup flow без scheduler и без refresh-token orchestration.
+
+#### `POST /api/v1/settings/google-drive-backup/run` — Запустить backup в Google Drive
+**Доступ:** `TENANT_ADMIN` или permission `SETTINGS_EDIT`
+
+**Response:** `ApiResponse<CloudBackupRunResultDto>`
+
+Поведение:
+- backend собирает snapshot tenant schema в `.json.gz`;
+- snapshot загружается в Google Drive multipart upload;
+- в ответе возвращается `provider`, `fileName`, `remoteId`, `completedAt`.
+
+---
+
+### 21.1.7 Yandex Disk backup (`/api/v1/settings/yandex-disk-backup`)
+
+```typescript
+interface YandexDiskBackupSettingsDto {
+  enabled: boolean;
+  configured: boolean;
+  folderPath: string | null;          // например: disk:/1edu-backups
+  accessTokenMasked: string | null;
+  lastBackupAt: string | null;
+}
+```
+
+#### `GET /api/v1/settings/yandex-disk-backup` — Получить настройки backup в Yandex Disk
+**Доступ:** `TENANT_ADMIN` или permission `SETTINGS_EDIT`
+
+#### `PUT /api/v1/settings/yandex-disk-backup` — Обновить настройки backup в Yandex Disk
+**Доступ:** `TENANT_ADMIN` или permission `SETTINGS_EDIT`
+
+**Request Body:**
+```json
+{
+  "enabled": true,
+  "folderPath": "disk:/1edu-backups",
+  "accessToken": "y0_AgAAAA..."
+}
+```
+
+Правила:
+- `folderPath` по умолчанию `disk:/1edu-backups`;
+- `accessToken` tenant-scoped и в ответах masked;
+- v1 — manual backup flow без scheduler.
+
+#### `POST /api/v1/settings/yandex-disk-backup/run` — Запустить backup в Yandex Disk
+**Доступ:** `TENANT_ADMIN` или permission `SETTINGS_EDIT`
+
+**Response:** `ApiResponse<CloudBackupRunResultDto>`
+
+Поведение:
+- backend собирает snapshot tenant schema в `.json.gz`;
+- получает upload href через Yandex Disk API и загружает файл в `folderPath`;
+- в ответе возвращается `provider`, `fileName`, `remotePath`, `completedAt`.
 
 ---
 

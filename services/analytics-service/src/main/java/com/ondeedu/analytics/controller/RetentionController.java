@@ -1,12 +1,14 @@
 package com.ondeedu.analytics.controller;
 
 import com.ondeedu.analytics.dto.response.RetentionResponse;
+import com.ondeedu.analytics.export.AnalyticsExcelExportService;
 import com.ondeedu.analytics.service.RetentionService;
 import com.ondeedu.common.dto.ApiResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -22,6 +24,7 @@ import java.time.LocalDate;
 public class RetentionController {
 
     private final RetentionService retentionService;
+    private final AnalyticsExcelExportService excelExportService;
 
     @GetMapping
     @PreAuthorize("hasAnyRole('TENANT_ADMIN', 'MANAGER') or hasAuthority('ANALYTICS_VIEW')")
@@ -33,5 +36,20 @@ public class RetentionController {
         if (from == null) from = LocalDate.now().minusMonths(6).withDayOfMonth(1);
         if (to == null) to = LocalDate.now();
         return ApiResponse.success(retentionService.getCohorts(from, to, cohortType));
+    }
+
+    @GetMapping("/export")
+    @PreAuthorize("hasAnyRole('TENANT_ADMIN', 'MANAGER') or hasAuthority('ANALYTICS_VIEW')")
+    @Operation(summary = "Скачать когортный анализ удержания в Excel")
+    public ResponseEntity<byte[]> exportCohorts(
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
+            @RequestParam(required = false, defaultValue = "FIRST_PAYMENT") String cohortType) {
+        if (from == null) from = LocalDate.now().minusMonths(6).withDayOfMonth(1);
+        if (to == null) to = LocalDate.now();
+
+        RetentionResponse report = retentionService.getCohorts(from, to, cohortType);
+        byte[] file = excelExportService.exportRetention(report, from, to, cohortType);
+        return ExcelResponseFactory.attachment("retention-report.xlsx", file);
     }
 }

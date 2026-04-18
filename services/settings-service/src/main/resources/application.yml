@@ -78,6 +78,10 @@ logging:
   level:
     com.ondeedu: INFO
 
+ondeedu:
+  integrations:
+    public-base-url: ${ONDEEDU_INTEGRATIONS_PUBLIC_BASE_URL:https://api.1edu.kz}
+
 services:
   auth-service:
     url: ${AUTH_SERVICE_URL:http://localhost:8101}

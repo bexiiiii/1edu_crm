@@ -1,5 +1,7 @@
 package com.ondeedu.analytics.config;
 
+import java.util.List;
+
 /**
  * Константы имён кешей аналитики.
  * Все имена используют TTL из {@link AnalyticsCacheConfig}.
@@ -8,39 +10,55 @@ public final class AnalyticsCacheNames {
 
     private AnalyticsCacheNames() {}
 
-    /** Статистика за сегодня — короткий TTL (5 мин), данные меняются постоянно */
+    /** Статистика за сегодня — самый короткий TTL, данные меняются постоянно */
     public static final String TODAY_STATS = "analytics:today";
 
-    /** Дашборд руководителя — 10 мин */
+    /** Дашборд руководителя */
     public static final String DASHBOARD = "analytics:dashboard";
 
-    /** Финансовый отчёт — 15 мин */
+    /** Финансовый отчёт */
     public static final String FINANCE_REPORT = "analytics:finance";
 
-    /** Отчёт по абонементам — 10 мин */
+    /** Отчёт по абонементам */
     public static final String SUBSCRIPTIONS = "analytics:subscriptions";
 
-    /** Воронка продаж — 15 мин */
+    /** Воронка продаж */
     public static final String FUNNEL = "analytics:funnel";
 
-    /** Конверсии лидов — 15 мин */
+    /** Конверсии лидов */
     public static final String LEAD_CONVERSIONS = "analytics:lead-conversions";
 
-    /** Менеджеры — 15 мин */
+    /** Менеджеры */
     public static final String MANAGERS = "analytics:managers";
 
-    /** Преподаватели — 15 мин */
+    /** Преподаватели */
     public static final String TEACHERS = "analytics:teachers";
 
-    /** Когортное удержание — 30 мин (исторические данные) */
+    /** Когортное удержание (исторические данные) */
     public static final String RETENTION = "analytics:retention";
 
-    /** Загрузка групп — 10 мин */
+    /** Загрузка групп */
     public static final String GROUP_LOAD = "analytics:group-load";
 
-    /** Загрузка аудиторий — 10 мин */
+    /** Загрузка аудиторий */
     public static final String ROOM_LOAD = "analytics:room-load";
 
-    /** Посещаемость группы — 15 мин */
+    /** Посещаемость группы */
     public static final String GROUP_ATTENDANCE = "analytics:group-attendance";
+
+    /** Список всех кешей аналитики для tenant-aware инвалидации. */
+    public static final List<String> ALL = List.of(
+            TODAY_STATS,
+            DASHBOARD,
+            FINANCE_REPORT,
+            SUBSCRIPTIONS,
+            FUNNEL,
+            LEAD_CONVERSIONS,
+            MANAGERS,
+            TEACHERS,
+            RETENTION,
+            GROUP_LOAD,
+            ROOM_LOAD,
+            GROUP_ATTENDANCE
+    );
 }

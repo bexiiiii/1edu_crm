@@ -78,25 +78,23 @@ public class TenantInterceptor implements HandlerInterceptor {
 
     private String extractTenantId(HttpServletRequest request) {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        String tenantFromHeader = TenantAccessValidator.normalize(request.getHeader(TENANT_HEADER));
 
         // Only SUPER_ADMIN can override tenant via X-Tenant-ID header
         boolean isSuperAdmin = authentication != null && authentication.getAuthorities().stream()
                 .anyMatch(a -> "ROLE_SUPER_ADMIN".equals(a.getAuthority()));
 
-        if (isSuperAdmin) {
-            String tenantFromHeader = request.getHeader(TENANT_HEADER);
-            if (tenantFromHeader != null && !tenantFromHeader.isBlank()) {
+        if (isSuperAdmin && tenantFromHeader != null) {
                 log.debug("SUPER_ADMIN override tenant via header: {}", tenantFromHeader);
                 return tenantFromHeader;
-            }
         }
 
-        // All users: resolve tenant from JWT claim
         if (authentication != null && authentication.getPrincipal() instanceof Jwt jwt) {
-            return jwt.getClaimAsString(TENANT_CLAIM);
+            String tenantFromJwt = TenantAccessValidator.normalize(jwt.getClaimAsString(TENANT_CLAIM));
+            return TenantAccessValidator.resolveTenantId(tenantFromHeader, tenantFromJwt, false);
         }
 
-        return null;
+        return tenantFromHeader;
     }
 
     private String extractUserId() {

@@ -1,12 +1,14 @@
 package com.ondeedu.analytics.controller;
 
 import com.ondeedu.analytics.dto.response.TeacherAnalyticsResponse;
+import com.ondeedu.analytics.export.AnalyticsExcelExportService;
 import com.ondeedu.analytics.service.TeacherAnalyticsService;
 import com.ondeedu.common.dto.ApiResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -22,6 +24,7 @@ import java.time.LocalDate;
 public class TeacherAnalyticsController {
 
     private final TeacherAnalyticsService teacherAnalyticsService;
+    private final AnalyticsExcelExportService excelExportService;
 
     @GetMapping
     @PreAuthorize("hasAnyRole('TENANT_ADMIN', 'MANAGER') or hasAuthority('ANALYTICS_VIEW')")
@@ -32,5 +35,19 @@ public class TeacherAnalyticsController {
         if (from == null) from = LocalDate.now().withDayOfMonth(1);
         if (to == null) to = LocalDate.now();
         return ApiResponse.success(teacherAnalyticsService.getAnalytics(from, to));
+    }
+
+    @GetMapping("/export")
+    @PreAuthorize("hasAnyRole('TENANT_ADMIN', 'MANAGER') or hasAuthority('ANALYTICS_VIEW')")
+    @Operation(summary = "Скачать аналитику преподавателей в Excel")
+    public ResponseEntity<byte[]> exportAnalytics(
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to) {
+        if (from == null) from = LocalDate.now().withDayOfMonth(1);
+        if (to == null) to = LocalDate.now();
+
+        TeacherAnalyticsResponse report = teacherAnalyticsService.getAnalytics(from, to);
+        byte[] file = excelExportService.exportTeachers(report, from, to);
+        return ExcelResponseFactory.attachment("teachers-report.xlsx", file);
     }
 }

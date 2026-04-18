@@ -48,6 +48,37 @@ spring:
             allowCredentials: true
 
       routes:
+        # Public integration webhooks
+        - id: aisar-webhook
+          uri: lb://lead-service
+          predicates:
+            - Path=/internal/aisar/**
+          filters:
+            - name: CircuitBreaker
+              args:
+                name: leadService
+                fallbackUri: forward:/fallback/lead
+
+        - id: ftelecom-webhook
+          uri: lb://lead-service
+          predicates:
+            - Path=/internal/ftelecom/**
+          filters:
+            - name: CircuitBreaker
+              args:
+                name: leadService
+                fallbackUri: forward:/fallback/lead
+
+        - id: zadarma-webhook
+          uri: lb://lead-service
+          predicates:
+            - Path=/internal/zadarma/**
+          filters:
+            - name: CircuitBreaker
+              args:
+                name: leadService
+                fallbackUri: forward:/fallback/lead
+
         # Public Registration (no auth required)
         - id: registration
           uri: lb://tenant-service

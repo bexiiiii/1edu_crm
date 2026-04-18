@@ -73,6 +73,15 @@ public class TenantService {
             entityManager.createNativeQuery("SELECT system.ensure_extended_settings_schema(:schemaName)")
                 .setParameter("schemaName", schemaName)
                 .getSingleResult();
+            entityManager.createNativeQuery("SELECT system.ensure_kpay_schema(:schemaName)")
+                .setParameter("schemaName", schemaName)
+                .getSingleResult();
+            entityManager.createNativeQuery("SELECT system.ensure_apipay_schema(:schemaName)")
+                .setParameter("schemaName", schemaName)
+                .getSingleResult();
+            entityManager.createNativeQuery("SELECT system.ensure_ftelecom_schema(:schemaName)")
+                .setParameter("schemaName", schemaName)
+                .getSingleResult();
             entityManager.createNativeQuery("SELECT system.ensure_amount_change_reason_schema(:schemaName)")
                 .setParameter("schemaName", schemaName)
                 .getSingleResult();

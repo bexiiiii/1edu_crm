@@ -1,0 +1,8 @@
+package com.ondeedu.common.payment;
+
+public enum KpayRecipientField {
+    PHONE,
+    STUDENT_PHONE,
+    PARENT_PHONE,
+    ADDITIONAL_PHONE_1
+}

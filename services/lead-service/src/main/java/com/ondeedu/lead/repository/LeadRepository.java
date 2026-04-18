@@ -9,6 +9,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import java.util.Optional;
 import java.util.UUID;
 
 @Repository
@@ -26,6 +27,18 @@ public interface LeadRepository extends JpaRepository<Lead, UUID> {
            OR LOWER(l.email) LIKE LOWER(CONCAT('%', :query, '%'))
         """)
     Page<Lead> search(@Param("query") String query, Pageable pageable);
+
+    @Query(value = """
+        SELECT *
+        FROM leads l
+        WHERE regexp_replace(COALESCE(l.phone, ''), '[^0-9]', '', 'g')
+              = regexp_replace(CAST(:phone AS text), '[^0-9]', '', 'g')
+        ORDER BY l.created_at DESC
+        LIMIT 1
+        """, nativeQuery = true)
+    Optional<Lead> findLatestByNormalizedPhone(@Param("phone") String phone);
+
+    Optional<Lead> findFirstByEmailIgnoreCaseOrderByCreatedAtDesc(String email);
 
     long countByStage(LeadStage stage);
 }

@@ -59,6 +59,20 @@ grpc:
   client:
     GLOBAL:
       negotiation-type: plaintext
+    student-service:
+      address: static://localhost:9102
+    settings-service:
+      address: static://localhost:9128
+
+payment:
+  kpay:
+    billing:
+      enabled: true
+      cron: ${KPAY_BILLING_CRON:0 0 20 28-31 * *}
+  apipay:
+    billing:
+      enabled: true
+      cron: ${APIPAY_BILLING_CRON:0 15 20 28-31 * *}
 
 management:
   endpoints:

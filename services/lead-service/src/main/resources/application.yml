@@ -65,6 +65,8 @@ grpc:
       negotiation-type: plaintext
     staff-service:
       address: static://localhost:9122
+    settings-service:
+      address: static://localhost:9128
 
 management:
   endpoints:
