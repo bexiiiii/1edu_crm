@@ -17,7 +17,13 @@ public class WebConfig implements WebMvcConfigurer {
     public void addInterceptors(InterceptorRegistry registry) {
         registry.addInterceptor(tenantInterceptor)
             .addPathPatterns("/api/**")
-            .excludePathPatterns("/actuator/**", "/v3/api-docs/**", "/swagger-ui/**");
+            .excludePathPatterns(
+                "/actuator/**",
+                "/v3/api-docs/**",
+                "/swagger-ui/**",
+                "/api/v1/settings/google-drive-backup/oauth/callback",
+                "/api/v1/settings/yandex-disk-backup/oauth/callback"
+            );
     }
 
     @Override

@@ -575,6 +575,8 @@ public class SettingsService {
             settings.setGoogleDriveBackupEnabled(true);
             settingsRepository.save(settings);
             log.info("Google Drive OAuth connected for tenant {}", stateData.tenantId());
+
+            triggerInitialGoogleDriveBackupSafely(stateData.tenantId());
         } finally {
             TenantContext.clear();
         }
@@ -662,6 +664,8 @@ public class SettingsService {
             settings.setYandexDiskBackupEnabled(true);
             settingsRepository.save(settings);
             log.info("Yandex Disk OAuth connected for tenant {}", stateData.tenantId());
+
+            triggerInitialYandexDiskBackupSafely(stateData.tenantId());
         } finally {
             TenantContext.clear();
         }
@@ -806,6 +810,28 @@ public class SettingsService {
             return effectiveBase + "/" + normalizedPath;
         }
         return effectiveBase + "/" + minioBucket + "/" + normalizedPath;
+    }
+
+    private void triggerInitialGoogleDriveBackupSafely(String tenantId) {
+        try {
+            CloudBackupRunResultDto result = runGoogleDriveBackup();
+            log.info("Initial Google Drive backup completed for tenant {}: file={}, remoteId={}",
+                    tenantId, result.getFileName(), result.getRemoteId());
+        } catch (Exception ex) {
+            log.warn("Google Drive connected for tenant {}, but initial backup failed: {}",
+                    tenantId, ex.getMessage());
+        }
+    }
+
+    private void triggerInitialYandexDiskBackupSafely(String tenantId) {
+        try {
+            CloudBackupRunResultDto result = runYandexDiskBackup();
+            log.info("Initial Yandex Disk backup completed for tenant {}: file={}, remotePath={}",
+                    tenantId, result.getFileName(), result.getRemotePath());
+        } catch (Exception ex) {
+            log.warn("Yandex Disk connected for tenant {}, but initial backup failed: {}",
+                    tenantId, ex.getMessage());
+        }
     }
 
     private String normalizeBaseUrl(String url) {

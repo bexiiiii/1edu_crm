@@ -38,7 +38,12 @@ public class TenantContextFilter extends OncePerRequestFilter {
     @Override
     protected boolean shouldNotFilter(@NonNull HttpServletRequest request) {
         String path = request.getRequestURI();
-        return !StringUtils.hasText(path) || !path.startsWith("/api/");
+        if (!StringUtils.hasText(path) || !path.startsWith("/api/")) {
+            return true;
+        }
+
+        return "/api/v1/settings/google-drive-backup/oauth/callback".equals(path)
+                || "/api/v1/settings/yandex-disk-backup/oauth/callback".equals(path);
     }
 
     @Override

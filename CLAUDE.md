@@ -258,6 +258,20 @@ nginx кэширует IP контейнера — после рестарта a
 2. Проверить `api-gateway /actuator/health` — `settings-service` должен быть в discovery list.
 3. При необходимости перезапустить `api-gateway` (очистка stale routing cache).
 
+#### OAuth callback возвращает `TENANT_CONTEXT_REQUIRED`
+На публичных callback URL (`/api/v1/settings/*/oauth/callback`) нет JWT и `X-Tenant-ID`, поэтому tenant должен резолвиться из подписанного `state`.
+
+**Симптомы**:
+- callback URL возвращает JSON ошибку `TENANT_CONTEXT_REQUIRED` вместо HTML OAuth результата;
+- Google/Yandex авторизация проходит у провайдера, но в CRM соединение не сохраняется.
+
+**Решение**:
+- исключить callback пути из `TenantContextFilter`/`TenantInterceptor` в common;
+- tenant context устанавливать внутри `SettingsService.complete*OAuth(...)` из `state` (`tenant_id + schema`);
+- после деплоя `settings-service` при необходимости перезапустить `api-gateway`, если виден fallback `service=settings`.
+- при успешном callback контроллер возвращает `302` redirect на frontend страницу настроек (default: `https://app.1edu.kz/settings`, настраивается через `ondeedu.frontend.settings-url`).
+- после успешного callback `settings-service` делает best-effort автозапуск первого backup в подключённый cloud provider; если upload не удался, OAuth-подключение всё равно сохраняется.
+
 #### ApiPay webhook 400 (signature missing/invalid)
 ApiPay/Kaspi может прислать подпись не только в `X-Webhook-Signature`, но и в альтернативных заголовках.
 
@@ -268,6 +282,7 @@ ApiPay/Kaspi может прислать подпись не только в `X-
 **Решение**:
 - backend принимает `X-Webhook-Signature` (основной), а также `Signature`/`X-Signature`;
 - поддерживает формат подписи `sha256=<hex>` и raw hex (`64` символа);
+- для sandbox resend (`invoice.is_sandbox=true`) webhook допускает отсутствие подписи;
 - для стабильности на стороне провайдера рекомендуется отправлять `X-Webhook-Signature: sha256=<hex>`.
 
 #### ApiPay/KPAY: single vs generate endpoint
@@ -280,6 +295,7 @@ ApiPay/Kaspi может прислать подпись не только в `X-
 **Решение**:
 - для ручного счёта использовать только `.../invoices/single`;
 - при нескольких абонементах у ученика передавать `subscriptionId` явно;
+- `.../invoices/single` теперь поддерживает reissue: если счёт за месяц уже есть, но не `PAID`, запись переиспользуется и перевыставляется;
 - payload для `.../invoices/generate` строгий (только `month`), лишние поля дают `400`.
 
 #### MinIO internal URL в API-ответах (studentPhoto/logoUrl)

@@ -31,6 +31,7 @@ import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.util.StringUtils;
 import org.springframework.web.client.RestClientException;
 
@@ -73,6 +74,7 @@ public class ApiPayInvoiceService {
     private final ApiPayApiClient apiPayApiClient;
     private final StudentPaymentService studentPaymentService;
     private final ObjectMapper objectMapper;
+    private final TransactionTemplate transactionTemplate;
 
     @Transactional
     public GenerateApiPayInvoicesResponse generateMonthlyInvoices(String month) {
@@ -224,10 +226,12 @@ public class ApiPayInvoiceService {
         }
 
         Subscription subscription = resolveSubscriptionForStudent(request.getStudentId(), request.getSubscriptionId(), targetMonth);
-
-        if (apiPayInvoiceRepository.existsBySubscriptionIdAndPaymentMonth(subscription.getId(), targetMonth.toString())) {
-            throw new BusinessException("APIPAY_INVOICE_ALREADY_EXISTS",
-                    "ApiPay invoice for selected subscription and month already exists");
+        ApiPayInvoice existingInvoice = apiPayInvoiceRepository
+            .findBySubscriptionIdAndPaymentMonth(subscription.getId(), targetMonth.toString())
+            .orElse(null);
+        if (existingInvoice != null && existingInvoice.getStatus() == ApiPayInvoiceStatus.PAID) {
+            throw new BusinessException("APIPAY_INVOICE_ALREADY_PAID",
+                "ApiPay invoice for selected subscription and month is already paid");
         }
 
         StudentGrpcClient.StudentContactData student = studentGrpcClient.getStudentContact(request.getStudentId())
@@ -260,7 +264,9 @@ public class ApiPayInvoiceService {
                 : "Оплата абонемента " + targetMonth;
 
         String merchantInvoiceId = buildMerchantInvoiceId(tenantId);
-        ApiPayInvoice invoice = ApiPayInvoice.builder()
+        ApiPayInvoice invoice;
+        if (existingInvoice == null) {
+            invoice = ApiPayInvoice.builder()
                 .studentId(subscription.getStudentId())
                 .subscriptionId(subscription.getId())
                 .paymentMonth(targetMonth.toString())
@@ -272,6 +278,30 @@ public class ApiPayInvoiceService {
                 .status(ApiPayInvoiceStatus.CREATED)
                 .requestPayload(buildRequestPayload(merchantInvoiceId, amount, recipient, currency))
                 .build();
+        } else {
+            invoice = existingInvoice;
+            invoice.setStudentId(subscription.getStudentId());
+            invoice.setSubscriptionId(subscription.getId());
+            invoice.setPaymentMonth(targetMonth.toString());
+            invoice.setRecipientField(recipientField.name());
+            invoice.setRecipientValue(recipient);
+            invoice.setAmount(amount);
+            invoice.setCurrency(currency);
+            invoice.setMerchantInvoiceId(merchantInvoiceId);
+            invoice.setStatus(ApiPayInvoiceStatus.CREATED);
+            invoice.setRequestPayload(buildRequestPayload(merchantInvoiceId, amount, recipient, currency));
+            invoice.setExternalInvoiceId(null);
+            invoice.setPaymentUrl(null);
+            invoice.setResponsePayload(null);
+            invoice.setWebhookPayload(null);
+            invoice.setExternalPaymentMethod(null);
+            invoice.setExternalTransactionId(null);
+            invoice.setPaidAt(null);
+            invoice.setStudentPaymentId(null);
+            invoice.setErrorMessage(null);
+            log.info("Reissuing ApiPay invoice for subscription={} month={} previousStatus={}",
+                subscription.getId(), targetMonth, existingInvoice.getStatus());
+        }
 
         invoice = apiPayInvoiceRepository.save(invoice);
 
@@ -311,7 +341,7 @@ public class ApiPayInvoiceService {
             return cb.and(predicates.toArray(new Predicate[0]));
         };
 
-        return apiPayInvoiceRepository.findAll(spec, Sort.by(Sort.Direction.DESC, "createdAt")).stream()
+        return apiPayInvoiceRepository.findAll(spec, Sort.by(Sort.Direction.DESC, "updatedAt")).stream()
                 .map(this::toDto)
                 .toList();
     }
@@ -323,7 +353,6 @@ public class ApiPayInvoiceService {
         return toDto(invoice);
     }
 
-    @Transactional
     public void handleWebhookPayload(String payload, String signatureHeader) {
         ApiPayWebhookRequest request = parseWebhook(payload);
         String merchantInvoiceId = extractMerchantInvoiceId(request);
@@ -332,75 +361,97 @@ public class ApiPayInvoiceService {
             throw new BusinessException("APIPAY_INVOICE_ID_REQUIRED", "invoice id is required");
         }
 
-        boolean contextInjected = false;
-        if (!StringUtils.hasText(TenantContext.getTenantId())) {
-            String tenantId = extractTenantIdFromMerchantInvoiceId(merchantInvoiceId);
-            if (!StringUtils.hasText(tenantId)) {
-                throw new BusinessException("APIPAY_TENANT_ID_NOT_FOUND",
-                        "Unable to resolve tenant from merchant invoice id");
-            }
-            String schemaName = TenantSchemaResolver.schemaNameForTenantId(tenantId);
-            if (!StringUtils.hasText(schemaName)) {
-                throw new BusinessException("APIPAY_INVALID_TENANT", "Invalid tenant in merchant invoice id");
-            }
-            TenantContext.setTenantId(tenantId);
-            TenantContext.setSchemaName(schemaName);
-            contextInjected = true;
+        String tenantId = extractTenantIdFromMerchantInvoiceId(merchantInvoiceId);
+        if (!StringUtils.hasText(tenantId)) {
+            throw new BusinessException("APIPAY_TENANT_ID_NOT_FOUND",
+                    "Unable to resolve tenant from merchant invoice id");
         }
 
+        String schemaName = TenantSchemaResolver.schemaNameForTenantId(tenantId);
+        if (!StringUtils.hasText(schemaName)) {
+            throw new BusinessException("APIPAY_INVALID_TENANT", "Invalid tenant in merchant invoice id");
+        }
+
+        String previousTenantId = TenantContext.getTenantId();
+        String previousSchemaName = TenantContext.getSchemaNameOrNull();
+        String previousUserId = TenantContext.getUserId();
+
+        TenantContext.setTenantId(tenantId);
+        TenantContext.setSchemaName(schemaName);
+
         try {
-            SettingsGrpcClient.ApiPayConfigData config = settingsGrpcClient.getApiPayConfig()
-                    .orElseThrow(() -> new BusinessException("APIPAY_CONFIG_NOT_FOUND",
-                            "ApiPay settings are not configured for current tenant"));
-
-            verifyWebhookSignature(payload, signatureHeader, config.webhookSecret());
-
-            ApiPayInvoice invoice = apiPayInvoiceRepository.findByMerchantInvoiceId(merchantInvoiceId)
-                    .orElseThrow(() -> new ResourceNotFoundException("ApiPayInvoice", "merchantInvoiceId", merchantInvoiceId));
-
-            invoice.setWebhookPayload(payload);
-            if (request.getInvoice() != null) {
-                invoice.setExternalInvoiceId(firstNonBlank(request.getInvoice().getKaspiInvoiceId(), invoice.getExternalInvoiceId()));
-            }
-
-            ApiPayInvoiceStatus targetStatus = mapWebhookStatus(request);
-            invoice.setStatus(targetStatus);
-
-            if (targetStatus == ApiPayInvoiceStatus.PAID) {
-                Instant paidAt = parsePaidAt(request);
-                invoice.setPaidAt(paidAt);
-
-                if (invoice.getStudentPaymentId() == null) {
-                    BigDecimal paidAmount = request.getAmount() != null
-                            ? request.getAmount()
-                            : request.getInvoice() != null && request.getInvoice().getAmount() != null
-                                    ? request.getInvoice().getAmount()
-                                    : invoice.getAmount();
-
-                    RecordPaymentRequest recordPaymentRequest = RecordPaymentRequest.builder()
-                            .studentId(invoice.getStudentId())
-                            .subscriptionId(invoice.getSubscriptionId())
-                            .amount(paidAmount)
-                            .paymentMonth(invoice.getPaymentMonth())
-                            .method(PaymentMethod.OTHER)
-                            .paidAt(paidAt.atZone(ZoneId.systemDefault()).toLocalDate())
-                            .notes(buildPaymentNote(merchantInvoiceId))
-                            .build();
-
-                    var payment = studentPaymentService.recordPayment(recordPaymentRequest);
-                    invoice.setStudentPaymentId(payment.getId());
-                }
-                invoice.setErrorMessage(null);
-            } else if (targetStatus == ApiPayInvoiceStatus.FAILED) {
-                invoice.setErrorMessage(firstNonBlank(request.getReason(), "ApiPay webhook marked invoice as failed"));
-            }
-
-            apiPayInvoiceRepository.save(invoice);
+            transactionTemplate.executeWithoutResult(status ->
+                    processWebhookPayloadInTenant(payload, signatureHeader, request, merchantInvoiceId));
         } finally {
-            if (contextInjected) {
+            if (StringUtils.hasText(previousTenantId) || StringUtils.hasText(previousSchemaName)
+                    || StringUtils.hasText(previousUserId)) {
+                TenantContext.setTenantId(previousTenantId);
+                TenantContext.setSchemaName(previousSchemaName);
+                TenantContext.setUserId(previousUserId);
+            } else {
                 TenantContext.clear();
             }
         }
+    }
+
+    private void processWebhookPayloadInTenant(String payload,
+                                               String signatureHeader,
+                                               ApiPayWebhookRequest request,
+                                               String merchantInvoiceId) {
+        SettingsGrpcClient.ApiPayConfigData config = settingsGrpcClient.getApiPayConfig()
+                .orElseThrow(() -> new BusinessException("APIPAY_CONFIG_NOT_FOUND",
+                        "ApiPay settings are not configured for current tenant"));
+
+        verifyWebhookSignature(payload, signatureHeader, config.webhookSecret(), request);
+
+        Optional<ApiPayInvoice> invoiceOpt = apiPayInvoiceRepository.findByMerchantInvoiceId(merchantInvoiceId);
+        if (invoiceOpt.isEmpty()) {
+            if (isSandboxWebhook(request)) {
+                log.warn("ApiPay sandbox webhook ignored: invoice not found for merchantInvoiceId={}", merchantInvoiceId);
+                return;
+            }
+            throw new ResourceNotFoundException("ApiPayInvoice", "merchantInvoiceId", merchantInvoiceId);
+        }
+        ApiPayInvoice invoice = invoiceOpt.get();
+
+        invoice.setWebhookPayload(payload);
+        if (request.getInvoice() != null) {
+            invoice.setExternalInvoiceId(firstNonBlank(request.getInvoice().getKaspiInvoiceId(), invoice.getExternalInvoiceId()));
+        }
+
+        ApiPayInvoiceStatus targetStatus = mapWebhookStatus(request);
+        invoice.setStatus(targetStatus);
+
+        if (targetStatus == ApiPayInvoiceStatus.PAID) {
+            Instant paidAt = parsePaidAt(request);
+            invoice.setPaidAt(paidAt);
+
+            if (invoice.getStudentPaymentId() == null) {
+                BigDecimal paidAmount = request.getAmount() != null
+                        ? request.getAmount()
+                        : request.getInvoice() != null && request.getInvoice().getAmount() != null
+                        ? request.getInvoice().getAmount()
+                        : invoice.getAmount();
+
+                RecordPaymentRequest recordPaymentRequest = RecordPaymentRequest.builder()
+                        .studentId(invoice.getStudentId())
+                        .subscriptionId(invoice.getSubscriptionId())
+                        .amount(paidAmount)
+                        .paymentMonth(invoice.getPaymentMonth())
+                        .method(PaymentMethod.OTHER)
+                        .paidAt(paidAt.atZone(ZoneId.systemDefault()).toLocalDate())
+                        .notes(buildPaymentNote(merchantInvoiceId))
+                        .build();
+
+                var payment = studentPaymentService.recordPayment(recordPaymentRequest);
+                invoice.setStudentPaymentId(payment.getId());
+            }
+            invoice.setErrorMessage(null);
+        } else if (targetStatus == ApiPayInvoiceStatus.FAILED) {
+            invoice.setErrorMessage(firstNonBlank(request.getReason(), "ApiPay webhook marked invoice as failed"));
+        }
+
+        apiPayInvoiceRepository.save(invoice);
     }
 
     private ApiPayWebhookRequest parseWebhook(String payload) {
@@ -411,12 +462,20 @@ public class ApiPayInvoiceService {
         }
     }
 
-    private void verifyWebhookSignature(String payload, String signatureHeader, String secret) {
+    private void verifyWebhookSignature(String payload,
+                                        String signatureHeader,
+                                        String secret,
+                                        ApiPayWebhookRequest request) {
+        if (!StringUtils.hasText(signatureHeader)) {
+            if (isSandboxWebhook(request)) {
+                log.warn("ApiPay webhook received without signature for sandbox invoice; accepted");
+                return;
+            }
+            throw new BusinessException("APIPAY_SIGNATURE_MISSING", APIPAY_SIGNATURE_HEADER + " is required");
+        }
+
         if (!StringUtils.hasText(secret)) {
             throw new BusinessException("APIPAY_WEBHOOK_SECRET_REQUIRED", "ApiPay webhook secret is not configured");
-        }
-        if (!StringUtils.hasText(signatureHeader)) {
-            throw new BusinessException("APIPAY_SIGNATURE_MISSING", APIPAY_SIGNATURE_HEADER + " is required");
         }
 
         try {
@@ -454,12 +513,21 @@ public class ApiPayInvoiceService {
         return signature;
     }
 
+    private boolean isSandboxWebhook(ApiPayWebhookRequest request) {
+        return request != null
+                && request.getInvoice() != null
+                && Boolean.TRUE.equals(request.getInvoice().getSandbox());
+    }
+
     private String extractMerchantInvoiceId(ApiPayWebhookRequest request) {
         if (request == null) {
             return null;
         }
         if (StringUtils.hasText(request.getInvoiceId())) {
             return request.getInvoiceId();
+        }
+        if (request.getInvoice() != null && StringUtils.hasText(request.getInvoice().getExternalOrderId())) {
+            return request.getInvoice().getExternalOrderId();
         }
         if (request.getInvoice() != null && StringUtils.hasText(request.getInvoice().getId())) {
             return request.getInvoice().getId();

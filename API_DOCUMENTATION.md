@@ -2280,6 +2280,8 @@ interface GenerateApiPayInvoicesResponse {
 - `amount` optional: если не передан, сумма считается автоматически из абонемента;
 - для ApiPay телефон автоматически нормализуется к формату `8XXXXXXXXXX`.
 - при наличии нескольких релевантных абонементов у ученика рекомендуется передавать `subscriptionId` явно.
+- если счёт за этот `subscriptionId + month` уже существует и НЕ оплачен (`CREATED/PENDING/FAILED/CANCELLED/EXPIRED/REFUNDED`), endpoint перевыставляет счёт (reissue) вместо ошибки дубликата;
+- если счёт уже `PAID`, endpoint возвращает `APIPAY_INVOICE_ALREADY_PAID`.
 
 **Response:** `ApiResponse<ApiPayInvoiceDto>`
 
@@ -2289,6 +2291,10 @@ interface GenerateApiPayInvoicesResponse {
 **Query Params:**
 - `month` (optional): `YYYY-MM`
 - `status` (optional): `CREATED | PENDING | PAID | FAILED | CANCELLED | EXPIRED | REFUNDED`
+
+Поведение:
+- список сортируется по `updatedAt DESC`, поэтому перевыставленный (reissue) счёт и любые webhook-обновления статуса отображаются вверху таблицы;
+- webhook-статусы (`pending/paid/cancelled/expired/...`) отражаются в этом же списке без дополнительного endpoint.
 
 **Response:** `ApiResponse<List<ApiPayInvoiceDto>>`
 
@@ -2312,7 +2318,8 @@ Headers:
 - webhook обновляет статус `apipay_invoices`;
 - подпись webhook валидируется HMAC-SHA256 (секрет из tenant settings);
 - при статусе `PAID` автоматически записывает платеж в `student_payments` и связывает его с `apipay_invoices.studentPaymentId`.
-- при отсутствии/некорректной подписи webhook возвращает `400` (`APIPAY_SIGNATURE_MISSING` / `APIPAY_SIGNATURE_INVALID`).
+- при отсутствии подписи webhook возвращает `400` (`APIPAY_SIGNATURE_MISSING`), кроме sandbox payload (`invoice.is_sandbox=true`) — такие повторные уведомления принимаются без подписи;
+- при некорректной подписи webhook возвращает `400` (`APIPAY_SIGNATURE_INVALID`).
 
 ---
 
@@ -4284,12 +4291,18 @@ interface GoogleDriveBackupSettingsDto {
 
 Поведение:
 - валидируется подписанный `state` (tenant-aware);
+- tenant контекст для callback берётся из `state` (заголовок `X-Tenant-ID` не требуется);
 - access token сохраняется в tenant settings;
 - интеграция автоматически включается (`enabled=true`).
+- сразу после успешного OAuth backend делает best-effort автозапуск первого backup (ошибка backup не откатывает подключение интеграции);
+- при успешной авторизации callback делает redirect (`302`) на frontend settings страницу (`https://app.1edu.kz/settings` по умолчанию).
 
 Если backend отвечает `GOOGLE_DRIVE_OAUTH_NOT_CONFIGURED`, на сервере не заданы OAuth env-переменные:
 - `ONDEEDU_GOOGLE_DRIVE_OAUTH_CLIENT_ID`
 - `ONDEEDU_GOOGLE_DRIVE_OAUTH_CLIENT_SECRET`
+
+Опциональная настройка redirect URL:
+- `ondeedu.frontend.settings-url` (default: `https://app.1edu.kz/settings`)
 
 #### `PUT /api/v1/settings/google-drive-backup` — Обновить настройки backup в Google Drive
 **Доступ:** `TENANT_ADMIN` или permission `SETTINGS_EDIT`
@@ -4307,7 +4320,7 @@ interface GoogleDriveBackupSettingsDto {
 - `accessToken` tenant-scoped и в ответах masked;
 - `accessToken` можно не передавать при OAuth-connect flow (callback сохранит токен автоматически);
 - если `folderId` не указан, файл загружается в root Google Drive пользователя;
-- backup запускается вручную.
+- backup можно запускать вручную; первый запуск также выполняется автоматически после OAuth callback.
 
 #### `POST /api/v1/settings/google-drive-backup/run` — Запустить backup в Google Drive
 **Доступ:** `TENANT_ADMIN` или permission `SETTINGS_EDIT`
@@ -4355,8 +4368,11 @@ interface YandexDiskBackupSettingsDto {
 
 Поведение:
 - валидируется подписанный `state` (tenant-aware);
+- tenant контекст для callback берётся из `state` (заголовок `X-Tenant-ID` не требуется);
 - access token сохраняется в tenant settings;
 - интеграция автоматически включается (`enabled=true`).
+- сразу после успешного OAuth backend делает best-effort автозапуск первого backup (ошибка backup не откатывает подключение интеграции);
+- при успешной авторизации callback делает redirect (`302`) на frontend settings страницу (`https://app.1edu.kz/settings` по умолчанию).
 
 Если backend отвечает `YANDEX_DISK_OAUTH_NOT_CONFIGURED`, на сервере не заданы OAuth env-переменные:
 - `ONDEEDU_YANDEX_DISK_OAUTH_CLIENT_ID`
@@ -4378,7 +4394,7 @@ interface YandexDiskBackupSettingsDto {
 - `folderPath` по умолчанию `disk:/1edu-backups`;
 - `accessToken` tenant-scoped и в ответах masked;
 - `accessToken` можно не передавать при OAuth-connect flow (callback сохранит токен автоматически);
-- backup запускается вручную.
+- backup можно запускать вручную; первый запуск также выполняется автоматически после OAuth callback.
 
 #### `POST /api/v1/settings/yandex-disk-backup/run` — Запустить backup в Yandex Disk
 **Доступ:** `TENANT_ADMIN` или permission `SETTINGS_EDIT`

@@ -202,9 +202,13 @@ Webhook ingress sanity check:
 
 - if `https://api.1edu.kz/internal/aisar/...`, `.../ftelecom/...`, `.../zadarma/...`, `.../apipay/...`, `.../kpay/...` returns `404` from edge, verify nginx has `location /internal/ { proxy_pass http://api_gateway; ... }` and reload nginx.
 - if OAuth callback URLs under `/api/v1/settings/*/oauth/callback` return `401`, verify gateway/service security allowlist includes these callback paths.
-- if `POST /internal/apipay/webhook` returns `400`, verify provider sends signature in `X-Webhook-Signature` (preferred) or `Signature`/`X-Signature`, and signature format is `sha256=<hex>` (or raw 64-char hex).
+- if OAuth callback returns `TENANT_CONTEXT_REQUIRED`, ensure common tenant guards (`TenantContextFilter` and `TenantInterceptor`) exclude `/api/v1/settings/google-drive-backup/oauth/callback` and `/api/v1/settings/yandex-disk-backup/oauth/callback` (tenant is resolved from signed `state`).
+- on successful OAuth callback, expected behavior is HTTP `302` redirect to frontend settings page (`https://app.1edu.kz/settings` by default; configurable via `ondeedu.frontend.settings-url`).
+- after successful OAuth callback, settings-service also performs a best-effort initial cloud backup run; backup failure should not break OAuth success redirect.
+- if `POST /internal/apipay/webhook` returns `400`, verify provider sends signature in `X-Webhook-Signature` (preferred) or `Signature`/`X-Signature`, and signature format is `sha256=<hex>` (or raw 64-char hex); sandbox resend payloads (`invoice.is_sandbox=true`) are accepted without signature.
 
 Invoice API usage sanity:
 
 - `POST /api/v1/payments/apipay/invoices/generate` and `.../kpay/invoices/generate` are bulk monthly endpoints (all relevant subscriptions), not single-student endpoints.
 - for one student use `POST /api/v1/payments/apipay/invoices/single` or `POST /api/v1/payments/kpay/invoices/single`.
+- `POST /api/v1/payments/apipay/invoices/single` supports reissue for non-paid monthly invoices; only `PAID` invoice is protected from reissue.

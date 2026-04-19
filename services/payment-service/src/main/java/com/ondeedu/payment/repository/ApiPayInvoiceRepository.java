@@ -14,6 +14,8 @@ public interface ApiPayInvoiceRepository extends JpaRepository<ApiPayInvoice, UU
 
     boolean existsBySubscriptionIdAndPaymentMonth(UUID subscriptionId, String paymentMonth);
 
+    Optional<ApiPayInvoice> findBySubscriptionIdAndPaymentMonth(UUID subscriptionId, String paymentMonth);
+
     Optional<ApiPayInvoice> findByMerchantInvoiceId(String merchantInvoiceId);
 
     long countByPaymentMonthAndStatus(String paymentMonth, ApiPayInvoiceStatus status);

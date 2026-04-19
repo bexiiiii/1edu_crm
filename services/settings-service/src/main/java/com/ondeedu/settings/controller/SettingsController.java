@@ -23,6 +23,7 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -46,6 +47,9 @@ import org.springframework.web.multipart.MultipartFile;
 public class SettingsController {
 
     private final SettingsService settingsService;
+
+    @Value("${ondeedu.frontend.settings-url:https://app.1edu.kz/settings}")
+    private String frontendSettingsUrl;
 
     @GetMapping
     @PreAuthorize("hasAnyRole('TENANT_ADMIN','MANAGER','RECEPTIONIST','TEACHER') or hasAuthority('SETTINGS_VIEW')")
@@ -183,7 +187,7 @@ public class SettingsController {
 
         try {
             settingsService.completeGoogleDriveBackupOAuth(code, state);
-            return html(HttpStatus.OK, "Google Drive connected successfully. You can close this tab.");
+            return redirectToSettings();
         } catch (Exception ex) {
             return html(HttpStatus.BAD_REQUEST, "Google Drive authorization failed: " + ex.getMessage());
         }
@@ -236,7 +240,7 @@ public class SettingsController {
 
         try {
             settingsService.completeYandexDiskBackupOAuth(code, state);
-            return html(HttpStatus.OK, "Yandex Disk connected successfully. You can close this tab.");
+            return redirectToSettings();
         } catch (Exception ex) {
             return html(HttpStatus.BAD_REQUEST, "Yandex Disk authorization failed: " + ex.getMessage());
         }
@@ -258,6 +262,12 @@ public class SettingsController {
                 .header(HttpHeaders.CONTENT_TYPE, MediaType.TEXT_HTML_VALUE)
                 .body(body);
     }
+
+        private ResponseEntity<String> redirectToSettings() {
+        return ResponseEntity.status(HttpStatus.FOUND)
+            .header(HttpHeaders.LOCATION, frontendSettingsUrl)
+            .build();
+        }
 
     private String escapeHtml(String value) {
         if (value == null) {

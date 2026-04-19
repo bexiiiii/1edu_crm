@@ -35,8 +35,11 @@ public class ApiPayWebhookRequest {
     @NoArgsConstructor
     @AllArgsConstructor
     public static class InvoicePayload {
-        @JsonAlias({"id", "external_order_id", "externalOrderId"})
+        @JsonAlias({"id"})
         private String id;
+
+        @JsonAlias({"external_order_id", "externalOrderId"})
+        private String externalOrderId;
 
         @JsonAlias({"status"})
         private String status;
@@ -46,6 +49,9 @@ public class ApiPayWebhookRequest {
 
         @JsonAlias({"kaspi_invoice_id", "kaspiInvoiceId"})
         private String kaspiInvoiceId;
+
+        @JsonAlias({"is_sandbox", "sandbox"})
+        private Boolean sandbox;
 
         @JsonAlias({"paid_at", "paidAt"})
         private String paidAt;
