@@ -40,11 +40,18 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
+import org.springframework.web.context.request.RequestContextHolder;
+import org.springframework.web.context.request.ServletRequestAttributes;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.util.UriComponentsBuilder;
+
+import jakarta.servlet.http.HttpServletRequest;
 
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
@@ -837,21 +844,53 @@ public class SettingsService {
     }
 
     private String requireTenantId() {
-        String tenantId = TenantContext.getTenantId();
+        String tenantId = resolveTenantId();
         if (!StringUtils.hasText(tenantId)) {
             throw new BusinessException("TENANT_CONTEXT_REQUIRED", "Tenant context is required");
         }
         return tenantId.trim();
     }
 
+    private String resolveTenantId() {
+        String tenantId = trimToNull(TenantContext.getTenantId());
+        if (StringUtils.hasText(tenantId)) {
+            return tenantId;
+        }
+
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication instanceof JwtAuthenticationToken jwtAuthenticationToken) {
+            tenantId = trimToNull(jwtAuthenticationToken.getToken().getClaimAsString("tenant_id"));
+            if (StringUtils.hasText(tenantId)) {
+                return tenantId;
+            }
+        }
+
+        try {
+            ServletRequestAttributes requestAttributes =
+                    (ServletRequestAttributes) RequestContextHolder.getRequestAttributes();
+            if (requestAttributes != null) {
+                HttpServletRequest request = requestAttributes.getRequest();
+                tenantId = trimToNull(request.getHeader("X-Tenant-ID"));
+                if (StringUtils.hasText(tenantId)) {
+                    return tenantId;
+                }
+            }
+        } catch (Exception ignored) {
+            // No web request bound to current thread.
+        }
+
+        return null;
+    }
+
     private String buildGoogleDriveOAuthConnectUrlSafe() {
         try {
-            if (!StringUtils.hasText(TenantContext.getTenantId())
+            String tenantId = resolveTenantId();
+            if (!StringUtils.hasText(tenantId)
                     || !StringUtils.hasText(googleDriveOAuthClientId)
                     || !StringUtils.hasText(googleDriveOAuthClientSecret)) {
                 return null;
             }
-            return buildGoogleDriveOAuthConnectUrl(TenantContext.getTenantId());
+            return buildGoogleDriveOAuthConnectUrl(tenantId);
         } catch (Exception ignored) {
             return null;
         }
@@ -859,12 +898,13 @@ public class SettingsService {
 
     private String buildYandexDiskOAuthConnectUrlSafe() {
         try {
-            if (!StringUtils.hasText(TenantContext.getTenantId())
+            String tenantId = resolveTenantId();
+            if (!StringUtils.hasText(tenantId)
                     || !StringUtils.hasText(yandexDiskOAuthClientId)
                     || !StringUtils.hasText(yandexDiskOAuthClientSecret)) {
                 return null;
             }
-            return buildYandexDiskOAuthConnectUrl(TenantContext.getTenantId());
+            return buildYandexDiskOAuthConnectUrl(tenantId);
         } catch (Exception ignored) {
             return null;
         }

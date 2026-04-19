@@ -2123,6 +2123,11 @@ interface KpayInvoiceDto {
 
 Если `month` не передан, используется текущий месяц.
 
+Важно:
+- это **bulk endpoint** — создаёт счета по всем релевантным подпискам за месяц;
+- для счёта на одного ученика используйте `POST /api/v1/payments/kpay/invoices/single`;
+- request body строгий: поддерживается только поле `month`, лишние поля возвращают `400`.
+
 **Response:** `ApiResponse<GenerateKpayInvoicesResponse>`
 
 ```typescript
@@ -2134,6 +2139,33 @@ interface GenerateKpayInvoicesResponse {
   failed: number;
 }
 ```
+
+#### `POST /api/v1/payments/kpay/invoices/single` — Создать KPAY счёт для одного ученика
+**Доступ:** `TENANT_ADMIN` | `FINANCE_CREATE`
+
+Позволяет вручную выставить счёт по выбранному ученику:
+- с авто-суммой (из активного абонемента), либо
+- с ручной суммой (`amount`).
+
+**Request Body:**
+```json
+{
+  "studentId": "uuid",
+  "subscriptionId": "uuid-optional",
+  "month": "2026-04",
+  "recipientField": "PARENT_PHONE",
+  "amount": 25000,
+  "currency": "KZT"
+}
+```
+
+Пояснения:
+- `subscriptionId` optional: если не передан, backend выберет подходящий активный/expired абонемент ученика для указанного месяца;
+- `recipientField`: `PHONE | STUDENT_PHONE | PARENT_PHONE | ADDITIONAL_PHONE_1`;
+- `amount` optional: если не передан, сумма считается автоматически из абонемента.
+- при наличии нескольких релевантных абонементов у ученика рекомендуется передавать `subscriptionId` явно.
+
+**Response:** `ApiResponse<KpayInvoiceDto>`
 
 #### `GET /api/v1/payments/kpay/invoices` — Список KPAY счетов
 **Доступ:** `TENANT_ADMIN` | `FINANCE_VIEW`
@@ -2205,6 +2237,11 @@ interface ApiPayInvoiceDto {
 
 Если `month` не передан, используется текущий месяц.
 
+Важно:
+- это **bulk endpoint** — создаёт счета по всем релевантным подпискам за месяц;
+- для счёта на одного ученика используйте `POST /api/v1/payments/apipay/invoices/single`;
+- request body строгий: поддерживается только поле `month`, лишние поля возвращают `400`.
+
 **Response:** `ApiResponse<GenerateApiPayInvoicesResponse>`
 
 ```typescript
@@ -2216,6 +2253,35 @@ interface GenerateApiPayInvoicesResponse {
   failed: number;
 }
 ```
+
+#### `POST /api/v1/payments/apipay/invoices/single` — Создать ApiPay счёт для одного ученика
+**Доступ:** `TENANT_ADMIN` | `FINANCE_CREATE`
+
+Позволяет вручную выставить счёт по выбранному ученику:
+- с авто-суммой (из активного абонемента), либо
+- с ручной суммой (`amount`).
+
+**Request Body:**
+```json
+{
+  "studentId": "uuid",
+  "subscriptionId": "uuid-optional",
+  "month": "2026-04",
+  "recipientField": "PARENT_PHONE",
+  "amount": 25000,
+  "currency": "KZT",
+  "description": "Оплата за апрель"
+}
+```
+
+Пояснения:
+- `subscriptionId` optional: если не передан, backend выберет подходящий активный/expired абонемент ученика для указанного месяца;
+- `recipientField`: `PHONE | STUDENT_PHONE | PARENT_PHONE | ADDITIONAL_PHONE_1`;
+- `amount` optional: если не передан, сумма считается автоматически из абонемента;
+- для ApiPay телефон автоматически нормализуется к формату `8XXXXXXXXXX`.
+- при наличии нескольких релевантных абонементов у ученика рекомендуется передавать `subscriptionId` явно.
+
+**Response:** `ApiResponse<ApiPayInvoiceDto>`
 
 #### `GET /api/v1/payments/apipay/invoices` — Список ApiPay счетов
 **Доступ:** `TENANT_ADMIN` | `FINANCE_VIEW`
@@ -2235,12 +2301,18 @@ interface GenerateApiPayInvoicesResponse {
 **Доступ:** public webhook endpoint (без JWT, проброшен через gateway)
 
 Headers:
-- `X-Webhook-Signature: sha256=<hex>`
+- `X-Webhook-Signature: sha256=<hex>` (предпочтительно)
+- также поддерживаются: `Signature`, `X-Signature`
+
+Формат подписи:
+- `sha256=<hex>`
+- либо raw-hex (`64` символа) — будет нормализован на backend.
 
 Поведение:
 - webhook обновляет статус `apipay_invoices`;
 - подпись webhook валидируется HMAC-SHA256 (секрет из tenant settings);
 - при статусе `PAID` автоматически записывает платеж в `student_payments` и связывает его с `apipay_invoices.studentPaymentId`.
+- при отсутствии/некорректной подписи webhook возвращает `400` (`APIPAY_SIGNATURE_MISSING` / `APIPAY_SIGNATURE_INVALID`).
 
 ---
 
@@ -4215,6 +4287,10 @@ interface GoogleDriveBackupSettingsDto {
 - access token сохраняется в tenant settings;
 - интеграция автоматически включается (`enabled=true`).
 
+Если backend отвечает `GOOGLE_DRIVE_OAUTH_NOT_CONFIGURED`, на сервере не заданы OAuth env-переменные:
+- `ONDEEDU_GOOGLE_DRIVE_OAUTH_CLIENT_ID`
+- `ONDEEDU_GOOGLE_DRIVE_OAUTH_CLIENT_SECRET`
+
 #### `PUT /api/v1/settings/google-drive-backup` — Обновить настройки backup в Google Drive
 **Доступ:** `TENANT_ADMIN` или permission `SETTINGS_EDIT`
 
@@ -4281,6 +4357,10 @@ interface YandexDiskBackupSettingsDto {
 - валидируется подписанный `state` (tenant-aware);
 - access token сохраняется в tenant settings;
 - интеграция автоматически включается (`enabled=true`).
+
+Если backend отвечает `YANDEX_DISK_OAUTH_NOT_CONFIGURED`, на сервере не заданы OAuth env-переменные:
+- `ONDEEDU_YANDEX_DISK_OAUTH_CLIENT_ID`
+- `ONDEEDU_YANDEX_DISK_OAUTH_CLIENT_SECRET`
 
 #### `PUT /api/v1/settings/yandex-disk-backup` — Обновить настройки backup в Yandex Disk
 **Доступ:** `TENANT_ADMIN` или permission `SETTINGS_EDIT`

@@ -23,6 +23,8 @@
   `<tenantUuidWithoutDashes>_<random>`
 - **Invoice side-effect:** при webhook-статусе `PAID` CRM автоматически создаёт запись в `student_payments`
   и связывает её с `apipay_invoices.student_payment_id`
+- **Single-student invoice endpoint (CRM backend):** `POST /api/v1/payments/apipay/invoices/single`
+  поддерживает выбор поля телефона (`PHONE | STUDENT_PHONE | PARENT_PHONE | ADDITIONAL_PHONE_1`) и ручную/авто сумму.
 
 ### Phone normalization in CRM
 

@@ -10,6 +10,7 @@ import com.ondeedu.common.tenant.TenantSchemaResolver;
 import com.ondeedu.payment.client.KpayApiClient;
 import com.ondeedu.payment.client.SettingsGrpcClient;
 import com.ondeedu.payment.client.StudentGrpcClient;
+import com.ondeedu.payment.dto.CreateKpayInvoiceRequest;
 import com.ondeedu.payment.dto.GenerateKpayInvoicesResponse;
 import com.ondeedu.payment.dto.KpayInvoiceDto;
 import com.ondeedu.payment.dto.KpayWebhookRequest;
@@ -41,6 +42,7 @@ import java.time.ZoneId;
 import java.time.YearMonth;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
+import java.util.EnumSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -190,6 +192,98 @@ public class KpayInvoiceService {
                 .skipped(skipped)
                 .failed(failed)
                 .build();
+    }
+
+    @Transactional
+    public KpayInvoiceDto createSingleInvoice(CreateKpayInvoiceRequest request) {
+        YearMonth targetMonth = parseYearMonth(request.getMonth());
+
+        SettingsGrpcClient.KpayConfigData config = settingsGrpcClient.getKpayConfig()
+                .orElseThrow(() -> new BusinessException("KPAY_CONFIG_NOT_FOUND",
+                        "KPay settings are not configured for current tenant"));
+
+        if (!config.enabled()) {
+            throw new BusinessException("KPAY_DISABLED", "KPay integration is disabled");
+        }
+
+        if (!config.configured() || !StringUtils.hasText(config.apiKey()) || !StringUtils.hasText(config.apiSecret())) {
+            throw new BusinessException("KPAY_KEYS_REQUIRED", "KPay API credentials are not configured");
+        }
+
+        String tenantId = TenantContext.getTenantId();
+        if (!StringUtils.hasText(tenantId)) {
+            throw new BusinessException("TENANT_CONTEXT_REQUIRED", "Tenant context is required for KPAY invoice generation");
+        }
+
+        Subscription subscription = resolveSubscriptionForStudent(request.getStudentId(), request.getSubscriptionId(), targetMonth);
+
+        if (kpayInvoiceRepository.existsBySubscriptionIdAndPaymentMonth(subscription.getId(), targetMonth.toString())) {
+            throw new BusinessException("KPAY_INVOICE_ALREADY_EXISTS",
+                    "KPAY invoice for selected subscription and month already exists");
+        }
+
+        StudentGrpcClient.StudentContactData student = studentGrpcClient.getStudentContact(request.getStudentId())
+                .orElseThrow(() -> new BusinessException("STUDENT_NOT_FOUND", "Student data is not available"));
+
+        KpayRecipientField recipientField = request.getRecipientField() != null
+                ? request.getRecipientField()
+                : config.recipientField();
+
+        String recipient = resolveRecipient(student, recipientField);
+        if (!StringUtils.hasText(recipient)) {
+            throw new BusinessException("RECIPIENT_EMPTY", "Configured recipient field is empty");
+        }
+
+        BigDecimal amount = request.getAmount() != null
+                ? request.getAmount().setScale(2, RoundingMode.HALF_UP)
+                : calcMonthlyExpected(subscription, priceListMap(subscription));
+
+        if (amount == null || amount.compareTo(BigDecimal.ZERO) <= 0) {
+            throw new BusinessException("AMOUNT_INVALID", "Invoice amount must be greater than 0");
+        }
+
+        String currency = StringUtils.hasText(request.getCurrency())
+                ? request.getCurrency().trim().toUpperCase(Locale.ROOT)
+                : "KZT";
+
+        String merchantInvoiceId = buildMerchantInvoiceId(tenantId);
+        KpayInvoice invoice = KpayInvoice.builder()
+                .studentId(subscription.getStudentId())
+                .subscriptionId(subscription.getId())
+                .paymentMonth(targetMonth.toString())
+                .recipientField(recipientField.name())
+                .recipientValue(recipient)
+                .amount(amount)
+                .currency(currency)
+                .merchantInvoiceId(merchantInvoiceId)
+                .status(KpayInvoiceStatus.CREATED)
+                .requestPayload(buildRequestPayload(merchantInvoiceId, amount, recipient, currency))
+                .build();
+
+        invoice = kpayInvoiceRepository.save(invoice);
+
+        try {
+            KpayApiClient.CreateInvoiceResult result = kpayApiClient.createInvoice(
+                    config.apiBaseUrl(),
+                    config.apiKey(),
+                    config.apiSecret(),
+                    merchantInvoiceId,
+                    amount,
+                    recipient,
+                    currency
+            );
+
+            invoice.setExternalInvoiceId(result.externalInvoiceId());
+            invoice.setPaymentUrl(result.paymentUrl());
+            invoice.setResponsePayload(result.rawResponse());
+            invoice.setStatus(KpayInvoiceStatus.PENDING);
+            invoice.setErrorMessage(null);
+        } catch (RestClientException ex) {
+            invoice.setStatus(KpayInvoiceStatus.FAILED);
+            invoice.setErrorMessage(ex.getMessage());
+        }
+
+        return toDto(kpayInvoiceRepository.save(invoice));
     }
 
     @Transactional(readOnly = true)
@@ -357,6 +451,50 @@ public class KpayInvoiceService {
         } catch (Exception e) {
             throw new BusinessException("INVALID_MONTH_FORMAT", "month must be in format YYYY-MM");
         }
+    }
+
+    private Subscription resolveSubscriptionForStudent(UUID studentId, UUID subscriptionId, YearMonth targetMonth) {
+        EnumSet<SubscriptionStatus> allowed = EnumSet.of(SubscriptionStatus.ACTIVE, SubscriptionStatus.EXPIRED);
+
+        if (subscriptionId != null) {
+            Subscription subscription = subscriptionRepository.findById(subscriptionId)
+                    .orElseThrow(() -> new ResourceNotFoundException("Subscription", "id", subscriptionId));
+
+            if (!subscription.getStudentId().equals(studentId)) {
+                throw new BusinessException("SUBSCRIPTION_STUDENT_MISMATCH",
+                        "Selected subscription does not belong to student");
+            }
+
+            if (!allowed.contains(subscription.getStatus())) {
+                throw new BusinessException("SUBSCRIPTION_NOT_ACTIVE",
+                        "Selected subscription is not active for invoicing");
+            }
+
+            return subscription;
+        }
+
+        return subscriptionRepository.findByStudentIdOrderByStartDateDesc(studentId).stream()
+                .filter(s -> allowed.contains(s.getStatus()))
+                .filter(s -> isSubscriptionRelevantForMonth(s, targetMonth))
+                .findFirst()
+                .orElseThrow(() -> new BusinessException("SUBSCRIPTION_NOT_FOUND",
+                        "No active subscription found for selected student"));
+    }
+
+    private boolean isSubscriptionRelevantForMonth(Subscription subscription, YearMonth targetMonth) {
+        LocalDate firstDay = targetMonth.atDay(1);
+        LocalDate lastDay = targetMonth.atEndOfMonth();
+        return !subscription.getStartDate().isAfter(lastDay)
+                && (subscription.getEndDate() == null || !subscription.getEndDate().isBefore(firstDay));
+    }
+
+    private Map<UUID, PriceList> priceListMap(Subscription subscription) {
+        if (subscription.getPriceListId() == null) {
+            return Map.of();
+        }
+        return priceListRepository.findById(subscription.getPriceListId())
+                .map(priceList -> Map.of(priceList.getId(), priceList))
+                .orElseGet(Map::of);
     }
 
     private String normalize(String value) {

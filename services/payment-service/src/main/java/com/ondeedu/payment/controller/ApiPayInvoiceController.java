@@ -2,6 +2,7 @@ package com.ondeedu.payment.controller;
 
 import com.ondeedu.common.dto.ApiResponse;
 import com.ondeedu.payment.dto.ApiPayInvoiceDto;
+import com.ondeedu.payment.dto.CreateApiPayInvoiceRequest;
 import com.ondeedu.payment.dto.GenerateApiPayInvoicesRequest;
 import com.ondeedu.payment.dto.GenerateApiPayInvoicesResponse;
 import com.ondeedu.payment.entity.ApiPayInvoiceStatus;
@@ -38,6 +39,14 @@ public class ApiPayInvoiceController {
         String month = request != null ? request.getMonth() : null;
         return ApiResponse.success(apiPayInvoiceService.generateMonthlyInvoices(month),
                 "ApiPay invoices generated");
+    }
+
+    @PostMapping("/invoices/single")
+    @PreAuthorize("hasRole('TENANT_ADMIN') or hasAuthority('FINANCE_CREATE')")
+    @Operation(summary = "Create single ApiPay invoice for one student")
+    public ApiResponse<ApiPayInvoiceDto> createSingleInvoice(@Valid @RequestBody CreateApiPayInvoiceRequest request) {
+        return ApiResponse.success(apiPayInvoiceService.createSingleInvoice(request),
+                "ApiPay invoice created");
     }
 
     @GetMapping("/invoices")

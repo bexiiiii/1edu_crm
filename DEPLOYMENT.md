@@ -84,6 +84,12 @@ API_DOMAIN=api.1edu.kz
 CERT_EMAIL=admin@1edu.kz
 KEYCLOAK_INTERNAL_URL=http://keycloak:8080/auth
 KEYCLOAK_PUBLIC_URL=https://api.1edu.kz/auth
+
+# Optional, required only for OAuth connect flow in cloud backups
+ONDEEDU_GOOGLE_DRIVE_OAUTH_CLIENT_ID=<google-client-id>
+ONDEEDU_GOOGLE_DRIVE_OAUTH_CLIENT_SECRET=<google-client-secret>
+ONDEEDU_YANDEX_DISK_OAUTH_CLIENT_ID=<yandex-client-id>
+ONDEEDU_YANDEX_DISK_OAUTH_CLIENT_SECRET=<yandex-client-secret>
 ```
 
 Then deploy:
@@ -101,6 +107,18 @@ Then deploy:
 - start application services and nginx
 - clean macOS metadata files from Grafana provisioning before restarting infra
 - verify `https://api.1edu.kz/health`
+
+## Tenant schema backfill (ApiPay/KPAY)
+
+Если часть тенантов была создана до миграций с интеграциями и вы видите ошибки вида
+`column ... apipay_api_base_url does not exist` или `relation apipay_invoices does not exist`,
+примените актуальные tenant-service миграции:
+
+```bash
+./deploy.sh restart tenant-service
+```
+
+Это запускает Flyway и backfill-функции для всех tenant-схем (`tenant_settings` + `apipay_invoices` + `kpay_invoices`).
 
 ## Ongoing operations
 
@@ -184,3 +202,9 @@ Webhook ingress sanity check:
 
 - if `https://api.1edu.kz/internal/aisar/...`, `.../ftelecom/...`, `.../zadarma/...`, `.../apipay/...`, `.../kpay/...` returns `404` from edge, verify nginx has `location /internal/ { proxy_pass http://api_gateway; ... }` and reload nginx.
 - if OAuth callback URLs under `/api/v1/settings/*/oauth/callback` return `401`, verify gateway/service security allowlist includes these callback paths.
+- if `POST /internal/apipay/webhook` returns `400`, verify provider sends signature in `X-Webhook-Signature` (preferred) or `Signature`/`X-Signature`, and signature format is `sha256=<hex>` (or raw 64-char hex).
+
+Invoice API usage sanity:
+
+- `POST /api/v1/payments/apipay/invoices/generate` and `.../kpay/invoices/generate` are bulk monthly endpoints (all relevant subscriptions), not single-student endpoints.
+- for one student use `POST /api/v1/payments/apipay/invoices/single` or `POST /api/v1/payments/kpay/invoices/single`.

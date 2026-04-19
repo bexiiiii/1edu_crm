@@ -245,6 +245,43 @@ nginx кэширует IP контейнера — после рестарта a
 
 `make deploy-service` вызывает `scripts/deploy.sh`, который делает reload автоматически. Проблема возникает только при ручном `docker compose up` без использования make.
 
+#### OAuth URL "не доступен" (Google/Yandex backup) после рестартов
+После рестарта `settings-service` в коротком окне возможны `503` на
+`/api/v1/settings/google-drive-backup*` и `/api/v1/settings/yandex-disk-backup*`.
+
+**Симптомы**:
+- UI показывает "OAuth URL не доступен. Попробуйте позже.";
+- в `api-gateway` логи `Gateway fallback: service=settings`.
+
+**Решение**:
+1. Дождаться `settings-service` health=UP и регистрации в Eureka.
+2. Проверить `api-gateway /actuator/health` — `settings-service` должен быть в discovery list.
+3. При необходимости перезапустить `api-gateway` (очистка stale routing cache).
+
+#### ApiPay webhook 400 (signature missing/invalid)
+ApiPay/Kaspi может прислать подпись не только в `X-Webhook-Signature`, но и в альтернативных заголовках.
+
+**Симптомы**:
+- `POST /internal/apipay/webhook` возвращает `400`;
+- в логах `APIPAY_SIGNATURE_MISSING` или `APIPAY_SIGNATURE_INVALID`.
+
+**Решение**:
+- backend принимает `X-Webhook-Signature` (основной), а также `Signature`/`X-Signature`;
+- поддерживает формат подписи `sha256=<hex>` и raw hex (`64` символа);
+- для стабильности на стороне провайдера рекомендуется отправлять `X-Webhook-Signature: sha256=<hex>`.
+
+#### ApiPay/KPAY: single vs generate endpoint
+`/api/v1/payments/*/invoices/generate` — массовая генерация за месяц (по всем релевантным подпискам),
+`/api/v1/payments/*/invoices/single` — создание счёта для одного ученика.
+
+**Симптом**:
+- ожидали 1 счёт, но создалось несколько.
+
+**Решение**:
+- для ручного счёта использовать только `.../invoices/single`;
+- при нескольких абонементах у ученика передавать `subscriptionId` явно;
+- payload для `.../invoices/generate` строгий (только `month`), лишние поля дают `400`.
+
 #### MinIO internal URL в API-ответах (studentPhoto/logoUrl)
 Если в БД хранится внутренний URL вида `http://minio:9000/...`, frontend не может загрузить изображение.
 
@@ -258,6 +295,17 @@ nginx кэширует IP контейнера — после рестарта a
   - `ondeedu-files/logos`
 
 Backend уже нормализует legacy-URL в ответах (`student-service`, `student-search`, `settings-service`) на публичный base URL.
+
+#### Flyway out-of-order — отсутствующие APIPAY/KPAY объекты в tenant-схемах
+Если на проде уже применены более новые миграции (`V23+`), а `V21/V22` добавлены позже, они не применяются при `outOfOrder=false`.
+
+**Симптомы**:
+- `ERROR: column ... apipay_api_base_url does not exist` в `settings-service`
+- `ERROR: relation apipay_invoices does not exist` / `kpay_invoices` в `payment-service`
+
+**Решение**:
+- миграция `V26__ensure_kpay_and_apipay_schema_backfill.sql` переопределяет `system.ensure_kpay_schema` и `system.ensure_apipay_schema` и прогоняет их по всем tenant-схемам;
+- для применения достаточно `./deploy.sh restart tenant-service`.
 
 #### Keycloak 26 User Profile — кастомные атрибуты (tenant_id, permissions)
 Keycloak 26 использует **DeclarativeUserProfile** по умолчанию. Кастомные атрибуты, не объявленные в схеме User Profile, **молча игнорируются** при создании/обновлении пользователя через Admin API.

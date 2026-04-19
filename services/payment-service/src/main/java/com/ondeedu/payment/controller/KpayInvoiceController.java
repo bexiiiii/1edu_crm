@@ -1,6 +1,7 @@
 package com.ondeedu.payment.controller;
 
 import com.ondeedu.common.dto.ApiResponse;
+import com.ondeedu.payment.dto.CreateKpayInvoiceRequest;
 import com.ondeedu.payment.dto.GenerateKpayInvoicesRequest;
 import com.ondeedu.payment.dto.GenerateKpayInvoicesResponse;
 import com.ondeedu.payment.dto.KpayInvoiceDto;
@@ -38,6 +39,14 @@ public class KpayInvoiceController {
         String month = request != null ? request.getMonth() : null;
         return ApiResponse.success(kpayInvoiceService.generateMonthlyInvoices(month),
                 "KPAY invoices generated");
+    }
+
+    @PostMapping("/invoices/single")
+    @PreAuthorize("hasRole('TENANT_ADMIN') or hasAuthority('FINANCE_CREATE')")
+    @Operation(summary = "Create single KPAY invoice for one student")
+    public ApiResponse<KpayInvoiceDto> createSingleInvoice(@Valid @RequestBody CreateKpayInvoiceRequest request) {
+        return ApiResponse.success(kpayInvoiceService.createSingleInvoice(request),
+                "KPAY invoice created");
     }
 
     @GetMapping("/invoices")
