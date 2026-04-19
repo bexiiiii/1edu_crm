@@ -29,6 +29,7 @@ import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.cache.annotation.Caching;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -56,6 +57,15 @@ public class StudentService {
     private final ObjectMapper objectMapper;
     private final Optional<StudentSearchService> studentSearchService;
     private final AuditLogPublisher auditLogPublisher;
+
+    @Value("${minio.public-url:}")
+    private String minioPublicUrl;
+
+    @Value("${minio.url:http://minio:9000}")
+    private String minioUrl;
+
+    @Value("${minio.bucket:ondeedu-files}")
+    private String minioBucket;
 
     @Transactional
     @CacheEvict(value = {"students", "student-stats"}, allEntries = true)
@@ -256,7 +266,46 @@ public class StudentService {
         dto.setAdditionalPhones(metadata.getAdditionalPhones());
         dto.setStateOrderParticipant(metadata.getStateOrderParticipant());
         dto.setLoyalty(metadata.getLoyalty());
+        dto.setStudentPhoto(normalizeMediaUrl(dto.getStudentPhoto()));
         return dto;
+    }
+
+    private String normalizeMediaUrl(String rawUrl) {
+        String value = trimToNull(rawUrl);
+        if (!StringUtils.hasText(value)) {
+            return null;
+        }
+
+        String publicBase = normalizeBaseUrl(minioPublicUrl);
+        String internalBase = normalizeBaseUrl(minioUrl);
+        String effectiveBase = StringUtils.hasText(publicBase) ? publicBase : internalBase;
+        if (!StringUtils.hasText(effectiveBase)) {
+            return value;
+        }
+
+        if (value.startsWith("http://") || value.startsWith("https://")) {
+            if (StringUtils.hasText(publicBase)
+                    && StringUtils.hasText(internalBase)
+                    && value.startsWith(internalBase + "/")) {
+                return publicBase + value.substring(internalBase.length());
+            }
+            return value;
+        }
+
+        String normalizedPath = value.startsWith("/") ? value.substring(1) : value;
+        String bucketPrefix = minioBucket + "/";
+        if (normalizedPath.startsWith(bucketPrefix)) {
+            return effectiveBase + "/" + normalizedPath;
+        }
+        return effectiveBase + "/" + minioBucket + "/" + normalizedPath;
+    }
+
+    private String normalizeBaseUrl(String url) {
+        String value = trimToNull(url);
+        if (!StringUtils.hasText(value)) {
+            return null;
+        }
+        return value.endsWith("/") ? value.substring(0, value.length() - 1) : value;
     }
 
     private void publishStudentCreatedEvent(Student student) {

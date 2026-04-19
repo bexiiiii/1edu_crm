@@ -15,6 +15,7 @@ public class YandexDiskBackupSettingsDto {
 
     private Boolean enabled;
     private Boolean configured;
+    private String oauthConnectUrl;
     private String folderPath;
     private String accessTokenMasked;
     private Instant lastBackupAt;

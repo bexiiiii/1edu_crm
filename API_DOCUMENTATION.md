@@ -37,6 +37,8 @@
   - в блоке `upcomingBirthdays` возраст/`daysUntil` считается на backend с корректной обработкой `29 февраля` в невисокосный год.
 - **Analytics cache freshness**: для analytics-кэшей уменьшены TTL (операционные виджеты обновляются быстрее), плюс добавлена tenant-aware инвалидация через RabbitMQ (`audit.tenant`).
 - **File URL for frontend**: `file-service` теперь возвращает URL на основе `MINIO_PUBLIC_URL` (если задан), fallback — `MINIO_URL`; это нужно для корректных ссылок в браузере.
+- **Media URL normalization in DTOs**: `studentPhoto` (student-service) и `logoUrl` (settings-service) в ответах нормализуются в публичный URL; legacy-значения с внутренним `http://minio:9000/...` автоматически переписываются на `MINIO_PUBLIC_URL`.
+- **Public media ingress**: на edge добавлен nginx proxy `/minio/* -> minio:9000`, чтобы фронтенд мог открывать медиа по URL вида `https://api.1edu.kz/minio/<bucket>/<object>`.
 - **Tenant header guard**: для non-super-admin запросов с `X-Tenant-ID`, не совпадающим с JWT `tenant_id`, backend/gateway возвращает `403 TENANT_MISMATCH`.
 
 - **Finance amount change reason**: reason-поля и их валидация зафиксированы для операций в `payment-service` и `finance-service`; для `TENANT_ADMIN`/`FINANCE_VIEW` поля видимы в API-ответах чтения.
@@ -45,8 +47,9 @@
   - в `payment-service` добавлены endpoints для генерации и отслеживания KPAY-инвойсов (`/api/v1/payments/kpay/invoices*`) и webhook (`POST /internal/kpay/webhook`);
   - в конце месяца scheduler автоматически генерирует счета на следующий месяц для тенантов с включенной KPAY-интеграцией.
 - **ApiPay integration (tenant-scoped, separate from KPAY)**:
-  - в `settings-service` добавлены endpoints для настройки ApiPay (`GET/PUT /api/v1/settings/apipay`) c отдельными секретами и полем получателя (`PHONE | STUDENT_PHONE | PARENT_PHONE | ADDITIONAL_PHONE_1`);
+  - в `settings-service` добавлены endpoints для настройки ApiPay (`GET/PUT /api/v1/settings/apipay`) с полем получателя (`PHONE | STUDENT_PHONE | PARENT_PHONE | ADDITIONAL_PHONE_1`) и готовым `webhookUrl`;
   - в `payment-service` добавлены endpoints `/api/v1/payments/apipay/invoices*` и webhook `POST /internal/apipay/webhook`;
+  - при включении интеграции `webhookSecret` генерируется автоматически, ручной ввод секрета не обязателен;
   - webhook валидирует `X-Webhook-Signature` (HMAC-SHA256) и при статусе оплаты автоматически создаёт запись в `student_payments`.
 - **AISAR integration (tenant-scoped, inbound social/web messenger webhook)**:
   - в `settings-service` добавлены endpoints `GET/PUT /api/v1/settings/aisar`;
@@ -60,12 +63,13 @@
   - в `settings-service` добавлены endpoints `GET/PUT /api/v1/settings/zadarma`;
   - ответ настроек возвращает готовый `webhookUrl`, режим валидации `GET ?zd_echo=...` и параметры подписи `Signature / HMAC-SHA1 (base64)`;
   - в `lead-service` добавлен публичный webhook `GET/POST /internal/zadarma/webhook/{tenantId}` для echo-валидации и входящих call-событий без дублей по номеру телефона.
-- **Cloud backup destinations (tenant-scoped, manual v1)**:
-  - в `settings-service` добавлены self-service endpoints для `Google Drive` и `Yandex Disk` backup destinations;
-  - `POST /api/v1/settings/google-drive-backup/run` и `POST /api/v1/settings/yandex-disk-backup/run` создают tenant snapshot (`.json.gz`) и загружают его в соответствующее облако по tenant token.
+- **Cloud backup destinations (tenant-scoped, OAuth connect flow)**:
+  - в `settings-service` доступны connect-url и callback endpoints для `Google Drive` и `Yandex Disk` OAuth;
+  - пользователь подключает облако по ссылке (consent screen), после callback access token сохраняется tenant-scoped;
+  - `POST /api/v1/settings/google-drive-backup/run` и `POST /api/v1/settings/yandex-disk-backup/run` создают tenant snapshot (`.json.gz`) и загружают его в соответствующее облако.
 - **Webhook ingress hardening**:
   - nginx в production теперь проксирует не только `/api/*`, но и `/internal/*` в `api-gateway`;
-  - публично проброшены и разрешены в gateway/security только webhook-маршруты `AISAR`, `Freedom Telecom`, `Zadarma`;
+  - публично проброшены и разрешены в gateway/security webhook-маршруты `AISAR`, `Freedom Telecom`, `Zadarma`, `ApiPay`, `KPAY`;
   - smoke-проверка публичных webhook URL должна давать бизнес-ответ (`2xx/4xx`), но не `404` от edge.
 - **Audit logs**: уточнена работа `/api/v1/audit/system` и `/api/v1/audit/tenant`, добавлены tenant-context требования, порядок фильтров, формат записей и TTL по коллекциям.
 - **Default role permissions**: добавлены default permission-наборы для встроенных ролей `MANAGER`, `RECEPTIONIST`, `TEACHER`, `ACCOUNTANT` и fallback-логика назначения.
@@ -132,6 +136,7 @@
 | `/api/v1/notifications/**` | notification-service |
 | `/api/v1/files/**` | file-service |
 | `/internal/aisar/**`, `/internal/ftelecom/**`, `/internal/zadarma/**` | lead-service (public webhook ingress) |
+| `/internal/apipay/**`, `/internal/kpay/**` | payment-service (public webhook ingress) |
 
 > Gateway также маршрутизирует legacy aliases `/api/v1/groups/**` и `/api/v1/invoices/**`, но для фронта используйте только публичные пути, описанные ниже.
 >
@@ -1067,6 +1072,8 @@ interface StudentDto {
   updatedAt: string;
 }
 ```
+
+> Поле `studentPhoto` возвращается в frontend-доступном виде. Если в БД сохранён legacy URL вида `http://minio:9000/...`, backend нормализует его в публичный URL на базе `MINIO_PUBLIC_URL`.
 
 ---
 
@@ -2143,9 +2150,7 @@ interface GenerateKpayInvoicesResponse {
 **Response:** `ApiResponse<KpayInvoiceDto>`
 
 #### `POST /internal/kpay/webhook` — Callback статуса оплаты от KPAY
-**Доступ:** internal callback endpoint (без JWT, internal route)
-
-> Примечание по ingress: endpoint существует в `payment-service`, но в текущем `api-gateway` не настроен публичный маршрут `Path=/internal/kpay/**`. Для внешнего callback требуется отдельный gateway route.
+**Доступ:** public webhook endpoint (без JWT, проброшен через gateway)
 
 Поведение:
 - webhook обновляет статус `kpay_invoices`;
@@ -2227,9 +2232,7 @@ interface GenerateApiPayInvoicesResponse {
 **Response:** `ApiResponse<ApiPayInvoiceDto>`
 
 #### `POST /internal/apipay/webhook` — Callback статуса оплаты от ApiPay
-**Доступ:** internal callback endpoint (без JWT, internal route)
-
-> Примечание по ingress: endpoint существует в `payment-service`, но в текущем `api-gateway` не настроен публичный маршрут `Path=/internal/apipay/**`. Для внешнего callback требуется отдельный gateway route.
+**Доступ:** public webhook endpoint (без JWT, проброшен через gateway)
 
 Headers:
 - `X-Webhook-Signature: sha256=<hex>`
@@ -3200,6 +3203,10 @@ interface FileUploadResponse {
 - если задан `MINIO_PUBLIC_URL`, ссылка строится от него (рекомендуется для frontend);
 - иначе используется `MINIO_URL`.
 
+Продовая рекомендация:
+- установить `MINIO_PUBLIC_URL=https://api.1edu.kz/minio`;
+- для фронтенда использовать URL вида `https://api.1edu.kz/minio/<bucket>/<object>` (например для `avatars/*`, `logos/*`).
+
 Для upload без `folder` backend использует папку `general`.
 
 ---
@@ -3831,6 +3838,8 @@ interface SettingsDto {
 }
 ```
 
+> Поле `logoUrl` в ответах также нормализуется в frontend-доступный URL (через `MINIO_PUBLIC_URL`) и не должно указывать на внутренний адрес MinIO контейнера.
+
 ---
 
 ### 21.1 Основные настройки (`/api/v1/settings`)
@@ -3876,6 +3885,21 @@ interface SettingsDto {
 | `file` | file | да | Изображение логотипа |
 
 **Response:** `ApiResponse<SettingsDto>`
+
+---
+
+### 21.1.0 Сводка функций интеграций (телефония + платежи)
+
+| Интеграция | Настройка | Inbound webhook | Что делает CRM автоматически |
+|---|---|---|---|
+| Freedom Telecom VPBX | `GET/PUT /api/v1/settings/ftelecom` | `POST /internal/ftelecom/webhook/{tenantId}` | Валидирует tenant и `crm_token`, принимает событие и пишет audit/log запись обработки webhook. |
+| Zadarma PBX | `GET/PUT /api/v1/settings/zadarma` | `GET/POST /internal/zadarma/webhook/{tenantId}` | `GET` возвращает `zd_echo` для URL validation; `POST` проверяет подпись `Signature` (HMAC-SHA1 base64), для `NOTIFY_INTERNAL`/`NOTIFY_END` создаёт lead и отсекает дубли по телефону. |
+| ApiPay | `GET/PUT /api/v1/settings/apipay` + `POST/GET /api/v1/payments/apipay/invoices*` | `POST /internal/apipay/webhook` | Генерация инвойсов по активным абонементам, обновление статуса инвойса по webhook, при `PAID` автозапись в `student_payments` и линковка с `apipay_invoices`. |
+| KPAY.kz | `GET/PUT /api/v1/settings/kpay` + `POST/GET /api/v1/payments/kpay/invoices*` | `POST /internal/kpay/webhook` | Генерация инвойсов по активным абонементам, обновление статуса инвойса по webhook, при `PAID` автозапись в `student_payments` и линковка с `kpay_invoices`. |
+
+Ограничения и нюансы:
+- Для Freedom Telecom текущая реализация webhook не создаёт лиды автоматически: выполняется tenant/token-валидация и приём события.
+- Для ApiPay и KPAY tenant в webhook определяется по префиксу merchant invoice id (`<tenantUuidWithoutDashes>_<random>`).
 
 ---
 
@@ -3943,6 +3967,9 @@ interface ApiPaySettingsDto {
   recipientField: ApiPayRecipientField;
   apiKeyMasked: string | null;
   webhookSecretMasked: string | null;
+  webhookUrl: string | null;          // https://api.1edu.kz/internal/apipay/webhook
+  signatureHeader: 'X-Webhook-Signature';
+  signatureAlgorithm: 'HMAC-SHA256';
 }
 ```
 
@@ -3962,14 +3989,22 @@ interface ApiPaySettingsDto {
   "enabled": true,
   "apiBaseUrl": "https://bpapi.bazarbay.site/api/v1",
   "recipientField": "PARENT_PHONE",
-  "apiKey": "your-apipay-api-key",
-  "webhookSecret": "your-apipay-webhook-secret"
+  "apiKey": "your-apipay-api-key"
 }
 ```
 
+`webhookSecret` можно передать опционально (для ручной ротации секрета).
+
 Правила:
-- при `enabled=true` обязательны `apiKey`, `apiBaseUrl` и `webhookSecret`;
+- при `enabled=true` обязательны `apiKey` и `apiBaseUrl`;
+- если `webhookSecret` не передан, backend генерирует секрет автоматически;
 - `recipientField` определяет, из какого поля студента брать телефон для выставления счета.
+- `webhookUrl` для ApiPay единый (`/internal/apipay/webhook`), tenant в webhook резолвится по `merchantInvoiceId`.
+- Перед отправкой инвойса в ApiPay номер телефона автоматически нормализуется в формат `8XXXXXXXXXX`:
+  - `+7XXXXXXXXXX` -> `8XXXXXXXXXX`
+  - `7XXXXXXXXXX` -> `8XXXXXXXXXX`
+  - `XXXXXXXXXX` -> `8XXXXXXXXXX`
+  - если номер не приводится к валидному формату, инвойс фиксируется как failed с кодом `RECIPIENT_INVALID`.
 
 ---
 
@@ -4149,6 +4184,7 @@ Payload:
 interface GoogleDriveBackupSettingsDto {
   enabled: boolean;
   configured: boolean;
+  oauthConnectUrl: string | null;
   folderId: string | null;
   accessTokenMasked: string | null;
   lastBackupAt: string | null;
@@ -4157,6 +4193,27 @@ interface GoogleDriveBackupSettingsDto {
 
 #### `GET /api/v1/settings/google-drive-backup` — Получить настройки backup в Google Drive
 **Доступ:** `TENANT_ADMIN` или permission `SETTINGS_EDIT`
+
+`oauthConnectUrl` возвращается готовым для кнопки "Подключить Google Drive".
+
+#### `GET /api/v1/settings/google-drive-backup/oauth/connect-url` — Получить OAuth URL для подключения Google Drive
+**Доступ:** `TENANT_ADMIN` или permission `SETTINGS_EDIT`
+
+**Response:** `ApiResponse<string>`
+
+#### `GET /api/v1/settings/google-drive-backup/oauth/callback` — OAuth callback Google Drive
+**Доступ:** public callback endpoint (без JWT)
+
+Параметры query:
+- `code`
+- `state`
+- `error` (optional)
+- `error_description` (optional)
+
+Поведение:
+- валидируется подписанный `state` (tenant-aware);
+- access token сохраняется в tenant settings;
+- интеграция автоматически включается (`enabled=true`).
 
 #### `PUT /api/v1/settings/google-drive-backup` — Обновить настройки backup в Google Drive
 **Доступ:** `TENANT_ADMIN` или permission `SETTINGS_EDIT`
@@ -4172,8 +4229,9 @@ interface GoogleDriveBackupSettingsDto {
 
 Правила:
 - `accessToken` tenant-scoped и в ответах masked;
+- `accessToken` можно не передавать при OAuth-connect flow (callback сохранит токен автоматически);
 - если `folderId` не указан, файл загружается в root Google Drive пользователя;
-- v1 — manual backup flow без scheduler и без refresh-token orchestration.
+- backup запускается вручную.
 
 #### `POST /api/v1/settings/google-drive-backup/run` — Запустить backup в Google Drive
 **Доступ:** `TENANT_ADMIN` или permission `SETTINGS_EDIT`
@@ -4193,6 +4251,7 @@ interface GoogleDriveBackupSettingsDto {
 interface YandexDiskBackupSettingsDto {
   enabled: boolean;
   configured: boolean;
+  oauthConnectUrl: string | null;
   folderPath: string | null;          // например: disk:/1edu-backups
   accessTokenMasked: string | null;
   lastBackupAt: string | null;
@@ -4201,6 +4260,27 @@ interface YandexDiskBackupSettingsDto {
 
 #### `GET /api/v1/settings/yandex-disk-backup` — Получить настройки backup в Yandex Disk
 **Доступ:** `TENANT_ADMIN` или permission `SETTINGS_EDIT`
+
+`oauthConnectUrl` возвращается готовым для кнопки "Подключить Yandex Disk".
+
+#### `GET /api/v1/settings/yandex-disk-backup/oauth/connect-url` — Получить OAuth URL для подключения Yandex Disk
+**Доступ:** `TENANT_ADMIN` или permission `SETTINGS_EDIT`
+
+**Response:** `ApiResponse<string>`
+
+#### `GET /api/v1/settings/yandex-disk-backup/oauth/callback` — OAuth callback Yandex Disk
+**Доступ:** public callback endpoint (без JWT)
+
+Параметры query:
+- `code`
+- `state`
+- `error` (optional)
+- `error_description` (optional)
+
+Поведение:
+- валидируется подписанный `state` (tenant-aware);
+- access token сохраняется в tenant settings;
+- интеграция автоматически включается (`enabled=true`).
 
 #### `PUT /api/v1/settings/yandex-disk-backup` — Обновить настройки backup в Yandex Disk
 **Доступ:** `TENANT_ADMIN` или permission `SETTINGS_EDIT`
@@ -4217,7 +4297,8 @@ interface YandexDiskBackupSettingsDto {
 Правила:
 - `folderPath` по умолчанию `disk:/1edu-backups`;
 - `accessToken` tenant-scoped и в ответах masked;
-- v1 — manual backup flow без scheduler.
+- `accessToken` можно не передавать при OAuth-connect flow (callback сохранит токен автоматически);
+- backup запускается вручную.
 
 #### `POST /api/v1/settings/yandex-disk-backup/run` — Запустить backup в Yandex Disk
 **Доступ:** `TENANT_ADMIN` или permission `SETTINGS_EDIT`

@@ -245,6 +245,20 @@ nginx кэширует IP контейнера — после рестарта a
 
 `make deploy-service` вызывает `scripts/deploy.sh`, который делает reload автоматически. Проблема возникает только при ручном `docker compose up` без использования make.
 
+#### MinIO internal URL в API-ответах (studentPhoto/logoUrl)
+Если в БД хранится внутренний URL вида `http://minio:9000/...`, frontend не может загрузить изображение.
+
+**Симптом**: в `students` / `settings` API приходит `studentPhoto`/`logoUrl` с хостом `minio:9000`, в браузере такие ссылки недоступны.
+
+**Решение**:
+1. В `.env` задать `MINIO_PUBLIC_URL=https://api.1edu.kz/minio`
+2. В nginx добавить proxy для `/minio/* -> http://minio:9000/*`
+3. В MinIO открыть anonymous download только для нужных префиксов:
+  - `ondeedu-files/avatars`
+  - `ondeedu-files/logos`
+
+Backend уже нормализует legacy-URL в ответах (`student-service`, `student-search`, `settings-service`) на публичный base URL.
+
 #### Keycloak 26 User Profile — кастомные атрибуты (tenant_id, permissions)
 Keycloak 26 использует **DeclarativeUserProfile** по умолчанию. Кастомные атрибуты, не объявленные в схеме User Profile, **молча игнорируются** при создании/обновлении пользователя через Admin API.
 

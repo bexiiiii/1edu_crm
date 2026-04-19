@@ -4,7 +4,9 @@ import com.ondeedu.common.exception.BusinessException;
 import com.ondeedu.common.payment.ApiPayRecipientField;
 import com.ondeedu.common.payment.KpayRecipientField;
 import com.ondeedu.common.tenant.TenantContext;
+import com.ondeedu.common.tenant.TenantSchemaResolver;
 import com.ondeedu.settings.client.GoogleDriveBackupClient;
+import com.ondeedu.settings.client.GoogleDriveOAuthClient;
 import com.ondeedu.settings.dto.AisarSettingsDto;
 import com.ondeedu.settings.client.FileServiceClient;
 import com.ondeedu.settings.dto.ApiPaySettingsDto;
@@ -32,6 +34,7 @@ import com.ondeedu.settings.entity.TenantSettings;
 import com.ondeedu.settings.mapper.SettingsMapper;
 import com.ondeedu.settings.repository.SettingsRepository;
 import com.ondeedu.settings.client.YandexDiskBackupClient;
+import com.ondeedu.settings.client.YandexDiskOAuthClient;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.cache.annotation.CacheEvict;
@@ -41,34 +44,79 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 import org.springframework.web.multipart.MultipartFile;
+import org.springframework.web.util.UriComponentsBuilder;
+
+import javax.crypto.Mac;
+import javax.crypto.spec.SecretKeySpec;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.time.Instant;
+import java.util.Base64;
+import java.util.UUID;
 
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class SettingsService {
 
+    private static final String APIPAY_SIGNATURE_HEADER = "X-Webhook-Signature";
+    private static final String APIPAY_SIGNATURE_ALGORITHM = "HMAC-SHA256";
     private static final String AISAR_SIGNATURE_HEADER = "X-AISAR-Signature";
     private static final String AISAR_SIGNATURE_ALGORITHM = "HMAC-SHA256";
     private static final String FTELECOM_TOKEN_FIELD = "crm_token";
     private static final String ZADARMA_SIGNATURE_HEADER = "Signature";
     private static final String ZADARMA_SIGNATURE_ALGORITHM = "HMAC-SHA1 (base64)";
     private static final String ZADARMA_VALIDATION_MODE = "GET ?zd_echo=<random>";
+    private static final String OAUTH_PROVIDER_GOOGLE_DRIVE = "google_drive";
+    private static final String OAUTH_PROVIDER_YANDEX_DISK = "yandex_disk";
 
     private final SettingsRepository settingsRepository;
     private final SettingsMapper settingsMapper;
     private final FileServiceClient fileServiceClient;
     private final TenantBackupExporter tenantBackupExporter;
     private final GoogleDriveBackupClient googleDriveBackupClient;
+    private final GoogleDriveOAuthClient googleDriveOAuthClient;
     private final YandexDiskBackupClient yandexDiskBackupClient;
+    private final YandexDiskOAuthClient yandexDiskOAuthClient;
 
     @Value("${ondeedu.integrations.public-base-url:https://api.1edu.kz}")
     private String integrationsPublicBaseUrl;
+
+    @Value("${ondeedu.integrations.oauth.state-secret:change-me-oauth-state-secret}")
+    private String oauthStateSecret;
+
+    @Value("${ondeedu.integrations.google-drive.oauth.client-id:}")
+    private String googleDriveOAuthClientId;
+
+    @Value("${ondeedu.integrations.google-drive.oauth.client-secret:}")
+    private String googleDriveOAuthClientSecret;
+
+    @Value("${ondeedu.integrations.google-drive.oauth.scope:https://www.googleapis.com/auth/drive.file}")
+    private String googleDriveOAuthScope;
+
+    @Value("${ondeedu.integrations.yandex-disk.oauth.client-id:}")
+    private String yandexDiskOAuthClientId;
+
+    @Value("${ondeedu.integrations.yandex-disk.oauth.client-secret:}")
+    private String yandexDiskOAuthClientSecret;
+
+    @Value("${ondeedu.integrations.yandex-disk.oauth.scope:cloud_api:disk.read cloud_api:disk.write}")
+    private String yandexDiskOAuthScope;
+
+    @Value("${minio.public-url:}")
+    private String minioPublicUrl;
+
+    @Value("${minio.url:http://minio:9000}")
+    private String minioUrl;
+
+    @Value("${minio.bucket:ondeedu-files}")
+    private String minioBucket;
 
     @Transactional(readOnly = true)
     @Cacheable(value = "settings", key = "T(com.ondeedu.common.cache.TenantCacheKeys).fixed('tenant-settings')")
     public SettingsDto getSettings() {
         TenantSettings settings = getOrCreateSettings();
-        return settingsMapper.toDto(settings);
+        return toSettingsDto(settings);
     }
 
     @Transactional
@@ -78,7 +126,7 @@ public class SettingsService {
         settingsMapper.updateEntity(settings, request);
         settings = settingsRepository.save(settings);
         log.info("Updated tenant settings");
-        return settingsMapper.toDto(settings);
+        return toSettingsDto(settings);
     }
 
     @Transactional
@@ -95,7 +143,13 @@ public class SettingsService {
         settings.setLogoUrl(fileServiceClient.uploadLogo(file, bearerToken));
         settings = settingsRepository.save(settings);
         log.info("Updated tenant logo");
-        return settingsMapper.toDto(settings);
+        return toSettingsDto(settings);
+    }
+
+    private SettingsDto toSettingsDto(TenantSettings settings) {
+        SettingsDto dto = settingsMapper.toDto(settings);
+        dto.setLogoUrl(normalizeMediaUrl(dto.getLogoUrl()));
+        return dto;
     }
 
     @Transactional(readOnly = true)
@@ -192,8 +246,7 @@ public class SettingsService {
         TenantSettings settings = getOrCreateSettings();
 
         boolean configured = StringUtils.hasText(settings.getApipayApiKey())
-                && StringUtils.hasText(settings.getApipayApiBaseUrl())
-                && StringUtils.hasText(settings.getApipayWebhookSecret());
+            && StringUtils.hasText(settings.getApipayApiBaseUrl());
 
         return ApiPaySettingsDto.builder()
                 .enabled(Boolean.TRUE.equals(settings.getApipayEnabled()))
@@ -202,6 +255,9 @@ public class SettingsService {
                 .recipientField(settings.getApipayRecipientField())
                 .apiKeyMasked(maskSecret(settings.getApipayApiKey()))
                 .webhookSecretMasked(maskSecret(settings.getApipayWebhookSecret()))
+            .webhookUrl(buildApiPayWebhookUrl())
+            .signatureHeader(APIPAY_SIGNATURE_HEADER)
+            .signatureAlgorithm(APIPAY_SIGNATURE_ALGORITHM)
                 .build();
     }
 
@@ -242,9 +298,9 @@ public class SettingsService {
                 throw new BusinessException("APIPAY_BASE_URL_REQUIRED",
                         "ApiPay base URL is required when integration is enabled");
             }
+
             if (!StringUtils.hasText(settings.getApipayWebhookSecret())) {
-                throw new BusinessException("APIPAY_WEBHOOK_SECRET_REQUIRED",
-                        "ApiPay webhook secret is required when integration is enabled");
+                settings.setApipayWebhookSecret(generateWebhookSecret());
             }
         }
 
@@ -467,10 +523,54 @@ public class SettingsService {
         return GoogleDriveBackupSettingsDto.builder()
                 .enabled(Boolean.TRUE.equals(settings.getGoogleDriveBackupEnabled()))
                 .configured(configured)
+                .oauthConnectUrl(buildGoogleDriveOAuthConnectUrlSafe())
                 .folderId(settings.getGoogleDriveBackupFolderId())
                 .accessTokenMasked(maskSecret(settings.getGoogleDriveBackupAccessToken()))
                 .lastBackupAt(settings.getGoogleDriveLastBackupAt())
                 .build();
+    }
+
+    @Transactional(readOnly = true)
+    public String getGoogleDriveBackupOAuthConnectUrl() {
+        ensureGoogleDriveOAuthConfigured();
+        String tenantId = requireTenantId();
+        return buildGoogleDriveOAuthConnectUrl(tenantId);
+    }
+
+    @Transactional
+    @CacheEvict(value = "settings", allEntries = true)
+    public void completeGoogleDriveBackupOAuth(String code, String state) {
+        if (!StringUtils.hasText(code)) {
+            throw new BusinessException("GOOGLE_DRIVE_OAUTH_CODE_REQUIRED",
+                    "Google Drive OAuth code is required");
+        }
+
+        ensureGoogleDriveOAuthConfigured();
+        OAuthStateData stateData = parseAndVerifyOAuthState(state, OAUTH_PROVIDER_GOOGLE_DRIVE);
+        String schemaName = TenantSchemaResolver.schemaNameForTenantId(stateData.tenantId());
+        if (!StringUtils.hasText(schemaName)) {
+            throw new BusinessException("GOOGLE_DRIVE_OAUTH_INVALID_TENANT",
+                    "Invalid tenant in OAuth state");
+        }
+
+        TenantContext.setTenantId(stateData.tenantId());
+        TenantContext.setSchemaName(schemaName);
+        try {
+            String accessToken = googleDriveOAuthClient.exchangeAuthorizationCode(
+                    code.trim(),
+                    googleDriveOAuthClientId.trim(),
+                    googleDriveOAuthClientSecret.trim(),
+                    buildGoogleDriveOAuthCallbackUrl()
+            ).accessToken();
+
+            TenantSettings settings = getOrCreateSettings();
+            settings.setGoogleDriveBackupAccessToken(trimToNull(accessToken));
+            settings.setGoogleDriveBackupEnabled(true);
+            settingsRepository.save(settings);
+            log.info("Google Drive OAuth connected for tenant {}", stateData.tenantId());
+        } finally {
+            TenantContext.clear();
+        }
     }
 
     @Transactional
@@ -511,10 +611,53 @@ public class SettingsService {
         return YandexDiskBackupSettingsDto.builder()
                 .enabled(Boolean.TRUE.equals(settings.getYandexDiskBackupEnabled()))
                 .configured(configured)
+                .oauthConnectUrl(buildYandexDiskOAuthConnectUrlSafe())
                 .folderPath(settings.getYandexDiskBackupFolderPath())
                 .accessTokenMasked(maskSecret(settings.getYandexDiskBackupAccessToken()))
                 .lastBackupAt(settings.getYandexDiskLastBackupAt())
                 .build();
+    }
+
+    @Transactional(readOnly = true)
+    public String getYandexDiskBackupOAuthConnectUrl() {
+        ensureYandexDiskOAuthConfigured();
+        String tenantId = requireTenantId();
+        return buildYandexDiskOAuthConnectUrl(tenantId);
+    }
+
+    @Transactional
+    @CacheEvict(value = "settings", allEntries = true)
+    public void completeYandexDiskBackupOAuth(String code, String state) {
+        if (!StringUtils.hasText(code)) {
+            throw new BusinessException("YANDEX_DISK_OAUTH_CODE_REQUIRED",
+                    "Yandex Disk OAuth code is required");
+        }
+
+        ensureYandexDiskOAuthConfigured();
+        OAuthStateData stateData = parseAndVerifyOAuthState(state, OAUTH_PROVIDER_YANDEX_DISK);
+        String schemaName = TenantSchemaResolver.schemaNameForTenantId(stateData.tenantId());
+        if (!StringUtils.hasText(schemaName)) {
+            throw new BusinessException("YANDEX_DISK_OAUTH_INVALID_TENANT",
+                    "Invalid tenant in OAuth state");
+        }
+
+        TenantContext.setTenantId(stateData.tenantId());
+        TenantContext.setSchemaName(schemaName);
+        try {
+            String accessToken = yandexDiskOAuthClient.exchangeAuthorizationCode(
+                    code.trim(),
+                    yandexDiskOAuthClientId.trim(),
+                    yandexDiskOAuthClientSecret.trim()
+            ).accessToken();
+
+            TenantSettings settings = getOrCreateSettings();
+            settings.setYandexDiskBackupAccessToken(trimToNull(accessToken));
+            settings.setYandexDiskBackupEnabled(true);
+            settingsRepository.save(settings);
+            log.info("Yandex Disk OAuth connected for tenant {}", stateData.tenantId());
+        } finally {
+            TenantContext.clear();
+        }
     }
 
     @Transactional
@@ -628,6 +771,216 @@ public class SettingsService {
         return trimmed.isEmpty() ? null : trimmed;
     }
 
+    private String normalizeMediaUrl(String rawUrl) {
+        String value = trimToNull(rawUrl);
+        if (!StringUtils.hasText(value)) {
+            return null;
+        }
+
+        String publicBase = normalizeBaseUrl(minioPublicUrl);
+        String internalBase = normalizeBaseUrl(minioUrl);
+        String effectiveBase = StringUtils.hasText(publicBase) ? publicBase : internalBase;
+        if (!StringUtils.hasText(effectiveBase)) {
+            return value;
+        }
+
+        if (value.startsWith("http://") || value.startsWith("https://")) {
+            if (StringUtils.hasText(publicBase)
+                    && StringUtils.hasText(internalBase)
+                    && value.startsWith(internalBase + "/")) {
+                return publicBase + value.substring(internalBase.length());
+            }
+            return value;
+        }
+
+        String normalizedPath = value.startsWith("/") ? value.substring(1) : value;
+        String bucketPrefix = minioBucket + "/";
+        if (normalizedPath.startsWith(bucketPrefix)) {
+            return effectiveBase + "/" + normalizedPath;
+        }
+        return effectiveBase + "/" + minioBucket + "/" + normalizedPath;
+    }
+
+    private String normalizeBaseUrl(String url) {
+        String value = trimToNull(url);
+        if (!StringUtils.hasText(value)) {
+            return null;
+        }
+        return value.endsWith("/") ? value.substring(0, value.length() - 1) : value;
+    }
+
+    private String buildApiPayWebhookUrl() {
+        if (!StringUtils.hasText(integrationsPublicBaseUrl)) {
+            return null;
+        }
+        return integrationsPublicBaseUrl.replaceAll("/+$", "") + "/internal/apipay/webhook";
+    }
+
+    private String generateWebhookSecret() {
+        return UUID.randomUUID() + "-" + UUID.randomUUID();
+    }
+
+    private void ensureGoogleDriveOAuthConfigured() {
+        if (!StringUtils.hasText(googleDriveOAuthClientId)
+                || !StringUtils.hasText(googleDriveOAuthClientSecret)) {
+            throw new BusinessException("GOOGLE_DRIVE_OAUTH_NOT_CONFIGURED",
+                    "Google Drive OAuth client is not configured on server");
+        }
+    }
+
+    private void ensureYandexDiskOAuthConfigured() {
+        if (!StringUtils.hasText(yandexDiskOAuthClientId)
+                || !StringUtils.hasText(yandexDiskOAuthClientSecret)) {
+            throw new BusinessException("YANDEX_DISK_OAUTH_NOT_CONFIGURED",
+                    "Yandex Disk OAuth client is not configured on server");
+        }
+    }
+
+    private String requireTenantId() {
+        String tenantId = TenantContext.getTenantId();
+        if (!StringUtils.hasText(tenantId)) {
+            throw new BusinessException("TENANT_CONTEXT_REQUIRED", "Tenant context is required");
+        }
+        return tenantId.trim();
+    }
+
+    private String buildGoogleDriveOAuthConnectUrlSafe() {
+        try {
+            if (!StringUtils.hasText(TenantContext.getTenantId())
+                    || !StringUtils.hasText(googleDriveOAuthClientId)
+                    || !StringUtils.hasText(googleDriveOAuthClientSecret)) {
+                return null;
+            }
+            return buildGoogleDriveOAuthConnectUrl(TenantContext.getTenantId());
+        } catch (Exception ignored) {
+            return null;
+        }
+    }
+
+    private String buildYandexDiskOAuthConnectUrlSafe() {
+        try {
+            if (!StringUtils.hasText(TenantContext.getTenantId())
+                    || !StringUtils.hasText(yandexDiskOAuthClientId)
+                    || !StringUtils.hasText(yandexDiskOAuthClientSecret)) {
+                return null;
+            }
+            return buildYandexDiskOAuthConnectUrl(TenantContext.getTenantId());
+        } catch (Exception ignored) {
+            return null;
+        }
+    }
+
+    private String buildGoogleDriveOAuthConnectUrl(String tenantId) {
+        String state = buildOAuthState(OAUTH_PROVIDER_GOOGLE_DRIVE, tenantId);
+        return UriComponentsBuilder
+            .fromUriString("https://accounts.google.com/o/oauth2/v2/auth")
+                .queryParam("client_id", googleDriveOAuthClientId.trim())
+                .queryParam("redirect_uri", buildGoogleDriveOAuthCallbackUrl())
+                .queryParam("response_type", "code")
+                .queryParam("scope", googleDriveOAuthScope)
+                .queryParam("access_type", "offline")
+                .queryParam("prompt", "consent")
+                .queryParam("state", state)
+                .build()
+                .encode()
+                .toUriString();
+    }
+
+    private String buildYandexDiskOAuthConnectUrl(String tenantId) {
+        String state = buildOAuthState(OAUTH_PROVIDER_YANDEX_DISK, tenantId);
+        return UriComponentsBuilder
+            .fromUriString("https://oauth.yandex.ru/authorize")
+                .queryParam("response_type", "code")
+                .queryParam("client_id", yandexDiskOAuthClientId.trim())
+                .queryParam("redirect_uri", buildYandexDiskOAuthCallbackUrl())
+                .queryParam("scope", yandexDiskOAuthScope)
+                .queryParam("state", state)
+                .build()
+                .encode()
+                .toUriString();
+    }
+
+    private String buildGoogleDriveOAuthCallbackUrl() {
+        return integrationsPublicBaseUrl.replaceAll("/+$", "")
+                + "/api/v1/settings/google-drive-backup/oauth/callback";
+    }
+
+    private String buildYandexDiskOAuthCallbackUrl() {
+        return integrationsPublicBaseUrl.replaceAll("/+$", "")
+                + "/api/v1/settings/yandex-disk-backup/oauth/callback";
+    }
+
+    private String buildOAuthState(String provider, String tenantId) {
+        long issuedAt = Instant.now().getEpochSecond();
+        String payload = provider + "|" + tenantId + "|" + issuedAt;
+        String payloadB64 = Base64.getUrlEncoder().withoutPadding()
+                .encodeToString(payload.getBytes(StandardCharsets.UTF_8));
+        String signature = signStatePayload(payloadB64);
+        return payloadB64 + "." + signature;
+    }
+
+    private OAuthStateData parseAndVerifyOAuthState(String state, String expectedProvider) {
+        if (!StringUtils.hasText(state) || !state.contains(".")) {
+            throw new BusinessException("OAUTH_STATE_INVALID", "OAuth state is invalid");
+        }
+
+        String[] parts = state.split("\\.", 2);
+        if (parts.length != 2 || !StringUtils.hasText(parts[0]) || !StringUtils.hasText(parts[1])) {
+            throw new BusinessException("OAUTH_STATE_INVALID", "OAuth state is invalid");
+        }
+
+        String expectedSignature = signStatePayload(parts[0]);
+        boolean validSignature = MessageDigest.isEqual(
+                expectedSignature.getBytes(StandardCharsets.UTF_8),
+                parts[1].getBytes(StandardCharsets.UTF_8)
+        );
+        if (!validSignature) {
+            throw new BusinessException("OAUTH_STATE_INVALID", "OAuth state signature is invalid");
+        }
+
+        String payload;
+        try {
+            payload = new String(Base64.getUrlDecoder().decode(parts[0]), StandardCharsets.UTF_8);
+        } catch (IllegalArgumentException e) {
+            throw new BusinessException("OAUTH_STATE_INVALID", "OAuth state payload is invalid");
+        }
+
+        String[] payloadParts = payload.split("\\|", 3);
+        if (payloadParts.length != 3) {
+            throw new BusinessException("OAUTH_STATE_INVALID", "OAuth state payload is invalid");
+        }
+
+        long issuedAt;
+        try {
+            issuedAt = Long.parseLong(payloadParts[2]);
+        } catch (NumberFormatException e) {
+            throw new BusinessException("OAUTH_STATE_INVALID", "OAuth state timestamp is invalid");
+        }
+
+        long ageSeconds = Instant.now().getEpochSecond() - issuedAt;
+        if (ageSeconds < 0 || ageSeconds > 600) {
+            throw new BusinessException("OAUTH_STATE_EXPIRED", "OAuth state is expired");
+        }
+
+        OAuthStateData stateData = new OAuthStateData(payloadParts[0], payloadParts[1], issuedAt);
+        if (!expectedProvider.equals(stateData.provider())) {
+            throw new BusinessException("OAUTH_STATE_PROVIDER_MISMATCH",
+                    "OAuth state provider mismatch");
+        }
+        return stateData;
+    }
+
+    private String signStatePayload(String payloadB64) {
+        try {
+            Mac mac = Mac.getInstance("HmacSHA256");
+            mac.init(new SecretKeySpec(oauthStateSecret.getBytes(StandardCharsets.UTF_8), "HmacSHA256"));
+            byte[] digest = mac.doFinal(payloadB64.getBytes(StandardCharsets.UTF_8));
+            return Base64.getUrlEncoder().withoutPadding().encodeToString(digest);
+        } catch (Exception e) {
+            throw new BusinessException("OAUTH_STATE_SIGN_FAILED", "Unable to sign OAuth state");
+        }
+    }
+
     private String buildAisarWebhookUrl() {
         String tenantId = TenantContext.getTenantId();
         if (!StringUtils.hasText(tenantId) || !StringUtils.hasText(integrationsPublicBaseUrl)) {
@@ -650,5 +1003,8 @@ public class SettingsService {
             return null;
         }
         return integrationsPublicBaseUrl.replaceAll("/+$", "") + "/internal/zadarma/webhook/" + tenantId;
+    }
+
+    private record OAuthStateData(String provider, String tenantId, long issuedAtEpochSec) {
     }
 }

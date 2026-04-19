@@ -6,6 +6,7 @@ import com.ondeedu.student.entity.Student;
 import com.ondeedu.student.support.StudentMetadata;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
@@ -23,6 +24,15 @@ import org.springframework.util.StringUtils;
 public class StudentSearchService {
 
     private final ElasticsearchOperations elasticsearchOperations;
+
+    @Value("${minio.public-url:}")
+    private String minioPublicUrl;
+
+    @Value("${minio.url:http://minio:9000}")
+    private String minioUrl;
+
+    @Value("${minio.bucket:ondeedu-files}")
+    private String minioBucket;
 
     public void indexStudent(Student student, String tenantId, StudentMetadata metadata) {
         if (!StringUtils.hasText(tenantId)) {
@@ -62,10 +72,60 @@ public class StudentSearchService {
                 elasticsearchOperations.search(criteriaQuery, StudentSearchDocument.class);
 
         PageImpl<StudentDto> page = new PageImpl<>(
-                hits.stream().map(hit -> hit.getContent().toDto()).toList(),
+                hits.stream().map(hit -> {
+                    StudentDto dto = hit.getContent().toDto();
+                    dto.setStudentPhoto(normalizeMediaUrl(dto.getStudentPhoto()));
+                    return dto;
+                }).toList(),
                 pageable,
                 hits.getTotalHits()
         );
         return PageResponse.from(page);
+    }
+
+    private String normalizeMediaUrl(String rawUrl) {
+        String value = trimToNull(rawUrl);
+        if (!StringUtils.hasText(value)) {
+            return null;
+        }
+
+        String publicBase = normalizeBaseUrl(minioPublicUrl);
+        String internalBase = normalizeBaseUrl(minioUrl);
+        String effectiveBase = StringUtils.hasText(publicBase) ? publicBase : internalBase;
+        if (!StringUtils.hasText(effectiveBase)) {
+            return value;
+        }
+
+        if (value.startsWith("http://") || value.startsWith("https://")) {
+            if (StringUtils.hasText(publicBase)
+                    && StringUtils.hasText(internalBase)
+                    && value.startsWith(internalBase + "/")) {
+                return publicBase + value.substring(internalBase.length());
+            }
+            return value;
+        }
+
+        String normalizedPath = value.startsWith("/") ? value.substring(1) : value;
+        String bucketPrefix = minioBucket + "/";
+        if (normalizedPath.startsWith(bucketPrefix)) {
+            return effectiveBase + "/" + normalizedPath;
+        }
+        return effectiveBase + "/" + minioBucket + "/" + normalizedPath;
+    }
+
+    private String normalizeBaseUrl(String url) {
+        String value = trimToNull(url);
+        if (!StringUtils.hasText(value)) {
+            return null;
+        }
+        return value.endsWith("/") ? value.substring(0, value.length() - 1) : value;
+    }
+
+    private String trimToNull(String value) {
+        if (value == null) {
+            return null;
+        }
+        String trimmed = value.trim();
+        return trimmed.isEmpty() ? null : trimmed;
     }
 }

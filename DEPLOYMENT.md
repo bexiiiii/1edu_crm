@@ -14,14 +14,41 @@ This repository is prepared for a production deployment on `api.1edu.kz` with te
 - Public tenant signup is exposed only via `POST https://api.1edu.kz/api/v1/register`.
 - Request path for signup: `nginx /api/* -> api-gateway -> tenant-service`.
 - Public integration webhooks for CRM/telephony use `https://api.1edu.kz/internal/*`.
-- Request path for webhooks: `nginx /internal/* -> api-gateway -> lead-service`.
-- Currently exposed webhook paths in gateway: `/internal/aisar/**`, `/internal/ftelecom/**`, `/internal/zadarma/**`.
+- Request path for webhooks: `nginx /internal/* -> api-gateway -> service by route` (`lead-service` for AISAR/Freedom/Zadarma, `payment-service` for ApiPay/KPAY).
+- Currently exposed webhook paths in gateway: `/internal/aisar/**`, `/internal/ftelecom/**`, `/internal/zadarma/**`, `/internal/apipay/**`, `/internal/kpay/**`.
+- OAuth callbacks for cloud backup use:
+	- `https://api.1edu.kz/api/v1/settings/google-drive-backup/oauth/callback`
+	- `https://api.1edu.kz/api/v1/settings/yandex-disk-backup/oauth/callback`
 - Keycloak is exposed publicly only under `https://api.1edu.kz/auth/*`.
 - Browser/OIDC login starts at `https://api.1edu.kz/auth/realms/ondeedu/protocol/openid-connect/auth`.
 - Password-grant token exchange uses `https://api.1edu.kz/auth/realms/ondeedu/protocol/openid-connect/token`.
 - Keycloak account console is available at `https://api.1edu.kz/auth/realms/ondeedu/account`.
 - Keycloak self-registration UI is disabled in the realm (`registrationAllowed=false`), so there is no supported public signup path under `/auth/*`.
 - There is no backend login endpoint such as `/api/v1/auth/login`; authentication is handled directly by Keycloak.
+
+## Public media files (MinIO)
+
+Чтобы frontend корректно открывал `studentPhoto` и `logoUrl`, в production нужен публичный MinIO base URL через nginx.
+
+Обязательные настройки:
+
+- В `.env` задать `MINIO_PUBLIC_URL=https://api.1edu.kz/minio`
+- В nginx должен быть маршрут `/minio/* -> http://minio:9000/*`
+
+Минимальная политика доступа (только медиа-префиксы, не весь bucket):
+
+```bash
+docker exec 1edu-minio sh -lc '
+	mc alias set local http://localhost:9000 "$MINIO_ROOT_USER" "$MINIO_ROOT_PASSWORD" &&
+	mc anonymous set download local/ondeedu-files/avatars &&
+	mc anonymous set download local/ondeedu-files/logos
+'
+```
+
+Проверка:
+
+- URL из API-полей `studentPhoto`/`logoUrl` должен открываться как `https://api.1edu.kz/minio/<bucket>/<object>` с HTTP `200`.
+- Если получаете `403` на `avatars/*` или `logos/*`, повторно примените `mc anonymous set download` для этих префиксов.
 
 ## Clean server bootstrap
 
@@ -155,4 +182,5 @@ Expected:
 
 Webhook ingress sanity check:
 
-- if `https://api.1edu.kz/internal/aisar/...`, `.../ftelecom/...`, `.../zadarma/...` returns `404` from edge, verify nginx has `location /internal/ { proxy_pass http://api_gateway; ... }` and reload nginx.
+- if `https://api.1edu.kz/internal/aisar/...`, `.../ftelecom/...`, `.../zadarma/...`, `.../apipay/...`, `.../kpay/...` returns `404` from edge, verify nginx has `location /internal/ { proxy_pass http://api_gateway; ... }` and reload nginx.
+- if OAuth callback URLs under `/api/v1/settings/*/oauth/callback` return `401`, verify gateway/service security allowlist includes these callback paths.

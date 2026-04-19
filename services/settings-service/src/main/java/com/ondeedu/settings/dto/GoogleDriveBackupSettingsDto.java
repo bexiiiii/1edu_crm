@@ -15,6 +15,7 @@ public class GoogleDriveBackupSettingsDto {
 
     private Boolean enabled;
     private Boolean configured;
+    private String oauthConnectUrl;
     private String folderId;
     private String accessTokenMasked;
     private Instant lastBackupAt;

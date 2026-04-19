@@ -81,6 +81,18 @@ logging:
 ondeedu:
   integrations:
     public-base-url: ${ONDEEDU_INTEGRATIONS_PUBLIC_BASE_URL:https://api.1edu.kz}
+    oauth:
+      state-secret: ${ONDEEDU_INTEGRATIONS_OAUTH_STATE_SECRET:change-me-oauth-state-secret}
+    google-drive:
+      oauth:
+        client-id: ${ONDEEDU_GOOGLE_DRIVE_OAUTH_CLIENT_ID:}
+        client-secret: ${ONDEEDU_GOOGLE_DRIVE_OAUTH_CLIENT_SECRET:}
+        scope: ${ONDEEDU_GOOGLE_DRIVE_OAUTH_SCOPE:https://www.googleapis.com/auth/drive.file}
+    yandex-disk:
+      oauth:
+        client-id: ${ONDEEDU_YANDEX_DISK_OAUTH_CLIENT_ID:}
+        client-secret: ${ONDEEDU_YANDEX_DISK_OAUTH_CLIENT_SECRET:}
+        scope: ${ONDEEDU_YANDEX_DISK_OAUTH_SCOPE:cloud_api:disk.read cloud_api:disk.write}
 
 services:
   auth-service:

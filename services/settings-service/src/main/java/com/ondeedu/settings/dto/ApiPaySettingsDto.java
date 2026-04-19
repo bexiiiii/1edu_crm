@@ -18,4 +18,7 @@ public class ApiPaySettingsDto {
     private ApiPayRecipientField recipientField;
     private String apiKeyMasked;
     private String webhookSecretMasked;
+    private String webhookUrl;
+    private String signatureHeader;
+    private String signatureAlgorithm;
 }

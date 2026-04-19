@@ -79,6 +79,26 @@ spring:
                 name: leadService
                 fallbackUri: forward:/fallback/lead
 
+        - id: apipay-webhook
+          uri: lb://payment-service
+          predicates:
+            - Path=/internal/apipay/**
+          filters:
+            - name: CircuitBreaker
+              args:
+                name: paymentService
+                fallbackUri: forward:/fallback/payment
+
+        - id: kpay-webhook
+          uri: lb://payment-service
+          predicates:
+            - Path=/internal/kpay/**
+          filters:
+            - name: CircuitBreaker
+              args:
+                name: paymentService
+                fallbackUri: forward:/fallback/payment
+
         # Public Registration (no auth required)
         - id: registration
           uri: lb://tenant-service

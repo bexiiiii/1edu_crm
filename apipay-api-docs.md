@@ -11,6 +11,33 @@
 
 ---
 
+## 1edu CRM Integration Notes
+
+Эти пункты описывают поведение именно нашей CRM-интеграции с ApiPay.
+
+- **CRM webhook endpoint:** `https://api.1edu.kz/internal/apipay/webhook`
+- **Public ingress:** путь `/internal/apipay/**` проброшен через nginx и api-gateway в `payment-service`
+- **Webhook signature header:** `X-Webhook-Signature`
+- **Signature format:** `sha256=<hex>` (HMAC-SHA256 по raw body и tenant webhook secret)
+- **Tenant resolution в webhook:** по `external_order_id`/`invoice_id` формата
+  `<tenantUuidWithoutDashes>_<random>`
+- **Invoice side-effect:** при webhook-статусе `PAID` CRM автоматически создаёт запись в `student_payments`
+  и связывает её с `apipay_invoices.student_payment_id`
+
+### Phone normalization in CRM
+
+ApiPay ожидает номер в формате `8XXXXXXXXXX`.
+CRM перед отправкой инвойса автоматически нормализует номер:
+
+- `+7XXXXXXXXXX` -> `8XXXXXXXXXX`
+- `7XXXXXXXXXX` -> `8XXXXXXXXXX`
+- `XXXXXXXXXX` -> `8XXXXXXXXXX`
+
+Если номер не приводится к корректному формату, инвойс не отправляется в ApiPay и сохраняется
+как failed с ошибкой `RECIPIENT_INVALID`.
+
+---
+
 ## Pricing
 
 | Plan | Transaction Limit (per day) | Price/month |

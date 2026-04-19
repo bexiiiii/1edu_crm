@@ -141,10 +141,12 @@ public class ApiPayInvoiceService {
                 continue;
             }
 
-            String recipient = resolveRecipient(studentOpt.get(), config.recipientField());
+            String recipientRaw = resolveRecipient(studentOpt.get(), config.recipientField());
+            String recipient = normalizeRecipientForApiPay(recipientRaw);
             if (!StringUtils.hasText(recipient)) {
                 failed += createFailedInvoice(subscription, targetMonth, monthlyAmount,
-                        config.recipientField(), "RECIPIENT_EMPTY", "Configured recipient field is empty");
+                        config.recipientField(), "RECIPIENT_INVALID",
+                        "Configured recipient phone must be in format 8XXXXXXXXXX");
                 continue;
             }
 
@@ -430,6 +432,32 @@ public class ApiPayInvoiceService {
         }
         String trimmed = value.trim();
         return trimmed.isEmpty() ? null : trimmed;
+    }
+
+    private String normalizeRecipientForApiPay(String phone) {
+        String normalized = normalize(phone);
+        if (!StringUtils.hasText(normalized)) {
+            return null;
+        }
+
+        String digits = normalized.replaceAll("\\D", "");
+        if (!StringUtils.hasText(digits)) {
+            return null;
+        }
+
+        if (digits.length() == 11 && digits.startsWith("8")) {
+            return digits;
+        }
+
+        if (digits.length() == 11 && digits.startsWith("7")) {
+            return "8" + digits.substring(1);
+        }
+
+        if (digits.length() == 10) {
+            return "8" + digits;
+        }
+
+        return null;
     }
 
     private String buildMerchantInvoiceId(String tenantId) {

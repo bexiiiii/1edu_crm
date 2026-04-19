@@ -41,7 +41,9 @@ public class SecurityConfig {
                     "/swagger-ui/**",
                     "/swagger-ui.html",
                     "/internal/**",
-                    "/api/v1/register"
+                    "/api/v1/register",
+                    "/api/v1/settings/google-drive-backup/oauth/callback",
+                    "/api/v1/settings/yandex-disk-backup/oauth/callback"
                 ).permitAll()
                 .anyRequest().authenticated()
             )

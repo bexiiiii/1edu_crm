@@ -141,9 +141,7 @@ public class SettingsGrpcService extends SettingsServiceGrpc.SettingsServiceImpl
                     .setEnabled(dto.isEnabled())
                     .setConfigured(dto.isEnabled()
                             && dto.getApiKey() != null
-                            && !dto.getApiKey().isBlank()
-                            && dto.getWebhookSecret() != null
-                            && !dto.getWebhookSecret().isBlank());
+                        && !dto.getApiKey().isBlank());
 
             if (dto.getApiBaseUrl() != null) {
                 configBuilder.setApiBaseUrl(StringValue.of(dto.getApiBaseUrl()));
