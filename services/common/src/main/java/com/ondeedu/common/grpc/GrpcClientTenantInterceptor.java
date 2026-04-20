@@ -20,12 +20,16 @@ public class GrpcClientTenantInterceptor implements ClientInterceptor {
             public void start(Listener<RespT> responseListener, Metadata headers) {
                 String tenantId = TenantContext.getTenantId();
                 String userId = TenantContext.getUserId();
+                String branchId = TenantContext.getBranchId();
 
                 if (tenantId != null) {
                     headers.put(GrpcTenantInterceptor.TENANT_ID_KEY, tenantId);
                 }
                 if (userId != null) {
                     headers.put(GrpcTenantInterceptor.USER_ID_KEY, userId);
+                }
+                if (branchId != null) {
+                    headers.put(GrpcTenantInterceptor.BRANCH_ID_KEY, branchId);
                 }
 
                 super.start(responseListener, headers);

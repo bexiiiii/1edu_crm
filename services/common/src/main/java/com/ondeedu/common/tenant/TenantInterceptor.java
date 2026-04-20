@@ -14,12 +14,20 @@ import org.springframework.util.StringUtils;
 import org.springframework.stereotype.Component;
 import org.springframework.web.servlet.HandlerInterceptor;
 
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
+import java.util.UUID;
+
 @Slf4j
 @Component
 public class TenantInterceptor implements HandlerInterceptor {
 
     private static final String TENANT_HEADER = "X-Tenant-ID";
     private static final String TENANT_CLAIM = "tenant_id";
+    private static final String BRANCH_HEADER = "X-Branch-ID";
+    private static final String BRANCH_CLAIM = "branch_id";
+    private static final String BRANCH_IDS_CLAIM = "branch_ids";
 
     @Value("${ondeedu.multitenancy.enabled:true}")
     private boolean multitenancyEnabled;
@@ -63,6 +71,11 @@ public class TenantInterceptor implements HandlerInterceptor {
         String userId = extractUserId();
         if (userId != null) {
             TenantContext.setUserId(userId);
+        }
+
+        String branchId = extractBranchId(request);
+        if (StringUtils.hasText(branchId)) {
+            TenantContext.setBranchId(branchId);
         }
 
         return true;
@@ -113,5 +126,74 @@ public class TenantInterceptor implements HandlerInterceptor {
             }
         }
         return null;
+    }
+
+    private String extractBranchId(HttpServletRequest request) {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        String branchFromHeader = normalizeUuid(request.getHeader(BRANCH_HEADER));
+
+        if (authentication != null && authentication.getPrincipal() instanceof Jwt jwt) {
+            Set<String> allowedBranchIds = resolveAllowedBranchIds(jwt);
+            if (!allowedBranchIds.isEmpty()) {
+                if (StringUtils.hasText(branchFromHeader)) {
+                    if (!allowedBranchIds.contains(branchFromHeader)) {
+                        throw new BusinessException(
+                                "BRANCH_ACCESS_DENIED",
+                                "Selected branch is not allowed for this user",
+                                HttpStatus.FORBIDDEN
+                        );
+                    }
+                    return branchFromHeader;
+                }
+
+                if (allowedBranchIds.size() == 1) {
+                    return allowedBranchIds.iterator().next();
+                }
+
+                String singleBranchClaim = normalizeUuid(jwt.getClaimAsString(BRANCH_CLAIM));
+                if (StringUtils.hasText(singleBranchClaim) && allowedBranchIds.contains(singleBranchClaim)) {
+                    return singleBranchClaim;
+                }
+
+                return null;
+            }
+
+            String singleBranchClaim = normalizeUuid(jwt.getClaimAsString(BRANCH_CLAIM));
+            if (StringUtils.hasText(branchFromHeader)) {
+                return branchFromHeader;
+            }
+            return singleBranchClaim;
+        }
+
+        return branchFromHeader;
+    }
+
+    private Set<String> resolveAllowedBranchIds(Jwt jwt) {
+        List<String> rawClaim = jwt.getClaimAsStringList(BRANCH_IDS_CLAIM);
+        if (rawClaim == null || rawClaim.isEmpty()) {
+            return Set.of();
+        }
+
+        Set<String> result = new HashSet<>();
+        for (String raw : rawClaim) {
+            String normalized = normalizeUuid(raw);
+            if (StringUtils.hasText(normalized)) {
+                result.add(normalized);
+            }
+        }
+        return result;
+    }
+
+    private String normalizeUuid(String raw) {
+        if (!StringUtils.hasText(raw)) {
+            return null;
+        }
+
+        String value = raw.trim();
+        try {
+            return UUID.fromString(value).toString();
+        } catch (IllegalArgumentException ignored) {
+            return null;
+        }
     }
 }

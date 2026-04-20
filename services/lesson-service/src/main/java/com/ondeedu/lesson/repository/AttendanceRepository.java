@@ -23,6 +23,17 @@ public interface AttendanceRepository extends JpaRepository<Attendance, UUID> {
 
     Page<Attendance> findByStudentId(UUID studentId, Pageable pageable);
 
+    @Query("""
+            SELECT a
+            FROM Attendance a
+            JOIN Lesson l ON l.id = a.lessonId
+            WHERE a.studentId = :studentId
+              AND l.teacherId = :teacherId
+            """)
+    Page<Attendance> findByStudentIdAndTeacherId(@Param("studentId") UUID studentId,
+                                                 @Param("teacherId") UUID teacherId,
+                                                 Pageable pageable);
+
     Optional<Attendance> findByLessonIdAndStudentId(UUID lessonId, UUID studentId);
 
     boolean existsByLessonIdAndStudentId(UUID lessonId, UUID studentId);

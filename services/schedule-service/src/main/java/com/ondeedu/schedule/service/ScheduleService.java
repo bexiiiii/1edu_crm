@@ -28,8 +28,13 @@ import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.http.HttpStatus;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
 
 import java.time.DayOfWeek;
 import java.time.Instant;
@@ -98,6 +103,7 @@ public class ScheduleService {
     public ScheduleDto getSchedule(UUID id) {
         Schedule schedule = scheduleRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Schedule", "id", id));
+        enforceTeacherOwnSchedule(schedule);
         return scheduleMapper.toDto(schedule);
     }
 
@@ -106,6 +112,7 @@ public class ScheduleService {
     public ScheduleDto updateSchedule(UUID id, UpdateScheduleRequest request) {
         Schedule schedule = scheduleRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Schedule", "id", id));
+        enforceTeacherOwnSchedule(schedule);
 
         // Determine effective courseId after the update
         UUID effectiveCourseId = request.getCourseId() != null ? request.getCourseId() : schedule.getCourseId();
@@ -152,6 +159,7 @@ public class ScheduleService {
     public void deleteSchedule(UUID id) {
         Schedule schedule = scheduleRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Schedule", "id", id));
+        enforceTeacherOwnSchedule(schedule);
         List<ManagedLesson> existingLessons = lessonGrpcClient.listGroupLessons(id);
 
         synchronizeLessonsOnDelete(id, existingLessons);
@@ -171,7 +179,16 @@ public class ScheduleService {
     @Transactional(readOnly = true)
     public PageResponse<ScheduleDto> listSchedules(ScheduleStatus status, UUID courseId, UUID teacherId, Pageable pageable) {
         Page<Schedule> page;
-        if (status != null) {
+        if (isTeacherUser()) {
+            UUID currentTeacherId = resolveCurrentTeacherStaffId();
+            if (status != null) {
+                page = scheduleRepository.findByStatusAndTeacherId(status, currentTeacherId, pageable);
+            } else if (courseId != null) {
+                page = scheduleRepository.findByCourseIdAndTeacherId(courseId, currentTeacherId, pageable);
+            } else {
+                page = scheduleRepository.findByTeacherId(currentTeacherId, pageable);
+            }
+        } else if (status != null) {
             page = scheduleRepository.findByStatus(status, pageable);
         } else if (courseId != null) {
             page = scheduleRepository.findByCourseId(courseId, pageable);
@@ -185,13 +202,23 @@ public class ScheduleService {
 
     @Transactional(readOnly = true)
     public PageResponse<ScheduleDto> getSchedulesByRoom(UUID roomId, Pageable pageable) {
-        Page<Schedule> page = scheduleRepository.findByRoomId(roomId, pageable);
+        Page<Schedule> page;
+        if (isTeacherUser()) {
+            page = scheduleRepository.findByRoomIdAndTeacherId(roomId, resolveCurrentTeacherStaffId(), pageable);
+        } else {
+            page = scheduleRepository.findByRoomId(roomId, pageable);
+        }
         return PageResponse.from(page, scheduleMapper::toDto);
     }
 
     @Transactional(readOnly = true)
     public PageResponse<ScheduleDto> searchSchedules(String query, Pageable pageable) {
-        Page<Schedule> page = scheduleRepository.search(query, pageable);
+        Page<Schedule> page;
+        if (isTeacherUser()) {
+            page = scheduleRepository.searchByTeacherId(query, resolveCurrentTeacherStaffId(), pageable);
+        } else {
+            page = scheduleRepository.search(query, pageable);
+        }
         return PageResponse.from(page, scheduleMapper::toDto);
     }
 
@@ -668,5 +695,60 @@ public class ScheduleService {
                 "INVALID_SCHEDULE_DAYS",
                 "No lesson dates match the provided daysOfWeek"
         );
+    }
+
+    private void enforceTeacherOwnSchedule(Schedule schedule) {
+        if (!isTeacherUser()) {
+            return;
+        }
+
+        UUID currentTeacherId = resolveCurrentTeacherStaffId();
+        if (!currentTeacherId.equals(schedule.getTeacherId())) {
+            throw new BusinessException(
+                    "TEACHER_SCOPE_DENIED",
+                    "Teacher can access only own schedules",
+                    HttpStatus.FORBIDDEN
+            );
+        }
+    }
+
+    private boolean isTeacherUser() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication == null) {
+            return false;
+        }
+
+        return authentication.getAuthorities().stream()
+                .anyMatch(authority -> "ROLE_TEACHER".equals(authority.getAuthority()));
+    }
+
+    private UUID resolveCurrentTeacherStaffId() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication == null || !(authentication.getPrincipal() instanceof Jwt jwt)) {
+            throw new BusinessException(
+                    "TEACHER_STAFF_ID_REQUIRED",
+                    "Teacher profile is not linked to staff account",
+                    HttpStatus.FORBIDDEN
+            );
+        }
+
+        String staffId = jwt.getClaimAsString("staff_id");
+        if (!StringUtils.hasText(staffId)) {
+            throw new BusinessException(
+                    "TEACHER_STAFF_ID_REQUIRED",
+                    "Teacher profile is not linked to staff account",
+                    HttpStatus.FORBIDDEN
+            );
+        }
+
+        try {
+            return UUID.fromString(staffId);
+        } catch (IllegalArgumentException ex) {
+            throw new BusinessException(
+                    "TEACHER_STAFF_ID_INVALID",
+                    "Teacher staff linkage is invalid",
+                    HttpStatus.FORBIDDEN
+            );
+        }
     }
 }

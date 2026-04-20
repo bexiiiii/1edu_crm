@@ -23,6 +23,9 @@ public class UpdateUserRequest {
     /** Optional: link auth account to staff profile in staff-service */
     private UUID staffId;
 
+    /** Optional: replace branch-scoped access list for this user */
+    private List<UUID> branchIds;
+
     /** Optional: replace all permissions for this user */
     private List<String> permissions;
 }

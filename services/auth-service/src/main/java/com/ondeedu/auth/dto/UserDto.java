@@ -22,6 +22,8 @@ public class UserDto {
 
     private UUID staffId;
 
+    private List<UUID> branchIds;
+
     private List<String> roles;
 
     /** Current permission codes assigned to this user (from Keycloak attribute) */

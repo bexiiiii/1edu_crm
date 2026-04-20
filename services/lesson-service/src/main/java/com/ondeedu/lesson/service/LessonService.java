@@ -3,6 +3,7 @@ package com.ondeedu.lesson.service;
 import com.ondeedu.common.audit.AuditAction;
 import com.ondeedu.common.audit.AuditLogPublisher;
 import com.ondeedu.common.audit.TenantAuditEvent;
+import com.ondeedu.common.exception.BusinessException;
 import com.ondeedu.common.dto.PageResponse;
 import com.ondeedu.common.exception.ResourceNotFoundException;
 import com.ondeedu.common.tenant.TenantContext;
@@ -21,8 +22,13 @@ import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.http.HttpStatus;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
 
 import java.time.LocalDate;
 import java.util.List;
@@ -61,6 +67,7 @@ public class LessonService {
     public LessonDto getLesson(UUID id) {
         Lesson lesson = lessonRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Lesson", "id", id));
+        enforceTeacherOwnLesson(lesson);
         return lessonMapper.toDto(lesson);
     }
 
@@ -69,6 +76,7 @@ public class LessonService {
     public LessonDto updateLesson(UUID id, UpdateLessonRequest request) {
         Lesson lesson = lessonRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Lesson", "id", id));
+        enforceTeacherOwnLesson(lesson);
 
         lessonMapper.updateEntity(lesson, request);
         lesson = lessonRepository.save(lesson);
@@ -88,6 +96,10 @@ public class LessonService {
     @Transactional
     @CacheEvict(value = "lessons", key = "T(com.ondeedu.common.cache.TenantCacheKeys).id(#id)")
     public void deleteLesson(UUID id) {
+        Lesson lesson = lessonRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Lesson", "id", id));
+        enforceTeacherOwnLesson(lesson);
+
         if (!lessonRepository.existsById(id)) {
             throw new ResourceNotFoundException("Lesson", "id", id);
         }
@@ -100,6 +112,7 @@ public class LessonService {
     public LessonDto completeLesson(UUID id, String topic, String homework) {
         Lesson lesson = lessonRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Lesson", "id", id));
+        enforceTeacherOwnLesson(lesson);
 
         lesson.setStatus(LessonStatus.COMPLETED);
         if (topic != null) {
@@ -127,6 +140,7 @@ public class LessonService {
     public LessonDto cancelLesson(UUID id) {
         Lesson lesson = lessonRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Lesson", "id", id));
+        enforceTeacherOwnLesson(lesson);
 
         lesson.setStatus(LessonStatus.CANCELLED);
         lesson = lessonRepository.save(lesson);
@@ -149,6 +163,39 @@ public class LessonService {
         Page<Lesson> page;
 
         boolean hasDateRange = from != null && to != null;
+
+        if (isTeacherUser()) {
+            UUID teacherId = resolveCurrentTeacherStaffId();
+            if (type != null && hasDateRange) {
+                page = lessonRepository.findByTeacherIdAndLessonTypeAndLessonDateBetween(
+                        teacherId,
+                        type,
+                        from,
+                        to,
+                        pageable
+                );
+            } else if (status != null && hasDateRange) {
+                page = lessonRepository.findByTeacherIdAndStatusAndLessonDateBetween(
+                        teacherId,
+                        status,
+                        from,
+                        to,
+                        pageable
+                );
+            } else if (hasDateRange) {
+                page = lessonRepository.findByTeacherIdAndLessonDateBetween(teacherId, from, to, pageable);
+            } else if (type != null) {
+                page = lessonRepository.findByTeacherIdAndLessonType(teacherId, type, pageable);
+            } else if (status != null) {
+                page = lessonRepository.findByTeacherIdAndStatus(teacherId, status, pageable);
+            } else if (date != null) {
+                page = lessonRepository.findByTeacherIdAndLessonDate(teacherId, date, pageable);
+            } else {
+                page = lessonRepository.findByTeacherId(teacherId, pageable);
+            }
+
+            return PageResponse.from(page, lessonMapper::toDto);
+        }
 
         if (type != null && hasDateRange) {
             page = lessonRepository.findByLessonTypeAndLessonDateBetween(type, from, to, pageable);
@@ -173,7 +220,20 @@ public class LessonService {
     public PageResponse<LessonDto> listByGroup(UUID groupId, LocalDate from, LocalDate to, Pageable pageable) {
         Page<Lesson> page;
 
-        if (from != null && to != null) {
+        if (isTeacherUser()) {
+            UUID teacherId = resolveCurrentTeacherStaffId();
+            if (from != null && to != null) {
+                page = lessonRepository.findByGroupIdAndTeacherIdAndLessonDateBetween(
+                        groupId,
+                        teacherId,
+                        from,
+                        to,
+                        pageable
+                );
+            } else {
+                page = lessonRepository.findByGroupIdAndTeacherId(groupId, teacherId, pageable);
+            }
+        } else if (from != null && to != null) {
             page = lessonRepository.findByGroupIdAndLessonDateBetween(groupId, from, to, pageable);
         } else {
             page = lessonRepository.findByGroupId(groupId, pageable);
@@ -187,6 +247,7 @@ public class LessonService {
     public LessonDto markTeacherAbsent(UUID id) {
         Lesson lesson = lessonRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Lesson", "id", id));
+        enforceTeacherOwnLesson(lesson);
         lesson.setStatus(LessonStatus.TEACHER_ABSENT);
         lesson = lessonRepository.save(lesson);
         log.info("Marked lesson {} as teacher absent", id);
@@ -198,6 +259,7 @@ public class LessonService {
     public LessonDto markTeacherSick(UUID id) {
         Lesson lesson = lessonRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Lesson", "id", id));
+        enforceTeacherOwnLesson(lesson);
         lesson.setStatus(LessonStatus.TEACHER_SICK);
         lesson = lessonRepository.save(lesson);
         log.info("Marked lesson {} as teacher sick", id);
@@ -209,6 +271,7 @@ public class LessonService {
     public LessonDto rescheduleLesson(UUID id, RescheduleLessonRequest request) {
         Lesson lesson = lessonRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Lesson", "id", id));
+        enforceTeacherOwnLesson(lesson);
         lesson.setLessonDate(request.getNewDate());
         lesson.setStartTime(request.getNewStartTime());
         lesson.setEndTime(request.getNewEndTime());
@@ -220,15 +283,88 @@ public class LessonService {
 
     @Transactional(readOnly = true)
     public PageResponse<LessonDto> listByTeacher(UUID teacherId, Pageable pageable) {
+        if (isTeacherUser() && !resolveCurrentTeacherStaffId().equals(teacherId)) {
+            throw new BusinessException(
+                    "TEACHER_SCOPE_DENIED",
+                    "Teacher can access only own lessons",
+                    HttpStatus.FORBIDDEN
+            );
+        }
         Page<Lesson> page = lessonRepository.findByTeacherId(teacherId, pageable);
         return PageResponse.from(page, lessonMapper::toDto);
     }
 
     @Transactional(readOnly = true)
     public List<LessonDto> listCalendar(LocalDate from, LocalDate to) {
-        return lessonRepository.findByLessonDateBetweenOrderByLessonDateAscStartTimeAsc(from, to)
+        List<Lesson> lessons;
+        if (isTeacherUser()) {
+            lessons = lessonRepository.findByTeacherIdAndLessonDateBetweenOrderByLessonDateAscStartTimeAsc(
+                    resolveCurrentTeacherStaffId(),
+                    from,
+                    to
+            );
+        } else {
+            lessons = lessonRepository.findByLessonDateBetweenOrderByLessonDateAscStartTimeAsc(from, to);
+        }
+
+        return lessons
                 .stream()
                 .map(lessonMapper::toDto)
                 .collect(Collectors.toList());
+    }
+
+    private void enforceTeacherOwnLesson(Lesson lesson) {
+        if (!isTeacherUser()) {
+            return;
+        }
+
+        UUID currentTeacherId = resolveCurrentTeacherStaffId();
+        if (!currentTeacherId.equals(lesson.getTeacherId())) {
+            throw new BusinessException(
+                    "TEACHER_SCOPE_DENIED",
+                    "Teacher can access only own lessons",
+                    HttpStatus.FORBIDDEN
+            );
+        }
+    }
+
+    private boolean isTeacherUser() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication == null) {
+            return false;
+        }
+
+        return authentication.getAuthorities().stream()
+                .anyMatch(authority -> "ROLE_TEACHER".equals(authority.getAuthority()));
+    }
+
+    private UUID resolveCurrentTeacherStaffId() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication == null || !(authentication.getPrincipal() instanceof Jwt jwt)) {
+            throw new BusinessException(
+                    "TEACHER_STAFF_ID_REQUIRED",
+                    "Teacher profile is not linked to staff account",
+                    HttpStatus.FORBIDDEN
+            );
+        }
+
+        String staffId = jwt.getClaimAsString("staff_id");
+        if (!StringUtils.hasText(staffId)) {
+            throw new BusinessException(
+                    "TEACHER_STAFF_ID_REQUIRED",
+                    "Teacher profile is not linked to staff account",
+                    HttpStatus.FORBIDDEN
+            );
+        }
+
+        try {
+            return UUID.fromString(staffId);
+        } catch (IllegalArgumentException ex) {
+            throw new BusinessException(
+                    "TEACHER_STAFF_ID_INVALID",
+                    "Teacher staff linkage is invalid",
+                    HttpStatus.FORBIDDEN
+            );
+        }
     }
 }

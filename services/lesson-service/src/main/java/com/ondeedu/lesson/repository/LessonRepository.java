@@ -19,6 +19,26 @@ public interface LessonRepository extends JpaRepository<Lesson, UUID> {
 
     Page<Lesson> findByTeacherId(UUID teacherId, Pageable pageable);
 
+    Page<Lesson> findByTeacherIdAndStatus(UUID teacherId, LessonStatus status, Pageable pageable);
+
+    Page<Lesson> findByTeacherIdAndLessonDate(UUID teacherId, LocalDate date, Pageable pageable);
+
+    Page<Lesson> findByTeacherIdAndLessonDateBetween(UUID teacherId, LocalDate from, LocalDate to, Pageable pageable);
+
+    Page<Lesson> findByTeacherIdAndLessonType(UUID teacherId, LessonType type, Pageable pageable);
+
+    Page<Lesson> findByTeacherIdAndLessonTypeAndLessonDateBetween(UUID teacherId,
+                                                                   LessonType type,
+                                                                   LocalDate from,
+                                                                   LocalDate to,
+                                                                   Pageable pageable);
+
+    Page<Lesson> findByTeacherIdAndStatusAndLessonDateBetween(UUID teacherId,
+                                                               LessonStatus status,
+                                                               LocalDate from,
+                                                               LocalDate to,
+                                                               Pageable pageable);
+
     Page<Lesson> findByStatus(LessonStatus status, Pageable pageable);
 
     Page<Lesson> findByLessonDate(LocalDate date, Pageable pageable);
@@ -27,6 +47,14 @@ public interface LessonRepository extends JpaRepository<Lesson, UUID> {
 
     Page<Lesson> findByGroupIdAndLessonDateBetween(UUID groupId, LocalDate from, LocalDate to, Pageable pageable);
 
+    Page<Lesson> findByGroupIdAndTeacherId(UUID groupId, UUID teacherId, Pageable pageable);
+
+    Page<Lesson> findByGroupIdAndTeacherIdAndLessonDateBetween(UUID groupId,
+                                                                UUID teacherId,
+                                                                LocalDate from,
+                                                                LocalDate to,
+                                                                Pageable pageable);
+
     Page<Lesson> findByLessonType(LessonType type, Pageable pageable);
 
     Page<Lesson> findByLessonTypeAndLessonDateBetween(LessonType type, LocalDate from, LocalDate to, Pageable pageable);
@@ -34,4 +62,8 @@ public interface LessonRepository extends JpaRepository<Lesson, UUID> {
     Page<Lesson> findByStatusAndLessonDateBetween(LessonStatus status, LocalDate from, LocalDate to, Pageable pageable);
 
     List<Lesson> findByLessonDateBetweenOrderByLessonDateAscStartTimeAsc(LocalDate from, LocalDate to);
+
+    List<Lesson> findByTeacherIdAndLessonDateBetweenOrderByLessonDateAscStartTimeAsc(UUID teacherId,
+                                                                                       LocalDate from,
+                                                                                       LocalDate to);
 }

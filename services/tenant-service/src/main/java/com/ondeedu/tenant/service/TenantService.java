@@ -88,6 +88,9 @@ public class TenantService {
             entityManager.createNativeQuery("SELECT system.ensure_zadarma_and_cloud_backup_schema(:schemaName)")
                 .setParameter("schemaName", schemaName)
                 .getSingleResult();
+            entityManager.createNativeQuery("SELECT system.ensure_branch_schema(:schemaName)")
+                .setParameter("schemaName", schemaName)
+                .getSingleResult();
             entityManager.createNativeQuery("SELECT system.ensure_amount_change_reason_schema(:schemaName)")
                 .setParameter("schemaName", schemaName)
                 .getSingleResult();

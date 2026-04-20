@@ -12,6 +12,7 @@ public final class TenantContext {
     private static final ThreadLocal<String> CURRENT_TENANT = new ThreadLocal<>();
     private static final ThreadLocal<String> CURRENT_SCHEMA = new ThreadLocal<>();
     private static final ThreadLocal<String> CURRENT_USER = new ThreadLocal<>();
+    private static final ThreadLocal<String> CURRENT_BRANCH = new ThreadLocal<>();
 
     public static void setTenantId(String tenantId) {
         CURRENT_TENANT.set(tenantId);
@@ -49,9 +50,18 @@ public final class TenantContext {
         return CURRENT_USER.get();
     }
 
+    public static void setBranchId(String branchId) {
+        CURRENT_BRANCH.set(branchId);
+    }
+
+    public static String getBranchId() {
+        return CURRENT_BRANCH.get();
+    }
+
     public static void clear() {
         CURRENT_TENANT.remove();
         CURRENT_SCHEMA.remove();
         CURRENT_USER.remove();
+        CURRENT_BRANCH.remove();
     }
 }

@@ -31,6 +31,19 @@
 
 ## 0. Release Notes (2026-04-18)
 
+- **Multi-branch support (tenant-scoped)**:
+  - добавлены CRUD endpoints филиалов в `settings-service`: `GET/POST/PUT/DELETE /api/v1/settings/branches`;
+  - в tenant schema добавлена таблица `tenant_branches` c default-филиалом `Главный филиал` (`code=MAIN`);
+  - context филиала поддерживается через `X-Branch-ID` и JWT claims `branch_id` / `branch_ids`.
+- **Branch-scoped user access (auth-service)**:
+  - в `CreateUserRequest`/`UpdateUserRequest` и `UserDto` добавлено поле `branchIds`;
+  - backend не позволяет назначать пользователю филиалы вне скоупа текущего администратора (`BRANCH_ACCESS_DENIED`);
+  - если администратор сам ограничен несколькими филиалами, `branchIds` обязательны (`BRANCH_SCOPE_REQUIRED`).
+- **Teacher self-scope enforcement (server-side)**:
+  - для `ROLE_TEACHER` доступ к расписанию, занятиям и посещаемости ограничен только собственными записями;
+  - попытки чтения/изменения чужих записей возвращают `403 TEACHER_SCOPE_DENIED`;
+  - для teacher-токена обязателен валидный claim `staff_id` (`TEACHER_STAFF_ID_REQUIRED` / `TEACHER_STAFF_ID_INVALID`).
+
 - **Analytics Excel export**: добавлены отдельные download endpoint'ы (`/export`) для 8 аналитических экранов с табличным `.xlsx` (несколько листов, структурированные колонки, без JSON-blob в одной ячейке).
 - **Today analytics data quality**:
   - в блоке `debtors` долг считается по подпискам со статусами `ACTIVE | EXPIRED | FROZEN` (и legacy `COMPLETED`), что устраняет пропуски должников;
@@ -153,6 +166,7 @@
 ```http
 Authorization: Bearer <access_token>
 Content-Type: application/json
+X-Branch-ID: <branch_uuid>   # optional
 ```
 
 > `X-Tenant-ID` не нужен для обычного tenant frontend. Gateway и backend сами берут tenant context из JWT claim `tenant_id`.
@@ -205,6 +219,8 @@ grant_type=password&client_id=1edu-web-app&username=<login>&password=<pass>
 ```json
 {
   "tenant_id": "tenant-uuid",
+  "branch_id": "branch-uuid",
+  "branch_ids": ["branch-uuid-1", "branch-uuid-2"],
   "permissions": ["STUDENTS_VIEW", "LESSONS_CREATE"],
   "realm_access": {
     "roles": ["TENANT_ADMIN", "offline_access", "uma_authorization"]
@@ -213,6 +229,8 @@ grant_type=password&client_id=1edu-web-app&username=<login>&password=<pass>
 ```
 
 > `tenant_id` — UUID тенанта в JWT. Для обычных пользователей фронт хранит его только как контекст UI; вручную копировать его в `X-Tenant-ID` не требуется.
+> `branch_id` — активный филиал пользователя (если задан).
+> `branch_ids` — список филиалов, к которым у пользователя есть доступ.
 > `permissions` — гранулярные права (через `permissions-mapper` клиента `1edu-web-app`).
 > `realm_access.roles` — роли пользователя; именно их backend использует в `@PreAuthorize("hasRole(...)")`.
 
@@ -220,7 +238,7 @@ grant_type=password&client_id=1edu-web-app&username=<login>&password=<pass>
 > - role-backed permissions (из `RoleConfig` / Keycloak role attributes), либо
 > - user override (`PUT /api/v1/auth/users/{id}/permissions`).
 >
-> В `auth-service` при старте автоматически провижинятся нужные Keycloak User Profile attributes (`permissions`, `permissions_source`, `tenant_id`, `staff_id`, `photoUrl`, `language`), чтобы custom-role permissions стабильно попадали в токен и корректно работал `hasAuthority(...)`.
+> В `auth-service` при старте автоматически провижинятся нужные Keycloak User Profile attributes (`permissions`, `permissions_source`, `tenant_id`, `staff_id`, `branch_ids`, `photoUrl`, `language`), чтобы custom-role permissions стабильно попадали в токен и корректно работал `hasAuthority(...)`.
 
 ---
 
@@ -854,6 +872,7 @@ interface UserDto {
   firstName: string;
   lastName: string;
   staffId: string | null;
+  branchIds: string[];
   roles: string[];
   permissions: string[];
   permissionsSource: string | null;   // USER | ROLE:<keycloakRoleName>
@@ -880,6 +899,7 @@ interface UserDto {
   "password": "password123",
   "role": "TEACHER",
   "staffId": "staff-uuid",
+  "branchIds": ["branch-uuid-1", "branch-uuid-2"],
   "tenantId": "uuid",
   "permissions": ["STUDENTS_VIEW", "LESSONS_CREATE"]
 }
@@ -889,6 +909,11 @@ interface UserDto {
 
 > Tenant scope берётся из JWT claim `tenant_id`.
 > Если запрос идёт от обычного `TENANT_ADMIN`, backend привязывает нового пользователя к текущему tenant context и не позволяет создать пользователя в другом tenant через произвольный `tenantId` в body.
+>
+> Branch scope:
+> - если в `branchIds` передан список, пользователь ограничивается этими филиалами;
+> - если администратор сам branch-scoped, backend запрещает назначать `branchIds` вне его скоупа (`BRANCH_ACCESS_DENIED`);
+> - если администратор branch-scoped и имеет доступ сразу к нескольким филиалам, `branchIds` обязателен (`BRANCH_SCOPE_REQUIRED`).
 >
 > При назначении роли backend наполняет `permissions` и `permissionsSource` так:
 > - если в запросе передан `permissions`, source = `USER`;
@@ -938,6 +963,7 @@ interface UserDto {
   "firstName": "Иван",
   "lastName": "Петров",
   "staffId": "staff-uuid",
+  "branchIds": ["branch-uuid-1"],
   "role": "MANAGER",
   "permissions": ["STUDENTS_VIEW", "LEADS_CREATE"]
 }
@@ -1602,6 +1628,9 @@ interface ScheduleDto {
 ---
 
 ### 11.2 Расписание / Группы (`/api/v1/schedules`)
+
+> Для `ROLE_TEACHER` backend принудительно ограничивает доступ только собственными расписаниями (по JWT claim `staff_id`).
+> Попытки обратиться к чужому расписанию возвращают `403 TEACHER_SCOPE_DENIED`.
 
 #### `POST /api/v1/schedules` — Создать группу/расписание
 **Доступ:** `TENANT_ADMIN` | `GROUPS_CREATE`
@@ -3620,6 +3649,9 @@ interface AttendanceDto {
 
 ### 20.1 Занятия (`/api/v1/lessons`)
 
+> Для `ROLE_TEACHER` backend принудительно ограничивает доступ только собственными занятиями (по JWT claim `staff_id`).
+> Попытки обратиться к чужому занятию возвращают `403 TEACHER_SCOPE_DENIED`.
+
 #### `POST /api/v1/lessons` — Создать занятие
 **Доступ:** `TENANT_ADMIN` | `LESSONS_CREATE`
 
@@ -3773,6 +3805,7 @@ interface AttendanceDto {
 > - окно редактирования посещаемости контролируется `settings.attendanceWindowDays`;
 > - после истечения окна API возвращает ошибку `ATTENDANCE_EDIT_WINDOW_EXPIRED`;
 > - attendance-операции запрещены для неактивных студентов (`STUDENT_NOT_ACTIVE`);
+> - для `ROLE_TEACHER` доступ к attendance ограничен только занятиями этого преподавателя (`TEACHER_SCOPE_DENIED`);
 > - при 3-м пропуске за неделю автоматически создаётся IN_APP уведомление в tenant notification log;
 > - такие tenant-level уведомления доступны ролям `MANAGER` и `RECEPTIONIST` (а также `SUPER_ADMIN`), но не выдаются как общий поток для `TENANT_ADMIN`.
 
@@ -4715,6 +4748,63 @@ interface FinanceCategoryConfigDto {
 **Доступ:** `TENANT_ADMIN`, `ACCOUNTANT` или permission `FINANCE_EDIT` / `SETTINGS_EDIT`
 
 **Response:** `ApiResponse<Void>`
+
+---
+
+### 21.8 Филиалы (`/api/v1/settings/branches`)
+
+```typescript
+interface BranchDto {
+  id: string;
+  name: string;
+  code: string | null;
+  address: string | null;
+  phone: string | null;
+  active: boolean;
+  isDefault: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+```
+
+#### `GET /api/v1/settings/branches` — Список филиалов тенанта
+**Доступ:** `TENANT_ADMIN`, `MANAGER`, `RECEPTIONIST`, `TEACHER` или permission `SETTINGS_VIEW`
+
+**Response:** `ApiResponse<List<BranchDto>>`
+
+#### `POST /api/v1/settings/branches` — Создать филиал
+**Доступ:** `TENANT_ADMIN` или permission `SETTINGS_EDIT`
+
+**Request Body:**
+```json
+{
+  "name": "Филиал на Чиланзаре",
+  "code": "CHIL-01",
+  "address": "Ташкент, Чиланзар 12",
+  "phone": "+998901112233",
+  "active": true,
+  "isDefault": false
+}
+```
+
+**Response:** `ApiResponse<BranchDto>`
+
+#### `PUT /api/v1/settings/branches/{id}` — Обновить филиал
+**Доступ:** `TENANT_ADMIN` или permission `SETTINGS_EDIT`
+
+**Request Body:** (те же поля, что и в create)
+
+**Response:** `ApiResponse<BranchDto>`
+
+#### `DELETE /api/v1/settings/branches/{id}` — Удалить филиал
+**Доступ:** `TENANT_ADMIN` или permission `SETTINGS_EDIT`
+
+**Response:** `ApiResponse<Void>`
+
+> Backend guards для филиалов:
+> - нельзя создать/переименовать филиал в дублирующее имя: `DUPLICATE_BRANCH`;
+> - всегда должен оставаться минимум 1 филиал: `LAST_BRANCH`;
+> - всегда должен оставаться минимум 1 активный филиал: `LAST_ACTIVE_BRANCH`.
 
 ---
 

@@ -52,6 +52,8 @@ public class KeycloakSetupService {
         ensureFrontendClientSettings();
         ensureUserProfileAttributes();
         ensureUserAttributeMapper("tenant_id-mapper", "tenant_id", "tenant_id", false);
+        ensureUserAttributeMapper("staff-id-mapper", "staff_id", "staff_id", false);
+        ensureUserAttributeMapper("branch-ids-mapper", "branch_ids", "branch_ids", true);
         ensureUserAttributeMapper("permissions-mapper", "permissions", "permissions", true);
         ensureRealmAccessRolesMapper();
         ensureUserPropertyMapper("preferred-username-mapper", "username", "preferred_username");
@@ -246,6 +248,7 @@ public class KeycloakSetupService {
             changed |= ensureUserProfileAttribute(attributes, "permissions", true);
             changed |= ensureUserProfileAttribute(attributes, "permissions_source", false);
             changed |= ensureUserProfileAttribute(attributes, "staff_id", false);
+            changed |= ensureUserProfileAttribute(attributes, "branch_ids", true);
             changed |= ensureUserProfileAttribute(attributes, "photoUrl", false);
             changed |= ensureUserProfileAttribute(attributes, "language", false);
 

@@ -1221,6 +1221,35 @@ MAIL_REPLY_TO=support@1edu.kz  # опционально
 - `KeycloakUserService` сохраняет связку в Keycloak attribute `staff_id` и возвращает её в `UserDto.staffId`.
 - Это поддерживает frontend flow «выбрать сотрудника → создать логин/пароль/роль» без отдельного endpoint.
 
+### Multi-branch support (settings + auth + common)
+- Добавлен tenant-scoped CRUD филиалов в `settings-service`:
+  - `GET/POST/PUT/DELETE /api/v1/settings/branches`
+  - новые классы: `TenantBranchController`, `TenantBranchService`, `TenantBranch`, `TenantBranchRepository`, `TenantBranchMapper`, `BranchDto`, `SaveBranchRequest`.
+- Добавлены branch-поля в auth DTO и Keycloak mapping:
+  - `CreateUserRequest.branchIds`, `UpdateUserRequest.branchIds`, `UserDto.branchIds`
+  - Keycloak attribute/claim: `branch_ids` (и выбор активного `branch_id`), mapper `branch-ids-mapper`.
+- Branch context пробрасывается через HTTP/gRPC:
+  - headers/claims: `X-Branch-ID`, `branch_id`, `branch_ids`
+  - фильтры/интерсепторы: `TenantContextFilter`, `TenantInterceptor`, `GrpcTenantInterceptor`, `GrpcClientTenantInterceptor`.
+- Branch access guards:
+  - `BRANCH_ACCESS_DENIED` при попытке выбрать/назначить запрещённый филиал
+  - `BRANCH_SCOPE_REQUIRED` если админ branch-scoped и должен явно передать `branchIds`.
+
+### Teacher self-scope enforcement (schedule + lesson)
+- Для `ROLE_TEACHER` backend принудительно ограничивает доступ только собственными записями (по JWT `staff_id`):
+  - `schedule-service` — расписания
+  - `lesson-service` — занятия и attendance.
+- Ошибки:
+  - `TEACHER_SCOPE_DENIED` — доступ к чужим данным
+  - `TEACHER_STAFF_ID_REQUIRED` / `TEACHER_STAFF_ID_INVALID` — отсутствует или невалиден claim `staff_id`.
+
+### Tenant-service migration for branches
+- Добавлена миграция `V27__ensure_branch_schema.sql` с функцией `system.ensure_branch_schema(t_schema)`:
+  - создаёт `tenant_branches` table + индексы;
+  - гарантирует default branch (`Главный филиал`, `MAIN`) в каждой tenant schema.
+- `TenantService.createTenant()` вызывает `system.ensure_branch_schema(:schemaName)` для новых тенантов.
+- Важно: версия миграции должна быть уникальной. `V20` уже занята (`V20__ensure_lead_activities_schema.sql`), поэтому branch-миграция использует `V27`.
+
 ### API Gateway — fallback observability
 - `FallbackController` теперь пишет `WARN` лог на каждый fallback с полями:
   - `service`

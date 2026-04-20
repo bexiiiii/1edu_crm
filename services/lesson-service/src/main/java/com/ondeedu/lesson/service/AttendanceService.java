@@ -20,8 +20,13 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.http.HttpStatus;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
 
 import java.time.DayOfWeek;
 import java.time.LocalDate;
@@ -46,6 +51,7 @@ public class AttendanceService {
     @Transactional
     public AttendanceDto markAttendance(UUID lessonId, MarkAttendanceRequest request) {
         Lesson lesson = getLessonOrThrow(lessonId);
+        enforceTeacherOwnLesson(lesson);
         validateAttendanceEditWindow(lesson);
         validateStudentIsActive(request.getStudentId());
 
@@ -79,6 +85,7 @@ public class AttendanceService {
     @Transactional
     public List<AttendanceDto> bulkMarkAttendance(UUID lessonId, BulkMarkAttendanceRequest request) {
         Lesson lesson = getLessonOrThrow(lessonId);
+        enforceTeacherOwnLesson(lesson);
         validateAttendanceEditWindow(lesson);
 
         List<AttendanceDto> result = new ArrayList<>();
@@ -94,6 +101,7 @@ public class AttendanceService {
     @Transactional(readOnly = true)
     public List<AttendanceDto> getLessonAttendance(UUID lessonId) {
         Lesson lesson = getLessonOrThrow(lessonId);
+        enforceTeacherOwnLesson(lesson);
         List<Attendance> attendances = attendanceRepository.findByLessonId(lessonId);
         Boolean autoMarkAttendanceSetting = attendanceRepository.findAutoMarkAttendance();
         boolean autoMarkAttendance = Boolean.TRUE.equals(autoMarkAttendanceSetting);
@@ -149,13 +157,19 @@ public class AttendanceService {
 
     @Transactional(readOnly = true)
     public PageResponse<AttendanceDto> getStudentAttendance(UUID studentId, Pageable pageable) {
-        Page<Attendance> page = attendanceRepository.findByStudentId(studentId, pageable);
+        Page<Attendance> page;
+        if (isTeacherUser()) {
+            page = attendanceRepository.findByStudentIdAndTeacherId(studentId, resolveCurrentTeacherStaffId(), pageable);
+        } else {
+            page = attendanceRepository.findByStudentId(studentId, pageable);
+        }
         return PageResponse.from(page, attendanceMapper::toDto);
     }
 
     @Transactional
     public List<AttendanceDto> markAllPresent(UUID lessonId, List<UUID> studentIds) {
         Lesson lesson = getLessonOrThrow(lessonId);
+        enforceTeacherOwnLesson(lesson);
         validateAttendanceEditWindow(lesson);
 
         List<AttendanceDto> result = new ArrayList<>();
@@ -244,6 +258,61 @@ public class AttendanceService {
             log.info("Published 3-absence weekly alert for student {} [tenant={}]", studentId, TenantContext.getTenantId());
         } catch (Exception e) {
             log.warn("Failed to publish weekly absence alert for student {}: {}", studentId, e.getMessage());
+        }
+    }
+
+    private void enforceTeacherOwnLesson(Lesson lesson) {
+        if (!isTeacherUser()) {
+            return;
+        }
+
+        UUID currentTeacherId = resolveCurrentTeacherStaffId();
+        if (!currentTeacherId.equals(lesson.getTeacherId())) {
+            throw new BusinessException(
+                    "TEACHER_SCOPE_DENIED",
+                    "Teacher can access only own attendance",
+                    HttpStatus.FORBIDDEN
+            );
+        }
+    }
+
+    private boolean isTeacherUser() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication == null) {
+            return false;
+        }
+
+        return authentication.getAuthorities().stream()
+                .anyMatch(authority -> "ROLE_TEACHER".equals(authority.getAuthority()));
+    }
+
+    private UUID resolveCurrentTeacherStaffId() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication == null || !(authentication.getPrincipal() instanceof Jwt jwt)) {
+            throw new BusinessException(
+                    "TEACHER_STAFF_ID_REQUIRED",
+                    "Teacher profile is not linked to staff account",
+                    HttpStatus.FORBIDDEN
+            );
+        }
+
+        String staffId = jwt.getClaimAsString("staff_id");
+        if (!StringUtils.hasText(staffId)) {
+            throw new BusinessException(
+                    "TEACHER_STAFF_ID_REQUIRED",
+                    "Teacher profile is not linked to staff account",
+                    HttpStatus.FORBIDDEN
+            );
+        }
+
+        try {
+            return UUID.fromString(staffId);
+        } catch (IllegalArgumentException ex) {
+            throw new BusinessException(
+                    "TEACHER_STAFF_ID_INVALID",
+                    "Teacher staff linkage is invalid",
+                    HttpStatus.FORBIDDEN
+            );
         }
     }
 }

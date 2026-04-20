@@ -9,6 +9,7 @@ import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.lang.NonNull;
 import org.springframework.security.core.Authentication;
@@ -19,8 +20,12 @@ import org.springframework.util.StringUtils;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.UUID;
 
 @Slf4j
 @Component
@@ -29,6 +34,9 @@ public class TenantContextFilter extends OncePerRequestFilter {
 
     private static final String TENANT_HEADER = "X-Tenant-ID";
     private static final String TENANT_CLAIM = "tenant_id";
+    private static final String BRANCH_HEADER = "X-Branch-ID";
+    private static final String BRANCH_CLAIM = "branch_id";
+    private static final String BRANCH_IDS_CLAIM = "branch_ids";
 
     private final ObjectMapper objectMapper;
 
@@ -84,6 +92,11 @@ public class TenantContextFilter extends OncePerRequestFilter {
                 TenantContext.setUserId(userId);
             }
 
+            String branchId = extractBranchId(request);
+            if (StringUtils.hasText(branchId)) {
+                TenantContext.setBranchId(branchId);
+            }
+
             filterChain.doFilter(request, response);
         } catch (BusinessException ex) {
             writeBusinessError(response, ex.getStatus().value(), ex.getErrorCode(), ex.getMessage());
@@ -128,6 +141,75 @@ public class TenantContextFilter extends OncePerRequestFilter {
             }
         }
         return null;
+    }
+
+    private String extractBranchId(HttpServletRequest request) {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        String branchFromHeader = normalizeUuid(request.getHeader(BRANCH_HEADER));
+
+        if (authentication != null && authentication.getPrincipal() instanceof Jwt jwt) {
+            Set<String> allowedBranchIds = resolveAllowedBranchIds(jwt);
+            if (!allowedBranchIds.isEmpty()) {
+                if (StringUtils.hasText(branchFromHeader)) {
+                    if (!allowedBranchIds.contains(branchFromHeader)) {
+                        throw new BusinessException(
+                                "BRANCH_ACCESS_DENIED",
+                                "Selected branch is not allowed for this user",
+                                HttpStatus.FORBIDDEN
+                        );
+                    }
+                    return branchFromHeader;
+                }
+
+                if (allowedBranchIds.size() == 1) {
+                    return allowedBranchIds.iterator().next();
+                }
+
+                String singleBranchClaim = normalizeUuid(jwt.getClaimAsString(BRANCH_CLAIM));
+                if (StringUtils.hasText(singleBranchClaim) && allowedBranchIds.contains(singleBranchClaim)) {
+                    return singleBranchClaim;
+                }
+
+                return null;
+            }
+
+            String singleBranchClaim = normalizeUuid(jwt.getClaimAsString(BRANCH_CLAIM));
+            if (StringUtils.hasText(branchFromHeader)) {
+                return branchFromHeader;
+            }
+            return singleBranchClaim;
+        }
+
+        return branchFromHeader;
+    }
+
+    private Set<String> resolveAllowedBranchIds(Jwt jwt) {
+        List<String> rawClaim = jwt.getClaimAsStringList(BRANCH_IDS_CLAIM);
+        if (rawClaim == null || rawClaim.isEmpty()) {
+            return Set.of();
+        }
+
+        Set<String> result = new HashSet<>();
+        for (String raw : rawClaim) {
+            String normalized = normalizeUuid(raw);
+            if (StringUtils.hasText(normalized)) {
+                result.add(normalized);
+            }
+        }
+        return result;
+    }
+
+    private String normalizeUuid(String raw) {
+        if (!StringUtils.hasText(raw)) {
+            return null;
+        }
+
+        String value = raw.trim();
+        try {
+            return UUID.fromString(value).toString();
+        } catch (IllegalArgumentException ignored) {
+            return null;
+        }
     }
 
     private void writeBusinessError(HttpServletResponse response,

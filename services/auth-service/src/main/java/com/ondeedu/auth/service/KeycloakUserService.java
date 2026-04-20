@@ -14,6 +14,7 @@ import com.ondeedu.common.exception.ResourceNotFoundException;
 import com.ondeedu.common.security.DefaultRolePermissions;
 import com.ondeedu.common.security.PermissionUtils;
 import com.ondeedu.common.security.RoleNameUtils;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.ws.rs.core.Response;
 import lombok.extern.slf4j.Slf4j;
 import org.keycloak.admin.client.Keycloak;
@@ -28,12 +29,19 @@ import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.web.context.request.RequestAttributes;
+import org.springframework.web.context.request.RequestContextHolder;
+import org.springframework.web.context.request.ServletRequestAttributes;
 
+import java.util.Arrays;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.UUID;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -42,6 +50,7 @@ public class KeycloakUserService {
 
     static final String PERMISSIONS_ATTRIBUTE = "permissions";
     static final String PERMISSIONS_SOURCE_ATTRIBUTE = "permissions_source";
+    static final String BRANCH_IDS_ATTRIBUTE = "branch_ids";
     private static final String USER_PERMISSIONS_SOURCE = "USER";
 
     private final Keycloak keycloak;
@@ -67,6 +76,7 @@ public class KeycloakUserService {
 
     public UserDto createUser(CreateUserRequest request) {
         String tenantId = resolveTenantId(request.getTenantId());
+        List<String> branchIds = resolveAndValidateRequestedBranchIds(request.getBranchIds());
         String keycloakRoleName = resolveKeycloakRoleName(tenantId, request.getRole());
         UserRepresentation user = new UserRepresentation();
         user.setUsername(request.getUsername());
@@ -81,20 +91,7 @@ public class KeycloakUserService {
         credential.setValue(request.getPassword());
         credential.setTemporary(false);
         user.setCredentials(Collections.singletonList(credential));
-
-        // Set tenant_id attribute so Keycloak includes it in JWT via protocol mapper
-        if (tenantId != null && !tenantId.isBlank()) {
-            Map<String, List<String>> attrs = new HashMap<>();
-            attrs.put("tenant_id", List.of(tenantId));
-            if (request.getStaffId() != null) {
-                attrs.put("staff_id", List.of(request.getStaffId().toString()));
-            }
-            user.setAttributes(attrs);
-        } else if (request.getStaffId() != null) {
-            Map<String, List<String>> attrs = new HashMap<>();
-            attrs.put("staff_id", List.of(request.getStaffId().toString()));
-            user.setAttributes(attrs);
-        }
+        user.setAttributes(buildUserAttributes(tenantId, request.getStaffId(), branchIds));
 
         try (Response response = keycloak.realm(realm).users().create(user)) {
             if (response.getStatus() == 409) {
@@ -112,28 +109,15 @@ public class KeycloakUserService {
 
             log.info("Created Keycloak user: {} with id: {}", request.getUsername(), userId);
 
-            // Set tenant_id attribute via separate update (more reliable than setting in create payload)
-            if (tenantId != null && !tenantId.isBlank()) {
-                UserResource userResource = keycloak.realm(realm).users().get(userId);
-                UserRepresentation createdUser = userResource.toRepresentation();
-                Map<String, List<String>> attrs = createdUser.getAttributes() != null
-                        ? new HashMap<>(createdUser.getAttributes()) : new HashMap<>();
-                attrs.put("tenant_id", List.of(tenantId));
-                if (request.getStaffId() != null) {
-                    attrs.put("staff_id", List.of(request.getStaffId().toString()));
-                }
-                createdUser.setAttributes(attrs);
-                userResource.update(createdUser);
-                log.info("Set tenant_id={} for user: {}", tenantId, userId);
-            } else if (request.getStaffId() != null) {
-                UserResource userResource = keycloak.realm(realm).users().get(userId);
-                UserRepresentation createdUser = userResource.toRepresentation();
-                Map<String, List<String>> attrs = createdUser.getAttributes() != null
-                        ? new HashMap<>(createdUser.getAttributes()) : new HashMap<>();
-                attrs.put("staff_id", List.of(request.getStaffId().toString()));
-                createdUser.setAttributes(attrs);
-                userResource.update(createdUser);
-            }
+            // Re-apply attributes via update call for reliability with Keycloak user profile validations.
+            UserResource userResource = keycloak.realm(realm).users().get(userId);
+            UserRepresentation createdUser = userResource.toRepresentation();
+            Map<String, List<String>> attrs = createdUser.getAttributes() != null
+                    ? new HashMap<>(createdUser.getAttributes()) : new HashMap<>();
+            mergeUserAttributes(attrs, tenantId, request.getStaffId(), branchIds);
+            createdUser.setAttributes(attrs);
+            userResource.update(createdUser);
+            log.info("Applied tenant/staff/branch attributes for user: {}", userId);
 
             // Assign realm role
             assignRole(userId, keycloakRoleName);
@@ -193,10 +177,23 @@ public class KeycloakUserService {
             if (request.getLastName() != null) {
                 user.setLastName(request.getLastName());
             }
-            if (request.getStaffId() != null) {
+            if (request.getStaffId() != null || request.getBranchIds() != null) {
                 Map<String, List<String>> attrs = user.getAttributes() != null
                         ? new HashMap<>(user.getAttributes()) : new HashMap<>();
-                attrs.put("staff_id", List.of(request.getStaffId().toString()));
+
+                if (request.getStaffId() != null) {
+                    attrs.put("staff_id", List.of(request.getStaffId().toString()));
+                }
+
+                if (request.getBranchIds() != null) {
+                    List<String> branchIds = resolveAndValidateRequestedBranchIds(request.getBranchIds());
+                    if (branchIds.isEmpty()) {
+                        attrs.remove(BRANCH_IDS_ATTRIBUTE);
+                    } else {
+                        attrs.put(BRANCH_IDS_ATTRIBUTE, branchIds);
+                    }
+                }
+
                 user.setAttributes(attrs);
             }
 
@@ -554,6 +551,8 @@ public class KeycloakUserService {
                 ? attrs.get("language").get(0) : null;
         String staffIdRaw = attrs != null && attrs.containsKey("staff_id")
             ? attrs.get("staff_id").get(0) : null;
+        List<UUID> branchIds = attrs != null && attrs.containsKey(BRANCH_IDS_ATTRIBUTE)
+            ? parseUuidList(attrs.get(BRANCH_IDS_ATTRIBUTE)) : List.of();
         List<String> permissions = attrs != null && attrs.containsKey(PERMISSIONS_ATTRIBUTE)
                 ? attrs.get(PERMISSIONS_ATTRIBUTE) : List.of();
         String permissionsSource = attrs != null && attrs.containsKey(PERMISSIONS_SOURCE_ATTRIBUTE)
@@ -566,6 +565,7 @@ public class KeycloakUserService {
             .firstName(user.getFirstName())
             .lastName(user.getLastName())
             .staffId(parseOptionalUuid(staffIdRaw))
+            .branchIds(branchIds)
             .roles(roles)
             .permissions(permissions)
             .permissionsSource(permissionsSource)
@@ -586,6 +586,25 @@ public class KeycloakUserService {
             log.warn("Ignoring malformed staff_id attribute: {}", raw);
             return null;
         }
+    }
+
+    private List<UUID> parseUuidList(List<String> rawValues) {
+        if (rawValues == null || rawValues.isEmpty()) {
+            return List.of();
+        }
+
+        List<UUID> result = new ArrayList<>(rawValues.size());
+        for (String raw : rawValues) {
+            if (!StringUtils.hasText(raw)) {
+                continue;
+            }
+            try {
+                result.add(UUID.fromString(raw.trim()));
+            } catch (IllegalArgumentException ex) {
+                log.warn("Ignoring malformed UUID attribute value: {}", raw);
+            }
+        }
+        return result;
     }
 
     private void applyRoleAndPermissions(String userId, String keycloakRoleName, List<String> explicitPermissions) {
@@ -609,6 +628,134 @@ public class KeycloakUserService {
             storePermissionsAttribute(userId, defaultPermissions, rolePermissionsSource(keycloakRoleName));
         } else {
             storePermissionsAttribute(userId, List.of(), rolePermissionsSource(keycloakRoleName));
+        }
+    }
+
+    private Map<String, List<String>> buildUserAttributes(String tenantId, UUID staffId, List<String> branchIds) {
+        Map<String, List<String>> attrs = new HashMap<>();
+        mergeUserAttributes(attrs, tenantId, staffId, branchIds);
+        return attrs;
+    }
+
+    private void mergeUserAttributes(Map<String, List<String>> attrs,
+                                     String tenantId,
+                                     UUID staffId,
+                                     List<String> branchIds) {
+        if (StringUtils.hasText(tenantId)) {
+            attrs.put("tenant_id", List.of(tenantId));
+        }
+
+        if (staffId != null) {
+            attrs.put("staff_id", List.of(staffId.toString()));
+        }
+
+        if (branchIds != null) {
+            if (branchIds.isEmpty()) {
+                attrs.remove(BRANCH_IDS_ATTRIBUTE);
+            } else {
+                attrs.put(BRANCH_IDS_ATTRIBUTE, branchIds);
+            }
+        }
+    }
+
+    private List<String> resolveAndValidateRequestedBranchIds(List<UUID> requestedBranchIds) {
+        Set<String> requested = new HashSet<>();
+        if (requestedBranchIds != null) {
+            requested.addAll(requestedBranchIds.stream()
+                    .filter(java.util.Objects::nonNull)
+                    .map(UUID::toString)
+                    .collect(Collectors.toSet()));
+        }
+
+        String selectedBranchId = resolveCurrentSelectedBranchId();
+        if (requested.isEmpty() && StringUtils.hasText(selectedBranchId)) {
+            requested.add(selectedBranchId);
+        }
+
+        Set<String> creatorAllowedBranchIds = currentAllowedBranchIds();
+        if (!creatorAllowedBranchIds.isEmpty()) {
+            if (requested.isEmpty()) {
+                if (creatorAllowedBranchIds.size() == 1) {
+                    requested.addAll(creatorAllowedBranchIds);
+                } else {
+                    throw new BusinessException(
+                            "BRANCH_SCOPE_REQUIRED",
+                            "Specify branchIds when creator has branch-scoped access"
+                    );
+                }
+            }
+
+            if (!creatorAllowedBranchIds.containsAll(requested)) {
+                throw new BusinessException(
+                        "BRANCH_ACCESS_DENIED",
+                        "Cannot assign user access to branches outside creator scope"
+                );
+            }
+        }
+
+        return requested.stream().sorted().toList();
+    }
+
+    private String resolveCurrentSelectedBranchId() {
+        RequestAttributes requestAttributes = RequestContextHolder.getRequestAttributes();
+        if (!(requestAttributes instanceof ServletRequestAttributes servletRequestAttributes)) {
+            return null;
+        }
+
+        HttpServletRequest request = servletRequestAttributes.getRequest();
+        String fromHeader = normalizeBranchId(request.getHeader("X-Branch-ID"));
+        if (StringUtils.hasText(fromHeader)) {
+            return fromHeader;
+        }
+
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication != null && authentication.getPrincipal() instanceof Jwt jwt) {
+            return normalizeBranchId(jwt.getClaimAsString("branch_id"));
+        }
+
+        return null;
+    }
+
+    private Set<String> currentAllowedBranchIds() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication == null || !(authentication.getPrincipal() instanceof Jwt jwt)) {
+            return Set.of();
+        }
+
+        List<String> claim = jwt.getClaimAsStringList(BRANCH_IDS_ATTRIBUTE);
+        if (claim == null || claim.isEmpty()) {
+            String csv = jwt.getClaimAsString(BRANCH_IDS_ATTRIBUTE);
+            if (StringUtils.hasText(csv)) {
+                claim = Arrays.stream(csv.split(","))
+                        .map(String::trim)
+                        .filter(StringUtils::hasText)
+                        .toList();
+            }
+        }
+
+        if (claim == null || claim.isEmpty()) {
+            return Set.of();
+        }
+
+        Set<String> result = new HashSet<>();
+        for (String raw : claim) {
+            String normalized = normalizeBranchId(raw);
+            if (StringUtils.hasText(normalized)) {
+                result.add(normalized);
+            }
+        }
+        return result;
+    }
+
+    private String normalizeBranchId(String raw) {
+        if (!StringUtils.hasText(raw)) {
+            return null;
+        }
+
+        try {
+            return UUID.fromString(raw.trim()).toString();
+        } catch (IllegalArgumentException ex) {
+            return null;
         }
     }
 

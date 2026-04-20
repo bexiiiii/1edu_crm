@@ -36,6 +36,9 @@ public class CreateUserRequest {
     /** Optional: link auth account to staff profile in staff-service */
     private UUID staffId;
 
+    /** Optional: restrict account access to selected tenant branches */
+    private List<UUID> branchIds;
+
     private String tenantId;
 
     /** Optional: permission codes from RoleConfig (e.g. ["STUDENTS_VIEW","LEADS_CREATE"]) */

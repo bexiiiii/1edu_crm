@@ -18,6 +18,9 @@ public class GrpcTenantInterceptor implements ServerInterceptor {
     public static final Metadata.Key<String> USER_ID_KEY =
         Metadata.Key.of("X-User-ID", Metadata.ASCII_STRING_MARSHALLER);
 
+    public static final Metadata.Key<String> BRANCH_ID_KEY =
+        Metadata.Key.of("X-Branch-ID", Metadata.ASCII_STRING_MARSHALLER);
+
     @Value("${ondeedu.multitenancy.enabled:true}")
     private boolean multitenancyEnabled;
 
@@ -29,6 +32,7 @@ public class GrpcTenantInterceptor implements ServerInterceptor {
 
         String tenantId = headers.get(TENANT_ID_KEY);
         String userId = headers.get(USER_ID_KEY);
+        String branchId = headers.get(BRANCH_ID_KEY);
         String schemaName = TenantSchemaResolver.schemaNameForTenantId(tenantId);
 
         if (multitenancyEnabled && !StringUtils.hasText(tenantId)) {
@@ -54,7 +58,11 @@ public class GrpcTenantInterceptor implements ServerInterceptor {
             TenantContext.setUserId(userId);
         }
 
-        log.debug("gRPC call - Tenant: {}, User: {}", tenantId, userId);
+        if (StringUtils.hasText(branchId)) {
+            TenantContext.setBranchId(branchId);
+        }
+
+        log.debug("gRPC call - Tenant: {}, User: {}, Branch: {}", tenantId, userId, branchId);
 
         return new ForwardingServerCallListener.SimpleForwardingServerCallListener<>(
                 next.startCall(call, headers)) {
