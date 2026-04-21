@@ -1,6 +1,8 @@
 package com.ondeedu.payment.repository;
 
 import com.ondeedu.payment.entity.StudentPayment;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -35,4 +37,18 @@ public interface StudentPaymentRepository extends JpaRepository<StudentPayment, 
     /** Один запрос вместо N*M — загружает все платежи по набору подписок. */
     @Query("SELECT sp FROM StudentPayment sp WHERE sp.subscriptionId IN :ids")
     List<StudentPayment> findBySubscriptionIdIn(@Param("ids") Collection<UUID> ids);
+
+    // ── Branch filtering ──────────────────────────────────────────────
+
+    @Query("SELECT sp FROM StudentPayment sp WHERE (:branchId IS NULL OR sp.branchId = :branchId)")
+    Page<StudentPayment> findAllByBranch(@Param("branchId") UUID branchId, Pageable pageable);
+
+    @Query("SELECT sp FROM StudentPayment sp WHERE sp.studentId = :studentId AND (:branchId IS NULL OR sp.branchId = :branchId)")
+    Page<StudentPayment> findByStudentIdAndBranch(@Param("studentId") UUID studentId, @Param("branchId") UUID branchId, Pageable pageable);
+
+    @Query("SELECT sp FROM StudentPayment sp WHERE sp.subscriptionId = :subscriptionId AND (:branchId IS NULL OR sp.branchId = :branchId)")
+    Page<StudentPayment> findBySubscriptionIdAndBranch(@Param("subscriptionId") UUID subscriptionId, @Param("branchId") UUID branchId, Pageable pageable);
+
+    @Query("SELECT COALESCE(SUM(sp.amount), 0) FROM StudentPayment sp WHERE (:branchId IS NULL OR sp.branchId = :branchId)")
+    BigDecimal sumAmountByBranch(@Param("branchId") UUID branchId);
 }

@@ -54,4 +54,7 @@ public class Course extends BaseEntity {
     // Reference to rooms table / schedule-service
     @Column(name = "room_id")
     private UUID roomId;
+
+    @Column(name = "branch_id")
+    private UUID branchId;
 }

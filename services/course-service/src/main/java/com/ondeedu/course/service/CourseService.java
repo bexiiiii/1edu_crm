@@ -3,6 +3,7 @@ package com.ondeedu.course.service;
 import com.ondeedu.common.dto.PageResponse;
 import com.ondeedu.common.exception.BusinessException;
 import com.ondeedu.common.exception.ResourceNotFoundException;
+import com.ondeedu.common.tenant.TenantContext;
 import com.ondeedu.course.client.PaymentGrpcClient;
 import com.ondeedu.course.dto.CourseDto;
 import com.ondeedu.course.dto.CreateCourseRequest;
@@ -22,6 +23,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
 
 import java.util.Collection;
 import java.util.Collections;
@@ -47,6 +49,7 @@ public class CourseService {
     @CacheEvict(value = "courses", allEntries = true)
     public CourseDto createCourse(CreateCourseRequest request) {
         Course course = courseMapper.toEntity(request);
+        course.setBranchId(resolveCurrentBranchId());
         courseConstraintsService.validateTeacherIsActive(course.getTeacherId());
         courseConstraintsService.validateEnrollmentLimitAgainstTenantSettings(course.getEnrollmentLimit());
 
@@ -103,28 +106,31 @@ public class CourseService {
 
     @Transactional(readOnly = true)
     public PageResponse<CourseDto> listCourses(CourseStatus status, CourseType type, Pageable pageable) {
+        UUID branchId = resolveCurrentBranchId();
         Page<Course> page;
         if (status != null && type != null) {
             page = courseRepository.findByStatusAndType(status, type, pageable);
         } else if (status != null) {
-            page = courseRepository.findByStatus(status, pageable);
+            page = courseRepository.findByStatusAndBranch(status, branchId, pageable);
         } else if (type != null) {
             page = courseRepository.findByType(type, pageable);
         } else {
-            page = courseRepository.findAll(pageable);
+            page = courseRepository.findAllByBranch(branchId, pageable);
         }
         return mapPage(page);
     }
 
     @Transactional(readOnly = true)
     public PageResponse<CourseDto> searchCourses(String query, Pageable pageable) {
+        UUID branchId = resolveCurrentBranchId();
         Page<Course> page = courseRepository.search(query, pageable);
         return mapPage(page);
     }
 
     @Transactional(readOnly = true)
     public PageResponse<CourseDto> getCoursesByTeacher(UUID teacherId, Pageable pageable) {
-        Page<Course> page = courseRepository.findByTeacherId(teacherId, pageable);
+        UUID branchId = resolveCurrentBranchId();
+        Page<Course> page = courseRepository.findByTeacherIdAndBranch(teacherId, branchId, pageable);
         return mapPage(page);
     }
 
@@ -238,6 +244,18 @@ public class CourseService {
                     "COURSE_ENROLLMENT_LIMIT_EXCEEDED",
                     "Student count exceeds course enrollment limit: " + enrollmentLimit
             );
+        }
+    }
+
+    private UUID resolveCurrentBranchId() {
+        String rawBranchId = TenantContext.getBranchId();
+        if (!StringUtils.hasText(rawBranchId)) {
+            return null;
+        }
+        try {
+            return UUID.fromString(rawBranchId.trim());
+        } catch (IllegalArgumentException e) {
+            throw new BusinessException("BRANCH_ID_INVALID", "Invalid branch_id in tenant context");
         }
     }
 }

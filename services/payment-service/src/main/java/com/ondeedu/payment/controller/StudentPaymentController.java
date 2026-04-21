@@ -69,9 +69,10 @@ public class StudentPaymentController {
     @GetMapping("/debtors")
     @PreAuthorize("hasRole('TENANT_ADMIN') or hasAuthority('FINANCE_VIEW')")
     @Operation(summary = "Список должников",
-               description = "Студенты с накопленным долгом за прошедшие месяцы, отсортированные по сумме долга")
-    public ApiResponse<List<StudentDebtDto>> getDebtors() {
-        return ApiResponse.success(studentPaymentService.getDebtors());
+               description = "Студенты с накопленным долгом. Можно указать month (YYYY-MM) для фильтрации по конкретному месяцу")
+    public ApiResponse<List<StudentDebtDto>> getDebtors(
+            @RequestParam(required = false) String month) {
+        return ApiResponse.success(studentPaymentService.getDebtors(month));
     }
 
     // ── Delete payment record ────────────────────────────────────────────

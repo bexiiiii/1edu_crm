@@ -37,4 +37,16 @@ public interface TaskRepository extends JpaRepository<Task, UUID> {
     long countByStatus(TaskStatus status);
 
     long countByAssignedToAndStatus(UUID assignedTo, TaskStatus status);
+
+    @Query("SELECT t FROM Task t WHERE (:branchId IS NULL OR t.branchId = :branchId)")
+    Page<Task> findAllByBranch(@Param("branchId") UUID branchId, Pageable pageable);
+
+    @Query("SELECT t FROM Task t WHERE t.status = :status AND (:branchId IS NULL OR t.branchId = :branchId)")
+    Page<Task> findByStatusAndBranch(@Param("status") TaskStatus status, @Param("branchId") UUID branchId, Pageable pageable);
+
+    @Query("SELECT t FROM Task t WHERE t.assignedTo = :assignedTo AND (:branchId IS NULL OR t.branchId = :branchId)")
+    Page<Task> findByAssignedToAndBranch(@Param("assignedTo") UUID assignedTo, @Param("branchId") UUID branchId, Pageable pageable);
+
+    @Query("SELECT COUNT(t) FROM Task t WHERE (:branchId IS NULL OR t.branchId = :branchId)")
+    long countAllByBranch(@Param("branchId") UUID branchId);
 }

@@ -25,7 +25,8 @@
 20. [Lesson Service (8126)](#20-lesson-service-8126)
 21. [Settings Service (8128)](#21-settings-service-8128)
 22. [Audit Service (8130)](#22-audit-service-8130)
-23. [Справочник Enum-ов](#23-справочник-enum-ов)
+23. [Inventory Service (8132)](#23-inventory-service-8132)
+24. [Справочник Enum-ов](#24-справочник-enum-ов)
 
 ---
 
@@ -1258,6 +1259,108 @@ interface StudentStatsDto {
 
 ---
 
+### 8.5 Журнал обзвонов студентов (Call Logs)
+
+#### `POST /api/v1/students/call-logs` — Создать запись обзвона
+**Доступ:** `TENANT_ADMIN` | `MANAGER` | `RECEPTIONIST` | `STUDENTS_EDIT`
+
+**Request Body:**
+```typescript
+interface CreateStudentCallLogRequest {
+  studentId: string;           // UUID студента (обязательно)
+  callerStaffId: string;       // UUID сотрудника который звонил (обязательно)
+  callDate: string;            // YYYY-MM-DD (обязательно)
+  callTime: string;            // HH:MM (обязательно)
+  callResult: string;          // Результат звонка (обязательно)
+  notes?: string;              // Заметки
+  followUpRequired?: boolean;  // Требуется повторный звонок (default: false)
+  followUpDate?: string;       // YYYY-MM-DD — дата следующего звонка
+}
+```
+
+**Response:** `ApiResponse<StudentCallLogDto>`
+
+```typescript
+interface StudentCallLogDto {
+  id: string;
+  branchId: string;
+  studentId: string;
+  studentName: string;         // ФИО студента (resolved)
+  callerStaffId: string;
+  callerStaffName: string;     // ФИО сотрудника (resolved)
+  callDate: string;
+  callTime: string;
+  callResult: string;
+  notes: string | null;
+  followUpRequired: boolean;
+  followUpDate: string | null;
+  createdBy: string | null;
+  updatedBy: string | null;
+  updateReason: string | null;  // Видна только админам
+  createdAt: string;
+  updatedAt: string;
+}
+```
+
+---
+
+#### `PUT /api/v1/students/call-logs/{id}` — Изменить запись обзвона
+**Доступ:** `TENANT_ADMIN` | `MANAGER` | `RECEPTIONIST` | `STUDENTS_EDIT`
+
+**Request Body:** `UpdateStudentCallLogRequest` (те же поля что и создание, все optional)
+
+**Важно:** Поле `updateReason` обязательно при редактировании.
+
+**Ошибки:**
+- `CALL_LOG_UPDATE_REASON_REQUIRED` — не указана причина изменения
+
+---
+
+#### `DELETE /api/v1/students/call-logs/{id}?reason=` — Удалить запись обзвона
+**Доступ:** **Только `TENANT_ADMIN` | `MANAGER`**
+
+**Query Params:**
+- `reason` (обязательно): причина удаления
+
+**Ошибки:**
+- `CALL_LOG_DELETE_REASON_REQUIRED` — не указана причина удаления
+
+---
+
+#### `GET /api/v1/students/call-logs/student/{studentId}` — История обзвонов студента
+**Доступ:** `TENANT_ADMIN` | `MANAGER` | `RECEPTIONIST` | `TEACHER` | `STUDENTS_VIEW`
+
+**Query Params:**
+- `page` (default `0`), `size` (default `20`)
+
+**Response:** `ApiResponse<PageResponse<StudentCallLogDto>>`
+
+---
+
+#### `GET /api/v1/students/call-logs/student/{studentId}/range` — История обзвонов за период
+**Доступ:** `TENANT_ADMIN` | `MANAGER` | `RECEPTIONIST` | `TEACHER` | `STUDENTS_VIEW`
+
+**Query Params:**
+- `fromDate` (обязательно): `YYYY-MM-DD`
+- `toDate` (обязательно): `YYYY-MM-DD`
+- `page`, `size`
+
+**Response:** `ApiResponse<PageResponse<StudentCallLogDto>>`
+
+---
+
+#### `GET /api/v1/students/call-logs/caller/{staffId}` — Обзвоны сотрудника
+**Доступ:** **Только `TENANT_ADMIN` | `MANAGER`**
+
+**Query Params:**
+- `page`, `size`
+
+**Response:** `ApiResponse<PageResponse<StudentCallLogDto>>`
+
+> Поля `createdBy`, `updatedBy`, `updateReason` в ответе отображаются **только админам** (`TENANT_ADMIN`, `MANAGER`). Для остальных ролей эти поля `null`.
+
+---
+
 ## 9. Lead Service (8104)
 
 ### LeadDto
@@ -2008,6 +2111,11 @@ type PaymentAmountChangeReasonCode =
 #### `GET /api/v1/payments/student-payments/student/{studentId}` — История платежей студента
 **Доступ:** `TENANT_ADMIN` | `FINANCE_VIEW`
 
+**Query Params:**
+- `fromMonth` (optional): `YYYY-MM` — фильтр по начальному месяцу
+- `toMonth` (optional): `YYYY-MM` — фильтр по конечному месяцу
+
+> Если `fromMonth`/`toMonth` не указаны — возвращаются все месяцы.
 > Если студент был добавлен в курс через `studentIds` в `POST/PUT /api/v1/courses`, здесь автоматически появится course subscription.
 > Для такого auto-created course subscription:
 > - `courseId` будет заполнен;
@@ -2084,6 +2192,11 @@ interface MonthlyStudentDto {
 
 #### `GET /api/v1/payments/student-payments/debtors` — Должники
 **Доступ:** `TENANT_ADMIN` | `FINANCE_VIEW`
+
+**Query Params:**
+- `month` (optional): `YYYY-MM` — месяц для проверки (по умолчанию текущий)
+- `fromDate` (optional): `YYYY-MM-DD` — фильтр по начальной дате
+- `toDate` (optional): `YYYY-MM-DD` — фильтр по конечной дате
 
 **Response:** `ApiResponse<List<StudentDebtDto>>`
 
@@ -4900,7 +5013,370 @@ interface TenantAuditLog {
 
 ---
 
-## 23. Справочник Enum-ов
+## 23. Inventory Service (8132)
+
+`inventory-service` — управление складом и инвентарём: учёт товаров, материалов, оборудования, движение товаров, категории, единицы измерения.
+
+### 23.1 Единицы инвентаря (Items)
+
+#### `POST /api/v1/inventory/items` — Создать единицу инвентаря
+**Доступ:** `TENANT_ADMIN` или `INVENTORY_EDIT`
+
+**Request Body:**
+```typescript
+interface CreateInventoryItemRequest {
+  categoryId?: string;       // UUID категории (optional)
+  unitId: string;            // UUID единицы измерения
+  sku?: string;              // Артикул (уникален в пределах branch)
+  barcode?: string;          // Штрихкод
+  name: string;              // Название (обязательно)
+  description?: string;
+  brand?: string;            // Бренд/производитель
+  model?: string;            // Модель
+  quantity: number;          // Начальное количество (обязательно)
+  minQuantity?: number;      // Минимальный порог для алертов
+  maxQuantity?: number;      // Максимальный порог
+  pricePerUnit?: number;     // Закупочная цена
+  sellingPrice?: number;     // Цена продажи
+  currency?: string;         // Default: "UZS"
+  location?: string;         // Место хранения (кабинет, склад)
+  supplier?: string;         // Поставщик
+  supplierContact?: string;  // Контакт поставщика
+  isTracked?: boolean;       // Отслеживать остатки (default: true)
+  imageUrl?: string;
+  notes?: string;
+}
+```
+
+**Response:** `ApiResponse<InventoryItemDto>`
+
+```typescript
+interface InventoryItemDto {
+  id: string;
+  branchId: string;
+  category: InventoryItemCategory | null;
+  name: string;
+  description: string | null;
+  sku: string | null;
+  unit: string;
+  quantity: number;
+  minQuantity: number | null;
+  pricePerUnit: number | null;
+  totalValue: number;          // Вычисляемое: pricePerUnit * quantity
+  location: string | null;
+  status: InventoryItemStatus; // IN_STOCK | LOW_STOCK | OUT_OF_STOCK | DISCONTINUED
+  createdAt: string;
+  updatedAt: string;
+}
+```
+
+**Ошибки:**
+- `INVENTORY_DUPLICATE_SKU` — SKU уже существует в этом филиале
+- `RESOURCE_NOT_FOUND` — category или unit не найдены
+
+---
+
+#### `GET /api/v1/inventory/items/{id}` — Получить единицу инвентаря
+**Доступ:** `TENANT_ADMIN` или `INVENTORY_VIEW`
+
+**Response:** `ApiResponse<InventoryItemDto>`
+
+---
+
+#### `GET /api/v1/inventory/items` — Список единиц инвентаря
+**Доступ:** `TENANT_ADMIN` или `INVENTORY_VIEW`
+
+**Query Params:**
+- `status` (optional): `IN_STOCK` | `LOW_STOCK` | `OUT_OF_STOCK` | `DISCONTINUED`
+- `search` (optional): поиск по названию
+- `page` (default `0`), `size` (default `20`)
+
+**Response:** `ApiResponse<PageResponse<InventoryItemDto>>`
+
+---
+
+#### `GET /api/v1/inventory/items/category/{categoryId}` — Единицы по категории
+**Доступ:** `TENANT_ADMIN` или `INVENTORY_VIEW`
+
+**Response:** `ApiResponse<PageResponse<InventoryItemDto>>`
+
+---
+
+#### `GET /api/v1/inventory/items/reorder-required` — Товары требующие пополнения
+**Доступ:** `TENANT_ADMIN` или `INVENTORY_VIEW`
+
+**Query Params:** `page`, `size`
+
+**Response:** `ApiResponse<PageResponse<InventoryItemDto>>` — список LOW_STOCK и OUT_OF_STOCK
+
+---
+
+#### `PUT /api/v1/inventory/items/{id}` — Обновить единицу инвентаря
+**Доступ:** `TENANT_ADMIN` или `INVENTORY_EDIT`
+
+**Request Body:**
+```typescript
+interface UpdateInventoryItemRequest {
+  category?: InventoryItemCategory;
+  name?: string;
+  description?: string;
+  sku?: string;
+  unit?: string;
+  quantity?: number;         // >= 0
+  minQuantity?: number;      // >= 0
+  pricePerUnit?: number;
+  location?: string;
+  status?: InventoryItemStatus;
+}
+```
+
+**Response:** `ApiResponse<InventoryItemDto>`
+
+**Ошибки:**
+- `INVENTORY_EDIT_WINDOW_EXPIRED` — изменение запрещено (если настроено окно редактирования)
+
+---
+
+#### `DELETE /api/v1/inventory/items/{id}` — Удалить единицу инвентаря
+**Доступ:** `TENANT_ADMIN` или `INVENTORY_EDIT`
+
+**Ошибки:**
+- `INVENTORY_DELETE_NOT_EMPTY` — нельзя удалить единицу с остатком > 0
+
+---
+
+### 23.2 Транзакции (Transactions)
+
+#### `POST /api/v1/inventory/items/{itemId}/transactions` — Записать транзакцию
+**Доступ:** `TENANT_ADMIN` или `INVENTORY_EDIT`
+
+**Request Body:**
+```typescript
+interface CreateInventoryTransactionRequest {
+  transactionType: TransactionType;  // RECEIVED | ISSUED | RETURNED | ADJUSTMENT | WRITE_OFF
+  quantity: number;                  // Количество (обязательно)
+  referenceType?: string;            // purchase_order, issue_request, return, adjustment
+  referenceId?: string;              // UUID связанного документа
+  notes?: string;
+  reason?: string;                   // Причина (для списаний/корректировок)
+}
+```
+
+**Response:** `ApiResponse<InventoryTransactionDto>`
+
+```typescript
+interface InventoryTransactionDto {
+  id: string;
+  branchId: string;
+  itemId: string;
+  itemName: string;
+  transactionType: InventoryTransactionType;
+  quantity: number;
+  performedBy: string | null;
+  performedByName: string | null;
+  referenceType: string | null;
+  referenceId: string | null;
+  notes: string | null;
+  transactionDate: string;
+  createdAt: string;
+}
+```
+
+**Бизнес-логика:**
+- `RECEIVED` / `RETURNED` — увеличивают количество (quantity += amount)
+- `ISSUED` / `WRITE_OFF` — уменьшают количество (проверка достаточности остатков)
+- `ADJUSTMENT` — устанавливает абсолютное количество
+- Автоматически обновляется статус единицы (IN_STOCK → LOW_STOCK → OUT_OF_STOCK)
+
+**Ошибки:**
+- `INVENTORY_INSUFFICIENT_STOCK` — недостаточно остатков для выдачи/списания
+- `INVENTORY_INVALID_TRANSACTION` — неподдерживаемый тип транзакции
+
+---
+
+#### `GET /api/v1/inventory/items/{itemId}/transactions` — История транзакций единицы
+**Доступ:** `TENANT_ADMIN` или `INVENTORY_VIEW`
+
+**Query Params:** `page`, `size`
+
+**Response:** `ApiResponse<PageResponse<InventoryTransactionDto>>`
+
+---
+
+#### `GET /api/v1/inventory/transactions` — Фильтр транзакций по типу
+**Доступ:** `TENANT_ADMIN` или `INVENTORY_VIEW`
+
+**Query Params:**
+- `transactionType` (обязательно): `RECEIVED` | `ISSUED` | `RETURNED` | `ADJUSTMENT` | `WRITE_OFF`
+- `page`, `size`
+
+**Response:** `ApiResponse<PageResponse<InventoryTransactionDto>>`
+
+---
+
+#### `GET /api/v1/inventory/transactions/date-range` — Транзакции за период
+**Доступ:** `TENANT_ADMIN` или `INVENTORY_VIEW`
+
+**Query Params:**
+- `fromDate` (обязательно): ISO datetime
+- `toDate` (обязательно): ISO datetime
+- `page`, `size`
+
+**Response:** `ApiResponse<PageResponse<InventoryTransactionDto>>`
+
+---
+
+### 23.3 Категории (Categories)
+
+#### `GET /api/v1/inventory/categories` — Список категорий
+**Доступ:** `TENANT_ADMIN` или `INVENTORY_VIEW`
+
+**Response:** `ApiResponse<InventoryCategoryDto[]>`
+
+```typescript
+interface InventoryCategoryDto {
+  id: string;
+  branchId: string;
+  name: string;
+  description: string | null;
+  icon: string | null;
+  isActive: boolean;
+  sortOrder: number;
+}
+```
+
+---
+
+#### `POST /api/v1/inventory/categories` — Создать категорию
+**Доступ:** `TENANT_ADMIN` или `INVENTORY_EDIT`
+
+**Request Body:**
+```typescript
+interface SaveInventoryCategoryRequest {
+  name: string;             // Обязательно, уникально в branch
+  description?: string;
+  icon?: string;
+  sortOrder?: number;       // Default: 0
+}
+```
+
+**Response:** `ApiResponse<InventoryCategoryDto>`
+
+**Ошибки:**
+- `INVENTORY_DUPLICATE_CATEGORY` — категория с таким именем уже существует
+
+---
+
+#### `PUT /api/v1/inventory/categories/{id}` — Обновить категорию
+**Доступ:** `TENANT_ADMIN` или `INVENTORY_EDIT`
+
+**Request Body:** `SaveInventoryCategoryRequest`
+
+**Ошибки:**
+- `INVENTORY_SYSTEM_CATEGORY` — нельзя изменить системную категорию
+
+---
+
+#### `DELETE /api/v1/inventory/categories/{id}` — Удалить категорию
+**Доступ:** `TENANT_ADMIN` или `INVENTORY_EDIT`
+
+**Ошибки:**
+- `INVENTORY_SYSTEM_CATEGORY` — нельзя удалить системную категорию
+- `INVENTORY_CATEGORY_IN_USE` — категория используется единицами инвентаря
+
+---
+
+### 23.4 Единицы измерения (Units)
+
+#### `GET /api/v1/inventory/units` — Список единиц измерения
+**Доступ:** `TENANT_ADMIN` или `INVENTORY_VIEW`
+
+**Response:** `ApiResponse<InventoryUnitDto[]>`
+
+```typescript
+interface InventoryUnitDto {
+  id: string;
+  branchId: string;
+  name: string;
+  abbreviation: string;
+  unitType: string;     // piece | weight | length | volume | area
+  description: string | null;
+  isSystem: boolean;
+  isActive: boolean;
+}
+```
+
+---
+
+#### `POST /api/v1/inventory/units` — Создать единицу измерения
+**Доступ:** `TENANT_ADMIN` или `INVENTORY_EDIT`
+
+**Request Body:**
+```typescript
+interface SaveInventoryUnitRequest {
+  name: string;         // Обязательно, уникально в branch
+  abbreviation: string; // Обязательно, уникально в branch
+  unitType: string;     // piece | weight | length | volume | area
+  description?: string;
+}
+```
+
+**Response:** `ApiResponse<InventoryUnitDto>`
+
+**Ошибки:**
+- `INVENTORY_DUPLICATE_UNIT` — единица с таким именем уже существует
+- `INVENTORY_DUPLICATE_UNIT_ABBR` — аббревиатура уже существует
+
+---
+
+#### `PUT /api/v1/inventory/units/{id}` — Обновить единицу измерения
+**Доступ:** `TENANT_ADMIN` или `INVENTORY_EDIT`
+
+**Ошибки:**
+- `INVENTORY_SYSTEM_UNIT` — нельзя изменить системную единицу
+
+---
+
+#### `DELETE /api/v1/inventory/units/{id}` — Удалить единицу измерения
+**Доступ:** `TENANT_ADMIN` или `INVENTORY_EDIT`
+
+**Ошибки:**
+- `INVENTORY_SYSTEM_UNIT` — нельзя удалить системную единицу
+
+---
+
+### 23.5 Статистика
+
+#### `GET /api/v1/inventory/stats` — Статистика склада
+**Доступ:** `TENANT_ADMIN` или `INVENTORY_VIEW`
+
+**Response:** `ApiResponse<InventoryStatsDto>`
+
+```typescript
+interface InventoryStatsDto {
+  totalItems: number;        // Общее количество единиц
+  lowStockCount: number;     // Количество LOW_STOCK
+  outOfStockCount: number;   // Количество OUT_OF_STOCK
+  totalTransactions: number; // Общее количество транзакций
+  totalCategories: number;   // Количество активных категорий
+}
+```
+
+---
+
+### 23.6 Системные данные (seed)
+
+При создании нового тенанта автоматически создаются:
+
+**Единицы измерения (17 системных):**
+Штука (шт), Комплект (компл), Коробка (кор), Упаковка (упак), Килограмм (кг), Грамм (г), Литр (л), Миллилитр (мл), Метр (м), Сантиметр (см), Квадратный метр (м²), Рулон (рул), Лист (лист), Бутылка (бут), Пачка (пач), Банка (бан), Тюбик (тюб)
+
+**Категории (11 системных):**
+Учебники, Рабочие тетради, Канцтовары, Бумага и картон, Оборудование, Мебель, Расходные материалы, Хозяйственные товары, Электроника, Спортинвентарь, Другое
+
+---
+
+## 24. Справочник Enum-ов
 
 ```typescript
 // Студент
@@ -4950,6 +5426,11 @@ enum AttendanceStatus { PLANNED, ATTENDED, ABSENT, SICK, VACATION, AUTO_ATTENDED
 // Тенант
 enum TenantStatus { TRIAL, ACTIVE, INACTIVE, SUSPENDED, BANNED }
 enum TenantPlan { BASIC, EXTENDED, EXTENDED_PLUS }
+
+// Инвентарь
+enum InventoryItemStatus { IN_STOCK, LOW_STOCK, OUT_OF_STOCK, DISCONTINUED }
+enum InventoryTransactionType { RECEIVED, ISSUED, RETURNED, ADJUSTMENT, WRITE_OFF, TRANSFER }
+enum InventoryUnitType { piece, weight, length, volume, area }
 ```
 
 ---

@@ -58,4 +58,7 @@ public class Schedule extends BaseEntity {
     @Column(name = "status", length = 20, nullable = false)
     @Builder.Default
     private ScheduleStatus status = ScheduleStatus.ACTIVE;
+
+    @Column(name = "branch_id")
+    private UUID branchId;
 }

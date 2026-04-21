@@ -46,6 +46,9 @@ public final class AnalyticsCacheNames {
     /** Посещаемость группы */
     public static final String GROUP_ATTENDANCE = "analytics:group-attendance";
 
+    /** Аналитика по филиалам */
+    public static final String BRANCH_ANALYTICS = "analytics:branch-analytics";
+
     /** Список всех кешей аналитики для tenant-aware инвалидации. */
     public static final List<String> ALL = List.of(
             TODAY_STATS,
@@ -59,6 +62,7 @@ public final class AnalyticsCacheNames {
             RETENTION,
             GROUP_LOAD,
             ROOM_LOAD,
-            GROUP_ATTENDANCE
+            GROUP_ATTENDANCE,
+            BRANCH_ANALYTICS
     );
 }

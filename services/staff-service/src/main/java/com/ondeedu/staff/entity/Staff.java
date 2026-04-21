@@ -7,6 +7,7 @@ import lombok.*;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.util.UUID;
 
 @Entity
 @Table(name = "staff")
@@ -121,6 +122,9 @@ public class Staff extends BaseEntity {
 
     @Column(name = "notes", columnDefinition = "TEXT")
     private String notes;
+
+    @Column(name = "branch_id")
+    private UUID branchId;
 
     public String getFullName() {
         if (middleName != null && !middleName.isBlank()) {

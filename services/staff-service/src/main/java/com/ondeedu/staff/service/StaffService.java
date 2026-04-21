@@ -39,6 +39,7 @@ public class StaffService {
     public StaffDto createStaff(CreateStaffRequest request) {
         normalizeCompensation(request);
         Staff staff = staffMapper.toEntity(request);
+        staff.setBranchId(resolveCurrentBranchId());
         staff = staffRepository.save(staff);
         log.info("Created staff: {} {}", staff.getFirstName(), staff.getLastName());
         auditLogPublisher.publishTenant(TenantAuditEvent.builder()
@@ -99,21 +100,35 @@ public class StaffService {
 
     @Transactional(readOnly = true)
     public PageResponse<StaffDto> listStaff(StaffRole role, StaffStatus status, Pageable pageable) {
+        UUID branchId = resolveCurrentBranchId();
         Page<Staff> page;
         if (role != null) {
-            page = staffRepository.findByRole(role, pageable);
+            page = staffRepository.findByRoleAndBranch(role, branchId, pageable);
         } else if (status != null) {
-            page = staffRepository.findByStatus(status, pageable);
+            page = staffRepository.findByStatusAndBranch(status, branchId, pageable);
         } else {
-            page = staffRepository.findAll(pageable);
+            page = staffRepository.findAllByBranch(branchId, pageable);
         }
         return PageResponse.from(page, staffMapper::toDto);
     }
 
     @Transactional(readOnly = true)
     public PageResponse<StaffDto> searchStaff(String query, Pageable pageable) {
+        UUID branchId = resolveCurrentBranchId();
         Page<Staff> page = staffRepository.search(query, pageable);
         return PageResponse.from(page, staffMapper::toDto);
+    }
+
+    private UUID resolveCurrentBranchId() {
+        String rawBranchId = TenantContext.getBranchId();
+        if (!org.springframework.util.StringUtils.hasText(rawBranchId)) {
+            return null;
+        }
+        try {
+            return UUID.fromString(rawBranchId.trim());
+        } catch (IllegalArgumentException e) {
+            throw new BusinessException("BRANCH_ID_INVALID", "Invalid branch_id in tenant context");
+        }
     }
 
     private void normalizeCompensation(CreateStaffRequest request) {

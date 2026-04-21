@@ -6,6 +6,7 @@ import lombok.*;
 import org.hibernate.annotations.ColumnTransformer;
 
 import java.time.LocalDate;
+import java.util.UUID;
 
 @Entity
 @Table(name = "students")
@@ -15,6 +16,9 @@ import java.time.LocalDate;
 @NoArgsConstructor
 @AllArgsConstructor
 public class Student extends BaseEntity {
+
+    @Column(name = "branch_id")
+    private UUID branchId;
 
     @Column(name = "first_name", nullable = false, length = 100)
     private String firstName;

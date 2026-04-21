@@ -4,6 +4,8 @@ import com.ondeedu.common.dto.BaseEntity;
 import jakarta.persistence.*;
 import lombok.*;
 
+import java.util.UUID;
+
 
 @Entity
 @Table(name = "leads")
@@ -13,6 +15,9 @@ import lombok.*;
 @NoArgsConstructor
 @AllArgsConstructor
 public class Lead extends BaseEntity {
+
+    @Column(name = "branch_id")
+    private UUID branchId;
 
     @Column(name = "first_name", nullable = false, length = 100)
     private String firstName;

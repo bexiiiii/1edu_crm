@@ -135,6 +135,7 @@ Tenant schemas are created via `system.create_tenant_schema()` SQL function (see
 | lesson-service | 8126 | 9126 | Lesson + Attendance journal |
 | settings-service | 8128 | 9128 | Tenant settings + catalogs (attendance/payment/roles/staff/finance) |
 | audit-service | 8130 | — | MongoDB, RabbitMQ listener, no JPA/Redis/gRPC |
+| inventory-service | 8132 | 9132 | Warehouse & inventory management (items, transactions, categories) |
 
 ### Key Patterns
 
@@ -699,13 +700,51 @@ monthly_expected = subscription.amount / months_duration
 | `POST /api/v1/payments/student-payments` | TENANT_ADMIN / FINANCE_CREATE | Записать платёж |
 | `GET /api/v1/payments/student-payments/student/{id}` | TENANT_ADMIN / FINANCE_VIEW | История студента (подписки + помесячно) |
 | `GET /api/v1/payments/student-payments/overview?month=YYYY-MM` | TENANT_ADMIN / FINANCE_VIEW | Месячный отчёт: PAID/PARTIAL/UNPAID по всем студентам |
-| `GET /api/v1/payments/student-payments/debtors` | TENANT_ADMIN / FINANCE_VIEW | Должники с суммой и количеством месяцев долга |
+| `GET /api/v1/payments/student-payments/debtors?month=YYYY-MM` | TENANT_ADMIN / FINANCE_VIEW | Должники с суммой и количеством месяцев долга. **month** — фильтр по месяцу (по умолчанию текущий) |
 | `DELETE /api/v1/payments/student-payments/{id}` | TENANT_ADMIN / FINANCE_EDIT | Удалить запись (исправление ошибки) |
 
 ### Статусы месяца
 - **PAID** — paid >= expected
 - **PARTIAL** — 0 < paid < expected
 - **UNPAID** — paid == 0
+
+## Student Service — Call Logs (port 8102)
+
+### Журнал обзвонов студентов
+Модуль `StudentCallLog` добавлен в student-service (V30 Flyway). Позво менедментам фиксировать результаты обзвонов студентов.
+
+### Таблица `student_call_logs` (V30)
+| Поле | Тип | Описание |
+|---|---|---|
+| id | UUID | ID записи |
+| branch_id | UUID | Филиал (FK) |
+| student_id | UUID | Студент (FK) |
+| caller_staff_id | UUID | Сотрудник который звонил (FK) |
+| call_date | DATE | Дата звонка |
+| call_time | TIME | Время звонка |
+| call_result | VARCHAR(50) | Результат звонка |
+| notes | TEXT | Заметки |
+| follow_up_required | BOOLEAN | Требуется повторный звонок |
+| follow_up_date | DATE | Дата следующего звонка |
+| created_by | UUID | Кто создал |
+| updated_by | UUID | Кто изменил |
+| update_reason | TEXT | Причина изменения (обязательно при edit/delete) |
+
+### API Call Logs
+| Эндпоинт | Доступ | Описание |
+|---|---|---|
+| `POST /api/v1/students/call-logs` | TENANT_ADMIN / MANAGER / RECEPTIONIST / STUDENTS_EDIT | Создать запись обзвона |
+| `PUT /api/v1/students/call-logs/{id}` | TENANT_ADMIN / MANAGER / RECEPTIONIST / STUDENTS_EDIT | Изменить запись (требуется `updateReason`) |
+| `DELETE /api/v1/students/call-logs/{id}?reason=` | TENANT_ADMIN / MANAGER | Удалить запись (требуется reason, **только админам**) |
+| `GET /api/v1/students/call-logs/student/{id}` | TENANT_ADMIN / MANAGER / RECEPTIONIST / TEACHER / STUDENTS_VIEW | История обзвонов студента |
+| `GET /api/v1/students/call-logs/student/{id}/range?fromDate=&toDate=` | TENANT_ADMIN / MANAGER / RECEPTIONIST / TEACHER / STUDENTS_VIEW | История обзвонов за период |
+| `GET /api/v1/students/call-logs/caller/{staffId}` | **TENANT_ADMIN / MANAGER** | Обзвоны конкретного менеджера (**только админам**) |
+
+### Правила
+- **Создание**: доступно TENANT_ADMIN, MANAGER, RECEPTIONIST, STUDENTS_EDIT
+- **Изменение**: доступно тем же ролям, **обязательно** поле `updateReason` (ошибка `CALL_LOG_UPDATE_REASON_REQUIRED`)
+- **Удаление**: **только TENANT_ADMIN и MANAGER**, обязательно query param `reason` (ошибка `CALL_LOG_DELETE_REASON_REQUIRED`)
+- **Просмотр истории изменений** (`createdBy`, `updatedBy`, `updateReason`): отображается **только админам** в ответе API
 
 ## Audit Service (port 8130)
 
@@ -1221,7 +1260,7 @@ MAIL_REPLY_TO=support@1edu.kz  # опционально
 - `KeycloakUserService` сохраняет связку в Keycloak attribute `staff_id` и возвращает её в `UserDto.staffId`.
 - Это поддерживает frontend flow «выбрать сотрудника → создать логин/пароль/роль» без отдельного endpoint.
 
-### Multi-branch support (settings + auth + common)
+### Multi-branch support (settings + auth + common + ALL business services)
 - Добавлен tenant-scoped CRUD филиалов в `settings-service`:
   - `GET/POST/PUT/DELETE /api/v1/settings/branches`
   - новые классы: `TenantBranchController`, `TenantBranchService`, `TenantBranch`, `TenantBranchRepository`, `TenantBranchMapper`, `BranchDto`, `SaveBranchRequest`.
@@ -1234,6 +1273,62 @@ MAIL_REPLY_TO=support@1edu.kz  # опционально
 - Branch access guards:
   - `BRANCH_ACCESS_DENIED` при попытке выбрать/назначить запрещённый филиал
   - `BRANCH_SCOPE_REQUIRED` если админ branch-scoped и должен явно передать `branchIds`.
+
+#### Branch-фильтрация данных (2026-04-21)
+Все бизнес-сервисы теперь фильтруют данные по `branch_id`:
+
+| Сервис | Entity | Repository методы | Service изменения |
+|---|---|---|---|
+| **student-service** | `Student.branchId` | `findAllByBranch`, `findByStatusAndBranch`, `searchByBranch`, etc. | `resolveCurrentBranchId()`, все CRUD с branch |
+| **lead-service** | `Lead.branchId` | `findAllByBranch`, `findByStageAndBranch`, `searchByBranch` | `resolveCurrentBranchId()`, create/list/search с branch |
+| **schedule-service** | `Schedule.branchId` | `findAllByBranch`, `findByStatusAndBranch`, `findByTeacherIdAndBranch` | `resolveCurrentBranchId()`, create/list/search с branch |
+| **staff-service** | `Staff.branchId` | `findAllByBranch`, `findByStatusAndBranch`, `findByRoleAndBranch` | `resolveCurrentBranchId()`, create/list/search с branch |
+| **task-service** | `Task.branchId` | `findAllByBranch`, `findByStatusAndBranch`, `findByAssignedToAndBranch` | `resolveCurrentBranchId()`, create/list/search с branch |
+| **course-service** | `Course.branchId` | `findAllByBranch`, `findByStatusAndBranch`, `findByTeacherIdAndBranch` | `resolveCurrentBranchId()`, create/list/search с branch |
+| **lesson-service** | `Lesson.branchId`, `Attendance.branchId` | `findAllByBranch`, `findByGroupIdAndBranch`, `findByLessonDateAndBranch` | `resolveCurrentBranchId()`, create/list с branch |
+| **payment-service** | `Subscription.branchId`, `StudentPayment.branchId` | `findAllByBranch`, `findByStudentIdAndBranch`, `findByStatusAndBranch` | `resolveCurrentBranchId()`, create/list с branch |
+| **finance-service** | `Transaction.branchId` | `findAllByBranch`, `findByTypeAndBranch`, `sumByTypeAndDateRangeAndBranch` | `resolveCurrentBranchId()`, create/list с branch |
+| **analytics-service** | N/A (native SQL) | Все SQL запросы обновлены с `AND (:branchId IS NULL OR table.branch_id = :branchId)` | `resolveCurrentBranchId()` во всех сервисах |
+
+**Паттерн реализации:**
+```java
+// В Entity:
+@Column(name = "branch_id")
+private UUID branchId;
+
+// В Repository:
+@Query("SELECT e FROM Entity e WHERE (:branchId IS NULL OR e.branchId = :branchId)")
+Page<Entity> findAllByBranch(@Param("branchId") UUID branchId, Pageable pageable);
+
+// В Service:
+private UUID resolveCurrentBranchId() {
+    String rawBranchId = TenantContext.getBranchId();
+    if (!StringUtils.hasText(rawBranchId)) return null;
+    try {
+        return UUID.fromString(rawBranchId.trim());
+    } catch (IllegalArgumentException e) {
+        throw new BusinessException("BRANCH_ID_INVALID", "Invalid branch_id in tenant context");
+    }
+}
+
+// При создании:
+entity.setBranchId(resolveCurrentBranchId());
+
+// При поиске:
+page = repository.findAllByBranch(resolveCurrentBranchId(), pageable);
+```
+
+**Миграция БД V29** (`ensure_global_branch_data_scope.sql`):
+- Добавляет `branch_id UUID` колонку во все таблицы: `students`, `leads`, `staff`, `courses`, `schedules`, `tasks`, `lessons`, `attendances`, `subscriptions`, `student_payments`, `transactions`, `services`, `price_lists`, `student_groups`, `course_students`, `lead_activities`, `notification_logs`
+- Создаёт индексы `idx_<table>_branch_id`
+- Backfill существующих записей → `branch_id = default_branch_id`
+- Trigger `trg_set_branch_id` для автозаполнения при INSERT
+- Row Level Security (RLS) политики для изоляции на уровне БД
+
+**Кэш**: Все `@Cacheable` ключи теперь включают branch context:
+```java
+@Cacheable(value = "students", key = "T(com.ondeedu.common.cache.TenantCacheKeys).id(#id) + '::branch=' + T(com.ondeedu.common.tenant.TenantContext).getBranchId()")
+```
 
 ### Teacher self-scope enforcement (schedule + lesson)
 - Для `ROLE_TEACHER` backend принудительно ограничивает доступ только собственными записями (по JWT `staff_id`):
@@ -1284,3 +1379,134 @@ MAIL_REPLY_TO=support@1edu.kz  # опционально
   - добавляет поля во все существующие tenant-схемы;
   - обновляет CHECK constraints по допустимым кодам;
   - для новых тенантов вызывается `system.ensure_amount_change_reason_schema(:schemaName)` в `TenantService.createTenant()`.
+
+## Inventory Service (port 8132)
+
+Сервис управления складом и инвентарём — учёт товаров, материалов, оборудования. Отслеживает количество, движение, категории, единицы измерения.
+
+### API
+| Эндпоинт | Доступ | Описание |
+|---|---|---|
+| `POST /api/v1/inventory/items` | TENANT_ADMIN / `INVENTORY_EDIT` | Создать единицу инвентаря |
+| `GET /api/v1/inventory/items/{id}` | TENANT_ADMIN / `INVENTORY_VIEW` | Получить единицу инвентаря |
+| `GET /api/v1/inventory/items?status=&search=&page=&size=` | TENANT_ADMIN / `INVENTORY_VIEW` | Список с фильтрами (статус, поиск) |
+| `GET /api/v1/inventory/items/category/{categoryId}` | TENANT_ADMIN / `INVENTORY_VIEW` | Единицы по категории |
+| `GET /api/v1/inventory/items/reorder-required` | TENANT_ADMIN / `INVENTORY_VIEW` | Товары требующие пополнения |
+| `PUT /api/v1/inventory/items/{id}` | TENANT_ADMIN / `INVENTORY_EDIT` | Обновить единицу инвентаря |
+| `DELETE /api/v1/inventory/items/{id}` | TENANT_ADMIN / `INVENTORY_EDIT` | Удалить (только при нулевом остатке) |
+| `POST /api/v1/inventory/items/{itemId}/transactions` | TENANT_ADMIN / `INVENTORY_EDIT` | Записать транзакцию (приход/расход/корректировка) |
+| `GET /api/v1/inventory/items/{itemId}/transactions` | TENANT_ADMIN / `INVENTORY_VIEW` | История транзакций единицы |
+| `GET /api/v1/inventory/transactions?transactionType=&page=&size=` | TENANT_ADMIN / `INVENTORY_VIEW` | Фильтр транзакций по типу |
+| `GET /api/v1/inventory/transactions/date-range?fromDate=&toDate=` | TENANT_ADMIN / `INVENTORY_VIEW` | Транзакции за период |
+| `GET/POST /api/v1/inventory/categories` | TENANT_ADMIN / `INVENTORY_VIEW` / `INVENTORY_EDIT` | Категории инвентаря |
+| `GET/POST/PUT/DELETE /api/v1/inventory/categories/{id}` | TENANT_ADMIN / `INVENTORY_VIEW` / `INVENTORY_EDIT` | CRUD категории |
+| `GET/POST /api/v1/inventory/units` | TENANT_ADMIN / `INVENTORY_VIEW` / `INVENTORY_EDIT` | Единицы измерения |
+| `GET/POST/PUT/DELETE /api/v1/inventory/units/{id}` | TENANT_ADMIN / `INVENTORY_VIEW` / `INVENTORY_EDIT` | CRUD единицы измерения |
+| `GET /api/v1/inventory/stats` | TENANT_ADMIN / `INVENTORY_VIEW` | Статистика склада |
+
+### Таблицы (Flyway V31)
+| Таблица | Описание |
+|---|---|
+| `inventory_items` | Единицы инвентаря (SKU, barcode, name, quantity, price, status, location, supplier) |
+| `inventory_transactions` | Движение товаров (type: RECEIVED/ISSUED/RETURNED/ADJUSTMENT/WRITE_OFF, quantity_before/after, reference) |
+| `inventory_categories` | Категории (name, description, icon, is_system, sort_order) |
+| `inventory_units` | Единицы измерения (name, abbreviation, unit_type: piece/weight/length/volume/area) |
+
+### Статусы инвентаря
+- `IN_STOCK` — в наличии (quantity > min_quantity)
+- `LOW_STOCK` — мало (quantity <= min_quantity)
+- `OUT_OF_STOCK` — нет в наличии (quantity <= 0)
+- `DISCONTINUED` — снят с учёта
+
+### Бизнес-логика
+- `InventoryService.updateStatus()` — автоматически обновляет статус при изменении количества
+- `InventoryService.recordTransaction()` — записывает транзакцию + обновляет количество единицы
+- При `ISSUED`/`WRITE_OFF` проверяется достаточность остатков (`INVENTORY_INSUFFICIENT_STOCK`)
+- При `ADJUSTMENT` количество устанавливается в абсолютное значение
+- Удаление единицы запрещено если `quantity > 0` (`INVENTORY_DELETE_NOT_EMPTY`)
+- Системные категории/единицы (`is_system=true`) защищены от изменения/удаления
+
+### Кэширование
+- `inventory` — единицы инвентаря (TTL по умолчанию)
+- `inventory-categories` — категории
+- `inventory-units` — единицы измерения
+
+### TenantService integration
+При создании нового тенанта вызывается `system.ensure_inventory_schema(:schemaName)` — создаёт таблицы + seed-данные (17 системных единиц измерения + 11 категорий).
+
+## Branch Analytics
+
+Все бизнес-сервисы поддерживают branch-scoped фильтрацию данных. Analytics-service применяет `branch_id` фильтр ко всем нативным SQL-запросам.
+
+### Паттерн в Analytics Service
+```java
+// В каждом SQL-запросе добавляется условие:
+AND (:branchId IS NULL OR table.branch_id = :branchId)
+```
+
+Это обеспечивает изоляцию аналитики по филиалам — каждый branch видит только свои данные.
+
+### Endpoint с branch-фильтрацией
+Все эндпоинты analytics-service автоматически фильтруются по `X-Branch-ID` header через `TenantContext.getBranchId()`.
+
+## Payment Dates
+
+### Student Payments — payment_month
+В `student_payments` поле `payment_month` (VARCHAR(7), формат `YYYY-MM`) используется для помесячного расчёта статуса оплаты.
+
+### Finance Transactions — salary_month
+В `transactions` поле `salary_month` (VARCHAR(7), формат `YYYY-MM`) используется для расчёта зарплат за конкретный месяц.
+
+### Invoice Payment Dates
+В `apipay_invoices` и `kpay_invoices` хранятся даты оплаты для трекинга статусов счетов:
+- `created_at` — дата создания счёта
+- `paid_at` — дата фактической оплаты (nullable)
+- `due_date` — срок оплаты
+
+### Subscription Payment Tracking
+`SubscriptionService` использует `subscriptionEndAt` для трекинга окончания подписки и автоматической отправки уведомлений о необходимости оплаты.
+
+## Student Call Logs (student-service, port 8102)
+
+Журнал обзвонов студентов — позволяет менеджерам фиксировать результаты телефонных обзвонов.
+
+### API
+| Эндпоинт | Доступ | Описание |
+|---|---|---|
+| `POST /api/v1/students/call-logs` | TENANT_ADMIN / MANAGER / RECEPTIONIST / `STUDENTS_EDIT` | Создать запись обзвона |
+| `PUT /api/v1/students/call-logs/{id}` | TENANT_ADMIN / MANAGER / RECEPTIONIST / `STUDENTS_EDIT` | Изменить запись (обязательно `updateReason`) |
+| `DELETE /api/v1/students/call-logs/{id}?reason=` | **TENANT_ADMIN / MANAGER** | Удалить запись (обязательно reason query param) |
+| `GET /api/v1/students/call-logs/student/{id}` | TENANT_ADMIN / MANAGER / RECEPTIONIST / TEACHER / `STUDENTS_VIEW` | История обзвонов студента |
+| `GET /api/v1/students/call-logs/student/{id}/range?fromDate=&toDate=` | TENANT_ADMIN / MANAGER / RECEPTIONIST / TEACHER / `STUDENTS_VIEW` | История обзвонов за период |
+| `GET /api/v1/students/call-logs/caller/{staffId}` | **TENANT_ADMIN / MANAGER** | Обзвоны конкретного менеджера |
+
+### Таблица `student_call_logs` (Flyway V30)
+| Поле | Тип | Описание |
+|---|---|---|
+| id | UUID | ID записи |
+| branch_id | UUID | Филиал |
+| student_id | UUID | Студент (FK) |
+| caller_staff_id | UUID | Сотрудник который звонил |
+| call_date | DATE | Дата звонка |
+| call_time | TIME | Время звонка |
+| call_result | VARCHAR(50) | Результат звонка |
+| notes | TEXT | Заметки |
+| follow_up_required | BOOLEAN | Требуется повторный звонок |
+| follow_up_date | DATE | Дата следующего звонка |
+| created_by | UUID | Кто создал |
+| updated_by | UUID | Кто изменил |
+| update_reason | TEXT | Причина изменения (обязательно при edit/delete) |
+
+### Правила доступа
+- **Создание**: TENANT_ADMIN, MANAGER, RECEPTIONIST, STUDENTS_EDIT
+- **Изменение**: те же роли + обязательно поле `updateReason` (ошибка `CALL_LOG_UPDATE_REASON_REQUIRED`)
+- **Удаление**: **только TENANT_ADMIN и MANAGER** + обязательно query param `reason` (ошибка `CALL_LOG_DELETE_REASON_REQUIRED`)
+- **Просмотр истории изменений** (`createdBy`, `updatedBy`, `updateReason`): отображается **только админам** в ответе API
+
+### Кэширование
+Кэш `call-logs` с tenant-изолированными ключами через `TenantCacheKeys`.
+
+### Payment Service — date filters
+В `student-payments` добавлены фильтры по дате:
+- `GET /api/v1/payments/student-payments/student/{studentId}?fromMonth=&toMonth=` — история платежей студента за период
+- `GET /api/v1/payments/student-payments/debtors?month=&fromDate=&toDate=` — должники с фильтрацией по дате

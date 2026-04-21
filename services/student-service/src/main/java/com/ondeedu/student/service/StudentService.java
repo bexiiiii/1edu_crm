@@ -70,17 +70,19 @@ public class StudentService {
     @Transactional
     @CacheEvict(value = {"students", "student-stats"}, allEntries = true)
     public StudentDto createStudent(CreateStudentRequest request) {
+        UUID branchId = resolveCurrentBranchId();
         normalizeCreateRequest(request);
 
         // Check for duplicates
-        if (request.getPhone() != null && studentRepository.existsByPhone(request.getPhone())) {
+        if (request.getPhone() != null && phoneExistsInScope(request.getPhone(), branchId)) {
             throw new BusinessException("DUPLICATE_PHONE", "Student with this phone already exists");
         }
-        if (request.getEmail() != null && studentRepository.existsByEmail(request.getEmail())) {
+        if (request.getEmail() != null && emailExistsInScope(request.getEmail(), branchId)) {
             throw new BusinessException("DUPLICATE_EMAIL", "Student with this email already exists");
         }
 
         Student student = studentMapper.toEntity(request);
+        student.setBranchId(branchId);
         student.setStatus(request.getStatus() != null ? request.getStatus() : StudentStatus.ACTIVE);
         writeMetadata(student, request.getAdditionalPhones(), request.getStateOrderParticipant(), request.getLoyalty());
         student = studentRepository.save(student);
@@ -103,30 +105,30 @@ public class StudentService {
     }
 
     @Transactional(readOnly = true)
-    @Cacheable(value = "students", key = "T(com.ondeedu.common.cache.TenantCacheKeys).id(#id)")
+    @Cacheable(value = "students", key = "T(com.ondeedu.common.cache.TenantCacheKeys).id(#id) + '::branch=' + T(com.ondeedu.common.tenant.TenantContext).getBranchId()")
     public StudentDto getStudent(UUID id) {
-        Student student = studentRepository.findById(id)
-            .orElseThrow(() -> new ResourceNotFoundException("Student", "id", id));
+        UUID branchId = resolveCurrentBranchId();
+        Student student = findStudentByIdInScope(id, branchId);
         return toDto(student);
     }
 
     @Transactional
     @Caching(evict = {
-            @CacheEvict(value = "students", key = "T(com.ondeedu.common.cache.TenantCacheKeys).id(#id)"),
+            @CacheEvict(value = "students", allEntries = true),
             @CacheEvict(value = "student-stats", allEntries = true)
     })
     public StudentDto updateStudent(UUID id, UpdateStudentRequest request) {
-        Student student = studentRepository.findById(id)
-            .orElseThrow(() -> new ResourceNotFoundException("Student", "id", id));
+        UUID branchId = resolveCurrentBranchId();
+        Student student = findStudentByIdInScope(id, branchId);
 
         normalizeUpdateRequest(request);
 
         if (request.getPhone() != null && !Objects.equals(request.getPhone(), student.getPhone())
-                && studentRepository.existsByPhone(request.getPhone())) {
+                && phoneExistsInScope(request.getPhone(), branchId)) {
             throw new BusinessException("DUPLICATE_PHONE", "Student with this phone already exists");
         }
         if (request.getEmail() != null && !Objects.equals(request.getEmail(), student.getEmail())
-                && studentRepository.existsByEmail(request.getEmail())) {
+                && emailExistsInScope(request.getEmail(), branchId)) {
             throw new BusinessException("DUPLICATE_EMAIL", "Student with this email already exists");
         }
 
@@ -153,14 +155,13 @@ public class StudentService {
 
     @Transactional
     @Caching(evict = {
-            @CacheEvict(value = "students", key = "T(com.ondeedu.common.cache.TenantCacheKeys).id(#id)"),
+            @CacheEvict(value = "students", allEntries = true),
             @CacheEvict(value = "student-stats", allEntries = true)
     })
     public void deleteStudent(UUID id) {
-        if (!studentRepository.existsById(id)) {
-            throw new ResourceNotFoundException("Student", "id", id);
-        }
-        studentRepository.deleteById(id);
+        UUID branchId = resolveCurrentBranchId();
+        Student student = findStudentByIdInScope(id, branchId);
+        studentRepository.delete(student);
         deleteStudentFromIndex(id);
         log.info("Deleted student: {}", id);
         auditLogPublisher.publishTenant(TenantAuditEvent.builder()
@@ -175,11 +176,12 @@ public class StudentService {
 
     @Transactional(readOnly = true)
     public PageResponse<StudentDto> listStudents(StudentStatus status, Pageable pageable) {
+        UUID branchId = resolveCurrentBranchId();
         Page<Student> page;
         if (status != null) {
-            page = studentRepository.findByStatus(status, pageable);
+            page = studentRepository.findByStatusAndBranch(status, branchId, pageable);
         } else {
-            page = studentRepository.findAll(pageable);
+            page = studentRepository.findAllByBranch(branchId, pageable);
         }
         return PageResponse.from(page, this::toDto);
     }
@@ -187,11 +189,12 @@ public class StudentService {
     @Transactional(readOnly = true)
     public PageResponse<StudentDto> searchStudents(String query, Pageable pageable) {
         String tenantId = TenantContext.getTenantId();
+        UUID branchId = resolveCurrentBranchId();
 
         if (StringUtils.hasText(tenantId) && studentSearchService.isPresent()) {
             try {
                 PageResponse<StudentDto> indexedResults =
-                        studentSearchService.get().searchStudents(tenantId, query, pageable);
+                        studentSearchService.get().searchStudents(tenantId, branchId, query, pageable);
                 if (indexedResults.getTotalElements() > 0) {
                     return indexedResults;
                 }
@@ -200,20 +203,22 @@ public class StudentService {
             }
         }
 
-        Page<Student> page = studentRepository.search(query, pageable);
+        Page<Student> page = studentRepository.searchByBranch(branchId, query, pageable);
         scheduleIndexBackfill(page.getContent(), tenantId);
         return PageResponse.from(page, this::toDto);
     }
 
     @Transactional(readOnly = true)
     public PageResponse<StudentDto> getStudentsByGroup(UUID groupId, Pageable pageable) {
-        Page<Student> page = studentRepository.findByGroupId(groupId, pageable);
+        UUID branchId = resolveCurrentBranchId();
+        Page<Student> page = studentRepository.findByGroupId(groupId, branchId, pageable);
         return PageResponse.from(page, this::toDto);
     }
 
     @Transactional
     public void addStudentToGroup(UUID studentId, UUID groupId) {
-        if (!studentRepository.existsById(studentId)) {
+        UUID branchId = resolveCurrentBranchId();
+        if (!studentExistsInScope(studentId, branchId)) {
             throw new ResourceNotFoundException("Student", "id", studentId);
         }
 
@@ -247,17 +252,61 @@ public class StudentService {
     }
 
     @Transactional(readOnly = true)
-    @Cacheable(value = "student-stats", key = "T(com.ondeedu.common.cache.TenantCacheKeys).fixed('summary')")
+    @Cacheable(value = "student-stats", key = "T(com.ondeedu.common.cache.TenantCacheKeys).fixed('summary') + '::branch=' + T(com.ondeedu.common.tenant.TenantContext).getBranchId()")
     public StudentStatsDto getStats() {
+        UUID branchId = resolveCurrentBranchId();
         Instant monthStart = Instant.now().minus(30, ChronoUnit.DAYS);
 
         return StudentStatsDto.builder()
-            .totalStudents(studentRepository.count())
-            .activeStudents(studentRepository.countByStatus(StudentStatus.ACTIVE))
-            .newThisMonth(studentRepository.countNewStudentsSince(monthStart))
-            .graduated(studentRepository.countByStatus(StudentStatus.GRADUATED))
-            .dropped(studentRepository.countByStatus(StudentStatus.DROPPED))
+            .totalStudents(studentRepository.countAllByBranch(branchId))
+            .activeStudents(studentRepository.countByStatusAndBranch(StudentStatus.ACTIVE, branchId))
+            .newThisMonth(studentRepository.countNewStudentsSince(monthStart, branchId))
+            .graduated(studentRepository.countByStatusAndBranch(StudentStatus.GRADUATED, branchId))
+            .dropped(studentRepository.countByStatusAndBranch(StudentStatus.DROPPED, branchId))
             .build();
+    }
+
+    private Student findStudentByIdInScope(UUID id, UUID branchId) {
+        if (branchId != null) {
+            return studentRepository.findByIdAndBranchId(id, branchId)
+                    .orElseThrow(() -> new ResourceNotFoundException("Student", "id", id));
+        }
+        return studentRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Student", "id", id));
+    }
+
+    private boolean studentExistsInScope(UUID studentId, UUID branchId) {
+        if (branchId != null) {
+            return studentRepository.existsByIdAndBranchId(studentId, branchId);
+        }
+        return studentRepository.existsById(studentId);
+    }
+
+    private boolean phoneExistsInScope(String phone, UUID branchId) {
+        if (branchId != null) {
+            return studentRepository.existsByPhoneAndBranchId(phone, branchId);
+        }
+        return studentRepository.existsByPhone(phone);
+    }
+
+    private boolean emailExistsInScope(String email, UUID branchId) {
+        if (branchId != null) {
+            return studentRepository.existsByEmailAndBranchId(email, branchId);
+        }
+        return studentRepository.existsByEmail(email);
+    }
+
+    private UUID resolveCurrentBranchId() {
+        String rawBranchId = TenantContext.getBranchId();
+        if (!StringUtils.hasText(rawBranchId)) {
+            return null;
+        }
+
+        try {
+            return UUID.fromString(rawBranchId.trim());
+        } catch (IllegalArgumentException e) {
+            throw new BusinessException("BRANCH_ID_INVALID", "Invalid branch_id in tenant context");
+        }
     }
 
     private StudentDto toDto(Student student) {

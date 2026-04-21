@@ -5,6 +5,7 @@ import org.springframework.util.StringUtils;
 
 import javax.sql.DataSource;
 import java.sql.Connection;
+import java.sql.PreparedStatement;
 import java.sql.SQLException;
 
 public class TenantSchemaConnectionProvider implements MultiTenantConnectionProvider<String> {
@@ -19,6 +20,7 @@ public class TenantSchemaConnectionProvider implements MultiTenantConnectionProv
     public Connection getAnyConnection() throws SQLException {
         Connection connection = dataSource.getConnection();
         connection.setSchema(TenantSchemaResolver.defaultSchema());
+        applyBranchContext(connection);
         return connection;
     }
 
@@ -34,13 +36,32 @@ public class TenantSchemaConnectionProvider implements MultiTenantConnectionProv
             ? tenantIdentifier
             : TenantSchemaResolver.defaultSchema();
         connection.setSchema(schema);
+        applyBranchContext(connection);
         return connection;
     }
 
     @Override
     public void releaseConnection(String tenantIdentifier, Connection connection) throws SQLException {
         connection.setSchema(TenantSchemaResolver.defaultSchema());
+        clearBranchContext(connection);
         releaseAnyConnection(connection);
+    }
+
+    private void applyBranchContext(Connection connection) throws SQLException {
+        String branchId = TenantContext.getBranchId();
+        try (PreparedStatement statement = connection.prepareStatement(
+                "SELECT set_config('app.branch_id', ?, false)")) {
+            statement.setString(1, StringUtils.hasText(branchId) ? branchId.trim() : "");
+            statement.execute();
+        }
+    }
+
+    private void clearBranchContext(Connection connection) throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement(
+                "SELECT set_config('app.branch_id', ?, false)")) {
+            statement.setString(1, "");
+            statement.execute();
+        }
     }
 
     @Override

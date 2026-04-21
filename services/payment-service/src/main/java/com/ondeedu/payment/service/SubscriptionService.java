@@ -4,6 +4,7 @@ import com.ondeedu.common.audit.AuditAction;
 import com.ondeedu.common.audit.AuditLogPublisher;
 import com.ondeedu.common.audit.TenantAuditEvent;
 import com.ondeedu.common.dto.PageResponse;
+import com.ondeedu.common.exception.BusinessException;
 import com.ondeedu.common.exception.ResourceNotFoundException;
 import com.ondeedu.common.tenant.TenantContext;
 import com.ondeedu.payment.dto.CreateSubscriptionRequest;
@@ -23,6 +24,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -46,6 +48,7 @@ public class SubscriptionService {
     @CacheEvict(value = "subscriptions", allEntries = true)
     public SubscriptionDto createSubscription(CreateSubscriptionRequest request) {
         Subscription subscription = subscriptionMapper.toEntity(request);
+        subscription.setBranchId(resolveCurrentBranchId());
 
         if (request.getPriceListId() != null) {
             PriceList priceList = priceListRepository.findById(request.getPriceListId())
@@ -125,6 +128,7 @@ public class SubscriptionService {
         Subscription subscription = Subscription.builder()
                 .studentId(studentId)
                 .courseId(courseId)
+                .branchId(resolveCurrentBranchId())
                 .totalLessons(1)
                 .lessonsLeft(1)
                 .startDate(LocalDate.now())
@@ -199,11 +203,12 @@ public class SubscriptionService {
 
     @Transactional(readOnly = true)
     public PageResponse<SubscriptionDto> listByStudent(UUID studentId, SubscriptionStatus status, Pageable pageable) {
+        UUID branchId = resolveCurrentBranchId();
         Page<Subscription> page;
         if (status != null) {
-            page = subscriptionRepository.findByStudentIdAndStatus(studentId, status, pageable);
+            page = subscriptionRepository.findByStudentIdAndBranch(studentId, branchId, pageable);
         } else {
-            page = subscriptionRepository.findByStudentId(studentId, pageable);
+            page = subscriptionRepository.findByStudentIdAndBranch(studentId, branchId, pageable);
         }
         return PageResponse.from(page, subscriptionMapper::toDto);
     }
@@ -216,11 +221,12 @@ public class SubscriptionService {
 
     @Transactional(readOnly = true)
     public PageResponse<SubscriptionDto> listAll(SubscriptionStatus status, Pageable pageable) {
+        UUID branchId = resolveCurrentBranchId();
         Page<Subscription> page;
         if (status != null) {
-            page = subscriptionRepository.findByStatus(status, pageable);
+            page = subscriptionRepository.findByStatusAndBranch(status, branchId, pageable);
         } else {
-            page = subscriptionRepository.findAll(pageable);
+            page = subscriptionRepository.findAllByBranch(branchId, pageable);
         }
         return PageResponse.from(page, subscriptionMapper::toDto);
     }
@@ -243,5 +249,15 @@ public class SubscriptionService {
 
     private String normalizeCurrency(String currency) {
         return currency != null && !currency.isBlank() ? currency : DEFAULT_CURRENCY;
+    }
+
+    private UUID resolveCurrentBranchId() {
+        String rawBranchId = TenantContext.getBranchId();
+        if (!StringUtils.hasText(rawBranchId)) return null;
+        try {
+            return UUID.fromString(rawBranchId.trim());
+        } catch (IllegalArgumentException e) {
+            throw new BusinessException("BRANCH_ID_INVALID", "Invalid branch_id in tenant context");
+        }
     }
 }

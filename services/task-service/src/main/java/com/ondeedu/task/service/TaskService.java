@@ -4,6 +4,7 @@ import com.ondeedu.common.audit.AuditAction;
 import com.ondeedu.common.audit.AuditLogPublisher;
 import com.ondeedu.common.audit.TenantAuditEvent;
 import com.ondeedu.common.dto.PageResponse;
+import com.ondeedu.common.exception.BusinessException;
 import com.ondeedu.common.exception.ResourceNotFoundException;
 import com.ondeedu.common.tenant.TenantContext;
 import com.ondeedu.task.dto.CreateTaskRequest;
@@ -36,6 +37,7 @@ public class TaskService {
     @Transactional
     public TaskDto createTask(CreateTaskRequest request) {
         Task task = taskMapper.toEntity(request);
+        task.setBranchId(resolveCurrentBranchId());
         task = taskRepository.save(task);
         taskAssignmentNotificationService.notifyIfAssigned(null, task);
         log.info("Created task: {}", task.getTitle());
@@ -100,11 +102,12 @@ public class TaskService {
 
     @Transactional(readOnly = true)
     public PageResponse<TaskDto> listTasks(TaskStatus status, Pageable pageable) {
+        UUID branchId = resolveCurrentBranchId();
         Page<Task> page;
         if (status != null) {
-            page = taskRepository.findByStatus(status, pageable);
+            page = taskRepository.findByStatusAndBranch(status, branchId, pageable);
         } else {
-            page = taskRepository.findAll(pageable);
+            page = taskRepository.findAllByBranch(branchId, pageable);
         }
         return PageResponse.from(page, taskMapper::toDto);
     }
@@ -128,7 +131,20 @@ public class TaskService {
 
     @Transactional(readOnly = true)
     public PageResponse<TaskDto> searchTasks(String query, Pageable pageable) {
+        UUID branchId = resolveCurrentBranchId();
         Page<Task> page = taskRepository.search(query, pageable);
         return PageResponse.from(page, taskMapper::toDto);
+    }
+
+    private UUID resolveCurrentBranchId() {
+        String rawBranchId = TenantContext.getBranchId();
+        if (!org.springframework.util.StringUtils.hasText(rawBranchId)) {
+            return null;
+        }
+        try {
+            return UUID.fromString(rawBranchId.trim());
+        } catch (IllegalArgumentException e) {
+            throw new BusinessException("BRANCH_ID_INVALID", "Invalid branch_id in tenant context");
+        }
     }
 }

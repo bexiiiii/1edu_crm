@@ -15,10 +15,12 @@ import java.util.UUID;
 @Setter
 @Builder
 
-
 @NoArgsConstructor
 @AllArgsConstructor
 public class Transaction extends BaseEntity {
+
+    @Column(name = "branch_id")
+    private UUID branchId;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "type", nullable = false, length = 20)

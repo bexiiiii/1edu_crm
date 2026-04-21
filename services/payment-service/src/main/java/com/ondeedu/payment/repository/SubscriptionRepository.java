@@ -66,4 +66,21 @@ public interface SubscriptionRepository extends JpaRepository<Subscription, UUID
     List<Subscription> findActiveNotExpiredBefore(
             @Param("status") SubscriptionStatus status,
             @Param("today") LocalDate today);
+
+    // ── Branch filtering ──────────────────────────────────────────────
+
+    @Query("SELECT s FROM Subscription s WHERE (:branchId IS NULL OR s.branchId = :branchId)")
+    Page<Subscription> findAllByBranch(@Param("branchId") UUID branchId, Pageable pageable);
+
+    @Query("SELECT s FROM Subscription s WHERE s.studentId = :studentId AND (:branchId IS NULL OR s.branchId = :branchId)")
+    Page<Subscription> findByStudentIdAndBranch(@Param("studentId") UUID studentId, @Param("branchId") UUID branchId, Pageable pageable);
+
+    @Query("SELECT s FROM Subscription s WHERE s.status = :status AND (:branchId IS NULL OR s.branchId = :branchId)")
+    Page<Subscription> findByStatusAndBranch(@Param("status") SubscriptionStatus status, @Param("branchId") UUID branchId, Pageable pageable);
+
+    @Query("SELECT COUNT(s) FROM Subscription s WHERE (:branchId IS NULL OR s.branchId = :branchId)")
+    long countAllByBranch(@Param("branchId") UUID branchId);
+
+    @Query("SELECT COUNT(s) FROM Subscription s WHERE s.status = :status AND (:branchId IS NULL OR s.branchId = :branchId)")
+    long countByStatusAndBranch(@Param("status") SubscriptionStatus status, @Param("branchId") UUID branchId);
 }

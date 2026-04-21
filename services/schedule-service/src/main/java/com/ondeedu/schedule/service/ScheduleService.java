@@ -76,6 +76,10 @@ public class ScheduleService {
         validateScheduleRange(request.getStartDate(), request.getEndDate());
         Schedule schedule = scheduleMapper.toEntity(request);
 
+        // Set branch ID from current tenant context
+        UUID branchId = resolveCurrentBranchId();
+        schedule.setBranchId(branchId);
+
         // Auto-populate teacherId and maxStudents from course — they cannot be overridden manually
         if (request.getCourseId() != null) {
             applyCourseDerivedFields(schedule, request.getCourseId());
@@ -178,6 +182,7 @@ public class ScheduleService {
 
     @Transactional(readOnly = true)
     public PageResponse<ScheduleDto> listSchedules(ScheduleStatus status, UUID courseId, UUID teacherId, Pageable pageable) {
+        UUID branchId = resolveCurrentBranchId();
         Page<Schedule> page;
         if (isTeacherUser()) {
             UUID currentTeacherId = resolveCurrentTeacherStaffId();
@@ -189,13 +194,13 @@ public class ScheduleService {
                 page = scheduleRepository.findByTeacherId(currentTeacherId, pageable);
             }
         } else if (status != null) {
-            page = scheduleRepository.findByStatus(status, pageable);
+            page = scheduleRepository.findByStatusAndBranch(status, branchId, pageable);
         } else if (courseId != null) {
             page = scheduleRepository.findByCourseId(courseId, pageable);
         } else if (teacherId != null) {
-            page = scheduleRepository.findByTeacherId(teacherId, pageable);
+            page = scheduleRepository.findByTeacherIdAndBranch(teacherId, branchId, pageable);
         } else {
-            page = scheduleRepository.findAll(pageable);
+            page = scheduleRepository.findAllByBranch(branchId, pageable);
         }
         return PageResponse.from(page, scheduleMapper::toDto);
     }
@@ -217,6 +222,7 @@ public class ScheduleService {
         if (isTeacherUser()) {
             page = scheduleRepository.searchByTeacherId(query, resolveCurrentTeacherStaffId(), pageable);
         } else {
+            UUID branchId = resolveCurrentBranchId();
             page = scheduleRepository.search(query, pageable);
         }
         return PageResponse.from(page, scheduleMapper::toDto);
@@ -749,6 +755,18 @@ public class ScheduleService {
                     "Teacher staff linkage is invalid",
                     HttpStatus.FORBIDDEN
             );
+        }
+    }
+
+    private UUID resolveCurrentBranchId() {
+        String rawBranchId = TenantContext.getBranchId();
+        if (!StringUtils.hasText(rawBranchId)) {
+            return null;
+        }
+        try {
+            return UUID.fromString(rawBranchId.trim());
+        } catch (IllegalArgumentException e) {
+            throw new BusinessException("BRANCH_ID_INVALID", "Invalid branch_id in tenant context");
         }
     }
 }

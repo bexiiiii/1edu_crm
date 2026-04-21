@@ -17,6 +17,9 @@ import java.util.UUID;
 @AllArgsConstructor
 public class StudentPayment extends BaseEntity {
 
+    @Column(name = "branch_id")
+    private UUID branchId;
+
     @Column(name = "student_id", nullable = false)
     private UUID studentId;
 

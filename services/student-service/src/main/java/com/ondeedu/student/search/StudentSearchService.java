@@ -17,6 +17,8 @@ import org.springframework.data.elasticsearch.core.query.CriteriaQuery;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
+import java.util.UUID;
+
 @Slf4j
 @Service
 @RequiredArgsConstructor
@@ -47,8 +49,11 @@ public class StudentSearchService {
         elasticsearchOperations.delete(studentId.toString(), StudentSearchDocument.class);
     }
 
-    public PageResponse<StudentDto> searchStudents(String tenantId, String query, Pageable pageable) {
+    public PageResponse<StudentDto> searchStudents(String tenantId, UUID branchId, String query, Pageable pageable) {
         Criteria criteria = new Criteria("tenantId").is(tenantId);
+        if (branchId != null) {
+            criteria = criteria.and(new Criteria("branchId").is(branchId.toString()));
+        }
 
         if (StringUtils.hasText(query)) {
             Criteria searchCriteria = new Criteria("fullName").matches(query)

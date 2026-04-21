@@ -47,4 +47,16 @@ public interface ScheduleRepository extends JpaRepository<Schedule, UUID> {
                                      Pageable pageable);
 
     long countByStatus(ScheduleStatus status);
+
+    @Query("SELECT s FROM Schedule s WHERE (:branchId IS NULL OR s.branchId = :branchId)")
+    Page<Schedule> findAllByBranch(@Param("branchId") UUID branchId, Pageable pageable);
+
+    @Query("SELECT s FROM Schedule s WHERE s.status = :status AND (:branchId IS NULL OR s.branchId = :branchId)")
+    Page<Schedule> findByStatusAndBranch(@Param("status") ScheduleStatus status, @Param("branchId") UUID branchId, Pageable pageable);
+
+    @Query("SELECT s FROM Schedule s WHERE s.teacherId = :teacherId AND (:branchId IS NULL OR s.branchId = :branchId)")
+    Page<Schedule> findByTeacherIdAndBranch(@Param("teacherId") UUID teacherId, @Param("branchId") UUID branchId, Pageable pageable);
+
+    @Query("SELECT COUNT(s) FROM Schedule s WHERE (:branchId IS NULL OR s.branchId = :branchId)")
+    long countAllByBranch(@Param("branchId") UUID branchId);
 }

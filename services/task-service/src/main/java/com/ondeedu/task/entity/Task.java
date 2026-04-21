@@ -40,4 +40,7 @@ public class Task extends BaseEntity {
 
     @Column(name = "notes", columnDefinition = "TEXT")
     private String notes;
+
+    @Column(name = "branch_id")
+    private UUID branchId;
 }

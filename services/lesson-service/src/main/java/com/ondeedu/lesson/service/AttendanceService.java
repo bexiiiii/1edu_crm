@@ -69,6 +69,7 @@ public class AttendanceService {
         } else {
             attendance = attendanceMapper.toEntity(request);
             attendance.setLessonId(lessonId);
+            attendance.setBranchId(resolveCurrentBranchId());
         }
 
         attendance = attendanceRepository.save(attendance);
@@ -157,11 +158,12 @@ public class AttendanceService {
 
     @Transactional(readOnly = true)
     public PageResponse<AttendanceDto> getStudentAttendance(UUID studentId, Pageable pageable) {
+        UUID branchId = resolveCurrentBranchId();
         Page<Attendance> page;
         if (isTeacherUser()) {
             page = attendanceRepository.findByStudentIdAndTeacherId(studentId, resolveCurrentTeacherStaffId(), pageable);
         } else {
-            page = attendanceRepository.findByStudentId(studentId, pageable);
+            page = attendanceRepository.findByStudentIdAndBranch(studentId, branchId, pageable);
         }
         return PageResponse.from(page, attendanceMapper::toDto);
     }
@@ -172,6 +174,7 @@ public class AttendanceService {
         enforceTeacherOwnLesson(lesson);
         validateAttendanceEditWindow(lesson);
 
+        UUID branchId = resolveCurrentBranchId();
         List<AttendanceDto> result = new ArrayList<>();
         for (UUID studentId : studentIds) {
             validateStudentIsActive(studentId);
@@ -186,6 +189,7 @@ public class AttendanceService {
                         .lessonId(lessonId)
                         .studentId(studentId)
                         .status(AttendanceStatus.ATTENDED)
+                        .branchId(branchId)
                         .build();
             }
 
@@ -313,6 +317,16 @@ public class AttendanceService {
                     "Teacher staff linkage is invalid",
                     HttpStatus.FORBIDDEN
             );
+        }
+    }
+
+    private UUID resolveCurrentBranchId() {
+        String rawBranchId = TenantContext.getBranchId();
+        if (!StringUtils.hasText(rawBranchId)) return null;
+        try {
+            return UUID.fromString(rawBranchId.trim());
+        } catch (IllegalArgumentException e) {
+            throw new BusinessException("BRANCH_ID_INVALID", "Invalid branch_id in tenant context");
         }
     }
 }

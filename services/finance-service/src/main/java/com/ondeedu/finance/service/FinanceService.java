@@ -40,6 +40,7 @@ public class FinanceService {
     public TransactionDto createTransaction(CreateTransactionRequest request) {
         validateReasonConsistency(request.getAmountChangeReasonCode(), request.getAmountChangeReasonOther());
         Transaction transaction = transactionMapper.toEntity(request);
+        transaction.setBranchId(resolveCurrentBranchId());
         transaction = transactionRepository.save(transaction);
         log.info("Created transaction: {} {} {}", transaction.getType(), transaction.getAmount(), transaction.getCurrency());
         AuditAction auditAction = transaction.getType() == TransactionType.INCOME
@@ -110,24 +111,25 @@ public class FinanceService {
 
     @Transactional(readOnly = true)
     public PageResponse<TransactionDto> listTransactions(TransactionType type, Pageable pageable) {
+        UUID branchId = resolveCurrentBranchId();
         Page<Transaction> page;
         if (type != null) {
-            page = transactionRepository.findByType(type, pageable);
+            page = transactionRepository.findByTypeAndBranch(type, branchId, pageable);
         } else {
-            page = transactionRepository.findAll(pageable);
+            page = transactionRepository.findAllByBranch(branchId, pageable);
         }
         return PageResponse.from(page, transactionMapper::toDto);
     }
 
     @Transactional(readOnly = true)
     public PageResponse<TransactionDto> listByDateRange(LocalDate from, LocalDate to, Pageable pageable) {
-        Page<Transaction> page = transactionRepository.findByTransactionDateBetween(from, to, pageable);
+        Page<Transaction> page = transactionRepository.findByTransactionDateBetweenAndBranch(from, to, resolveCurrentBranchId(), pageable);
         return PageResponse.from(page, transactionMapper::toDto);
     }
 
     @Transactional(readOnly = true)
     public PageResponse<TransactionDto> listByStudent(UUID studentId, Pageable pageable) {
-        Page<Transaction> page = transactionRepository.findByStudentId(studentId, pageable);
+        Page<Transaction> page = transactionRepository.findByStudentIdAndBranch(studentId, resolveCurrentBranchId(), pageable);
         return PageResponse.from(page, transactionMapper::toDto);
     }
 
@@ -151,6 +153,16 @@ public class FinanceService {
                 "TRANSACTION_AMOUNT_REASON_OTHER_FORBIDDEN",
                 "amountChangeReasonOther is allowed only when amountChangeReasonCode is OTHER"
             );
+        }
+    }
+
+    private UUID resolveCurrentBranchId() {
+        String rawBranchId = TenantContext.getBranchId();
+        if (!StringUtils.hasText(rawBranchId)) return null;
+        try {
+            return UUID.fromString(rawBranchId.trim());
+        } catch (IllegalArgumentException e) {
+            throw new BusinessException("BRANCH_ID_INVALID", "Invalid branch_id in tenant context");
         }
     }
 }

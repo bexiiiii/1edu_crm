@@ -2,6 +2,7 @@ package com.ondeedu.payment.service;
 
 import com.ondeedu.common.exception.BusinessException;
 import com.ondeedu.common.exception.ResourceNotFoundException;
+import com.ondeedu.common.tenant.TenantContext;
 import com.ondeedu.payment.dto.*;
 import com.ondeedu.payment.entity.*;
 import com.ondeedu.payment.repository.PriceListRepository;
@@ -62,6 +63,7 @@ public class StudentPaymentService {
         StudentPayment payment = StudentPayment.builder()
                 .studentId(request.getStudentId())
                 .subscriptionId(request.getSubscriptionId())
+                .branchId(resolveCurrentBranchId())
                 .amount(request.getAmount())
                 .paidAt(request.getPaidAt() != null ? request.getPaidAt() : LocalDate.now())
                 .paymentMonth(paymentMonth)
@@ -225,13 +227,26 @@ public class StudentPaymentService {
     // ── Debtors list ──────────────────────────────────────────────────────
 
     @Transactional(readOnly = true)
-    public List<StudentDebtDto> getDebtors() {
-        LocalDate today        = LocalDate.now();
-        YearMonth currentMonth = YearMonth.now();
+    public List<StudentDebtDto> getDebtors(String monthFilter) {
+        YearMonth targetMonth;
+        if (monthFilter != null && !monthFilter.isBlank()) {
+            try {
+                targetMonth = YearMonth.parse(monthFilter);
+            } catch (Exception e) {
+                throw new BusinessException("Invalid month format '" + monthFilter + "'. Expected YYYY-MM");
+            }
+        } else {
+            targetMonth = YearMonth.now();
+        }
 
-        // HIGH-3: SQL-level filtering
-        List<Subscription> activeSubs = subscriptionRepository.findActiveNotExpiredBefore(
-                SubscriptionStatus.ACTIVE, today);
+        LocalDate today        = LocalDate.now();
+        LocalDate firstDayOfMonth = targetMonth.atDay(1);
+        LocalDate lastDayOfMonth  = targetMonth.atEndOfMonth();
+
+        // HIGH-3: SQL-level filtering — подписки активные на указанный месяц
+        List<Subscription> activeSubs = subscriptionRepository.findActiveInPeriod(
+                List.of(SubscriptionStatus.ACTIVE, SubscriptionStatus.EXPIRED),
+                firstDayOfMonth, lastDayOfMonth);
 
         if (activeSubs.isEmpty()) return List.of();
 
@@ -241,7 +256,7 @@ public class StudentPaymentService {
         Map<UUID, PriceList> plMap = priceListRepository.findAllById(plIds).stream()
                 .collect(Collectors.toMap(PriceList::getId, pl -> pl));
 
-        // HIGH-1: one bulk query for all payments — no N*M DB calls
+        // HIGH-1: one bulk query for all payments up to target month
         List<UUID> subIds = activeSubs.stream().map(Subscription::getId).toList();
         Map<UUID, Map<String, BigDecimal>> paidBySubAndMonth = paymentRepository
                 .findBySubscriptionIdIn(subIds).stream()
@@ -257,12 +272,13 @@ public class StudentPaymentService {
 
             Map<String, BigDecimal> paidByMonth = paidBySubAndMonth.getOrDefault(sub.getId(), Map.of());
 
+            // Считаем долг от начала подписки до целевого месяца
             YearMonth m        = YearMonth.from(sub.getStartDate());
             int debtMonthCount = 0;
             BigDecimal totalDebt = BigDecimal.ZERO;
 
             // Iterate months in memory — no DB calls inside loop
-            while (!m.isAfter(currentMonth)) {
+            while (!m.isAfter(targetMonth)) {
                 BigDecimal paid = paidByMonth.getOrDefault(m.toString(), BigDecimal.ZERO);
                 BigDecimal debt = monthly.subtract(paid).max(BigDecimal.ZERO);
                 if (debt.compareTo(BigDecimal.ZERO) > 0) {
@@ -417,6 +433,16 @@ public class StudentPaymentService {
                     "PAYMENT_AMOUNT_REASON_OTHER_FORBIDDEN",
                     "amountChangeReasonOther is allowed only when amountChangeReasonCode is OTHER"
             );
+        }
+    }
+
+    private UUID resolveCurrentBranchId() {
+        String rawBranchId = TenantContext.getBranchId();
+        if (!StringUtils.hasText(rawBranchId)) return null;
+        try {
+            return UUID.fromString(rawBranchId.trim());
+        } catch (IllegalArgumentException e) {
+            throw new BusinessException("BRANCH_ID_INVALID", "Invalid branch_id in tenant context");
         }
     }
 }

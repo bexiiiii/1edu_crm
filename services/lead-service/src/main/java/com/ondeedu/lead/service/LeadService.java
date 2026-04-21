@@ -4,6 +4,7 @@ import com.ondeedu.common.audit.AuditAction;
 import com.ondeedu.common.audit.AuditLogPublisher;
 import com.ondeedu.common.audit.TenantAuditEvent;
 import com.ondeedu.common.dto.PageResponse;
+import com.ondeedu.common.exception.BusinessException;
 import com.ondeedu.common.exception.ResourceNotFoundException;
 import com.ondeedu.common.tenant.TenantContext;
 import com.ondeedu.lead.dto.CreateLeadRequest;
@@ -40,7 +41,9 @@ public class LeadService {
 
     @Transactional
     public LeadDto createLead(CreateLeadRequest request) {
+        UUID branchId = resolveCurrentBranchId();
         Lead lead = leadMapper.toEntity(request);
+        lead.setBranchId(branchId);
         lead = leadRepository.save(lead);
         leadAssignmentNotificationService.notifyIfAssigned(null, lead);
         indexLead(lead);
@@ -59,15 +62,15 @@ public class LeadService {
 
     @Transactional(readOnly = true)
     public LeadDto getLead(UUID id) {
-        Lead lead = leadRepository.findById(id)
-            .orElseThrow(() -> new ResourceNotFoundException("Lead", "id", id));
+        UUID branchId = resolveCurrentBranchId();
+        Lead lead = findLeadByIdInScope(id, branchId);
         return leadMapper.toDto(lead);
     }
 
     @Transactional
     public LeadDto updateLead(UUID id, UpdateLeadRequest request) {
-        Lead lead = leadRepository.findById(id)
-            .orElseThrow(() -> new ResourceNotFoundException("Lead", "id", id));
+        UUID branchId = resolveCurrentBranchId();
+        Lead lead = findLeadByIdInScope(id, branchId);
         String previousAssignedTo = lead.getAssignedTo();
         leadMapper.updateEntity(lead, request);
         lead = leadRepository.save(lead);
@@ -88,8 +91,8 @@ public class LeadService {
 
     @Transactional
     public LeadDto moveStage(UUID id, LeadStage newStage) {
-        Lead lead = leadRepository.findById(id)
-            .orElseThrow(() -> new ResourceNotFoundException("Lead", "id", id));
+        UUID branchId = resolveCurrentBranchId();
+        Lead lead = findLeadByIdInScope(id, branchId);
         lead.setStage(newStage);
         lead = leadRepository.save(lead);
         indexLead(lead);
@@ -109,7 +112,8 @@ public class LeadService {
 
     @Transactional
     public void deleteLead(UUID id) {
-        if (!leadRepository.existsById(id)) {
+        UUID branchId = resolveCurrentBranchId();
+        if (!leadExistsInScope(id, branchId)) {
             throw new ResourceNotFoundException("Lead", "id", id);
         }
         leadRepository.deleteById(id);
@@ -127,11 +131,12 @@ public class LeadService {
 
     @Transactional(readOnly = true)
     public PageResponse<LeadDto> listLeads(LeadStage stage, Pageable pageable) {
+        UUID branchId = resolveCurrentBranchId();
         Page<Lead> page;
         if (stage != null) {
-            page = leadRepository.findByStage(stage, pageable);
+            page = leadRepository.findByStageAndBranch(stage, branchId, pageable);
         } else {
-            page = leadRepository.findAll(pageable);
+            page = leadRepository.findAllByBranch(branchId, pageable);
         }
         return PageResponse.from(page, leadMapper::toDto);
     }
@@ -139,11 +144,12 @@ public class LeadService {
     @Transactional(readOnly = true)
     public PageResponse<LeadDto> searchLeads(String query, Pageable pageable) {
         String tenantId = TenantContext.getTenantId();
+        UUID branchId = resolveCurrentBranchId();
 
         if (StringUtils.hasText(tenantId) && leadSearchService.isPresent()) {
             try {
                 PageResponse<LeadDto> indexedResults =
-                        leadSearchService.get().searchLeads(tenantId, query, pageable);
+                        leadSearchService.get().searchLeads(tenantId, branchId, query, pageable);
                 if (indexedResults.getTotalElements() > 0) {
                     return indexedResults;
                 }
@@ -152,7 +158,7 @@ public class LeadService {
             }
         }
 
-        Page<Lead> page = leadRepository.search(query, pageable);
+        Page<Lead> page = leadRepository.searchByBranch(branchId, query, pageable);
         scheduleIndexBackfill(page.getContent(), tenantId);
         return PageResponse.from(page, leadMapper::toDto);
     }
@@ -192,5 +198,37 @@ public class LeadService {
                 log.warn("Failed to delete lead {} from Elasticsearch: {}", id, e.getMessage());
             }
         });
+    }
+
+    private Lead findLeadByIdInScope(UUID id, UUID branchId) {
+        if (branchId != null) {
+            return leadRepository.findById(id)
+                    .filter(lead -> lead.getBranchId() == null || lead.getBranchId().equals(branchId))
+                    .orElseThrow(() -> new ResourceNotFoundException("Lead", "id", id));
+        }
+        return leadRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Lead", "id", id));
+    }
+
+    private boolean leadExistsInScope(UUID id, UUID branchId) {
+        if (branchId != null) {
+            return leadRepository.findById(id)
+                    .map(lead -> lead.getBranchId() == null || lead.getBranchId().equals(branchId))
+                    .orElse(false);
+        }
+        return leadRepository.existsById(id);
+    }
+
+    private UUID resolveCurrentBranchId() {
+        String rawBranchId = TenantContext.getBranchId();
+        if (!StringUtils.hasText(rawBranchId)) {
+            return null;
+        }
+
+        try {
+            return UUID.fromString(rawBranchId.trim());
+        } catch (IllegalArgumentException e) {
+            throw new BusinessException("BRANCH_ID_INVALID", "Invalid branch_id in tenant context");
+        }
     }
 }

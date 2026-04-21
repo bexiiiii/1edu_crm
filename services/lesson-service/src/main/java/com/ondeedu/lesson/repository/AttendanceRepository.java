@@ -112,4 +112,18 @@ public interface AttendanceRepository extends JpaRepository<Attendance, UUID> {
             @Param("courseId") UUID courseId,
             @Param("lessonDate") LocalDate lessonDate
     );
+
+    // ── Branch filtering ──────────────────────────────────────────────
+
+    @Query("SELECT a FROM Attendance a WHERE (:branchId IS NULL OR a.branchId = :branchId)")
+    Page<Attendance> findAllByBranch(@Param("branchId") UUID branchId, Pageable pageable);
+
+    @Query("SELECT a FROM Attendance a WHERE a.lessonId = :lessonId AND (:branchId IS NULL OR a.branchId = :branchId)")
+    Page<Attendance> findByLessonIdAndBranch(@Param("lessonId") UUID lessonId, @Param("branchId") UUID branchId, Pageable pageable);
+
+    @Query("SELECT a FROM Attendance a WHERE a.studentId = :studentId AND (:branchId IS NULL OR a.branchId = :branchId)")
+    Page<Attendance> findByStudentIdAndBranch(@Param("studentId") UUID studentId, @Param("branchId") UUID branchId, Pageable pageable);
+
+    @Query("SELECT COUNT(a) FROM Attendance a WHERE a.status = :status AND (:branchId IS NULL OR a.branchId = :branchId)")
+    long countByStatusAndBranch(@Param("status") AttendanceStatus status, @Param("branchId") UUID branchId);
 }

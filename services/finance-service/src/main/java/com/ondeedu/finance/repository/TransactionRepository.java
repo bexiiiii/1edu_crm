@@ -41,4 +41,27 @@ public interface TransactionRepository extends JpaRepository<Transaction, UUID> 
               AND t.status = com.ondeedu.finance.entity.TransactionStatus.COMPLETED
             """)
     BigDecimal sumSalaryPaymentsByStaffIdAndMonth(@Param("staffId") UUID staffId, @Param("salaryMonth") String salaryMonth);
+
+    // ── Branch filtering ──────────────────────────────────────────────
+
+    @Query("SELECT t FROM Transaction t WHERE (:branchId IS NULL OR t.branchId = :branchId)")
+    Page<Transaction> findAllByBranch(@Param("branchId") UUID branchId, Pageable pageable);
+
+    @Query("SELECT t FROM Transaction t WHERE t.type = :type AND (:branchId IS NULL OR t.branchId = :branchId)")
+    Page<Transaction> findByTypeAndBranch(@Param("type") TransactionType type, @Param("branchId") UUID branchId, Pageable pageable);
+
+    @Query("SELECT t FROM Transaction t WHERE t.status = :status AND (:branchId IS NULL OR t.branchId = :branchId)")
+    Page<Transaction> findByStatusAndBranch(@Param("status") TransactionStatus status, @Param("branchId") UUID branchId, Pageable pageable);
+
+    @Query("SELECT t FROM Transaction t WHERE t.studentId = :studentId AND (:branchId IS NULL OR t.branchId = :branchId)")
+    Page<Transaction> findByStudentIdAndBranch(@Param("studentId") UUID studentId, @Param("branchId") UUID branchId, Pageable pageable);
+
+    @Query("SELECT t FROM Transaction t WHERE t.transactionDate BETWEEN :startDate AND :endDate AND (:branchId IS NULL OR t.branchId = :branchId)")
+    Page<Transaction> findByTransactionDateBetweenAndBranch(@Param("startDate") LocalDate startDate, @Param("endDate") LocalDate endDate, @Param("branchId") UUID branchId, Pageable pageable);
+
+    @Query("SELECT COUNT(t) FROM Transaction t WHERE (:branchId IS NULL OR t.branchId = :branchId)")
+    long countAllByBranch(@Param("branchId") UUID branchId);
+
+    @Query("SELECT COALESCE(SUM(t.amount), 0) FROM Transaction t WHERE t.type = :type AND t.status = 'COMPLETED' AND t.transactionDate BETWEEN :from AND :to AND (:branchId IS NULL OR t.branchId = :branchId)")
+    BigDecimal sumByTypeAndDateRangeAndBranch(@Param("type") TransactionType type, @Param("from") LocalDate from, @Param("to") LocalDate to, @Param("branchId") UUID branchId);
 }

@@ -31,4 +31,16 @@ public interface CourseRepository extends JpaRepository<Course, UUID> {
     Page<Course> search(@Param("query") String query, Pageable pageable);
 
     long countByStatus(CourseStatus status);
+
+    @Query("SELECT c FROM Course c WHERE (:branchId IS NULL OR c.branchId = :branchId)")
+    Page<Course> findAllByBranch(@Param("branchId") UUID branchId, Pageable pageable);
+
+    @Query("SELECT c FROM Course c WHERE c.status = :status AND (:branchId IS NULL OR c.branchId = :branchId)")
+    Page<Course> findByStatusAndBranch(@Param("status") CourseStatus status, @Param("branchId") UUID branchId, Pageable pageable);
+
+    @Query("SELECT c FROM Course c WHERE c.teacherId = :teacherId AND (:branchId IS NULL OR c.branchId = :branchId)")
+    Page<Course> findByTeacherIdAndBranch(@Param("teacherId") UUID teacherId, @Param("branchId") UUID branchId, Pageable pageable);
+
+    @Query("SELECT COUNT(c) FROM Course c WHERE (:branchId IS NULL OR c.branchId = :branchId)")
+    long countAllByBranch(@Param("branchId") UUID branchId);
 }

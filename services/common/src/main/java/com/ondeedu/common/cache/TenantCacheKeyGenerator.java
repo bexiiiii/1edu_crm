@@ -26,8 +26,14 @@ public class TenantCacheKeyGenerator implements KeyGenerator {
             return "no-tenant::" + UUID.randomUUID();
         }
 
+            String branchId = TenantContext.getBranchId();
+            String branchScope = (branchId == null || branchId.isBlank())
+                ? "no-branch"
+                : branchId.trim();
+
         StringJoiner joiner = new StringJoiner("::");
         joiner.add(tenantId);
+            joiner.add(branchScope);
         joiner.add(target.getClass().getSimpleName());
         joiner.add(method.getName());
         Arrays.stream(params).forEach(param -> joiner.add(param != null ? param.toString() : "null"));

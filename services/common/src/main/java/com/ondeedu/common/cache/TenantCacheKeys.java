@@ -19,6 +19,11 @@ public final class TenantCacheKeys {
 
     private static String tenantPrefix() {
         String tenantId = TenantContext.getTenantId();
-        return (tenantId == null || tenantId.isBlank()) ? "default" : tenantId;
+        String safeTenant = (tenantId == null || tenantId.isBlank()) ? "default" : tenantId;
+
+        String branchId = TenantContext.getBranchId();
+        String safeBranch = (branchId == null || branchId.isBlank()) ? "no-branch" : branchId.trim();
+
+        return safeTenant + "::" + safeBranch;
     }
 }

@@ -36,4 +36,16 @@ public interface StaffRepository extends JpaRepository<Staff, UUID> {
     long countByStatus(StaffStatus status);
 
     long countByRole(StaffRole role);
+
+    @Query("SELECT s FROM Staff s WHERE (:branchId IS NULL OR s.branchId = :branchId)")
+    Page<Staff> findAllByBranch(@Param("branchId") UUID branchId, Pageable pageable);
+
+    @Query("SELECT s FROM Staff s WHERE s.status = :status AND (:branchId IS NULL OR s.branchId = :branchId)")
+    Page<Staff> findByStatusAndBranch(@Param("status") StaffStatus status, @Param("branchId") UUID branchId, Pageable pageable);
+
+    @Query("SELECT s FROM Staff s WHERE s.role = :role AND (:branchId IS NULL OR s.branchId = :branchId)")
+    Page<Staff> findByRoleAndBranch(@Param("role") StaffRole role, @Param("branchId") UUID branchId, Pageable pageable);
+
+    @Query("SELECT COUNT(s) FROM Staff s WHERE (:branchId IS NULL OR s.branchId = :branchId)")
+    long countAllByBranch(@Param("branchId") UUID branchId);
 }

@@ -91,7 +91,19 @@ public class TenantService {
             entityManager.createNativeQuery("SELECT system.ensure_branch_schema(:schemaName)")
                 .setParameter("schemaName", schemaName)
                 .getSingleResult();
+            entityManager.createNativeQuery("SELECT system.ensure_student_branch_scope_schema(:schemaName)")
+                .setParameter("schemaName", schemaName)
+                .getSingleResult();
             entityManager.createNativeQuery("SELECT system.ensure_amount_change_reason_schema(:schemaName)")
+                .setParameter("schemaName", schemaName)
+                .getSingleResult();
+            entityManager.createNativeQuery("SELECT system.ensure_branch_data_scope_schema(:schemaName)")
+                .setParameter("schemaName", schemaName)
+                .getSingleResult();
+            entityManager.createNativeQuery("SELECT system.ensure_student_call_log_schema(:schemaName)")
+                .setParameter("schemaName", schemaName)
+                .getSingleResult();
+            entityManager.createNativeQuery("SELECT system.ensure_inventory_schema(:schemaName)")
                 .setParameter("schemaName", schemaName)
                 .getSingleResult();
             entityManager.createNativeQuery("SELECT system.add_performance_indexes(:schemaName)")

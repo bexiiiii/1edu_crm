@@ -48,6 +48,7 @@ public class LessonService {
     @CacheEvict(value = "lessons", allEntries = true)
     public LessonDto createLesson(CreateLessonRequest request) {
         Lesson lesson = lessonMapper.toEntity(request);
+        lesson.setBranchId(resolveCurrentBranchId());
         lesson = lessonRepository.save(lesson);
         log.info("Created lesson: {} on {}", lesson.getId(), lesson.getLessonDate());
         auditLogPublisher.publishTenant(TenantAuditEvent.builder()
@@ -160,6 +161,7 @@ public class LessonService {
     @Transactional(readOnly = true)
     public PageResponse<LessonDto> listLessons(LessonType type, LessonStatus status, LocalDate date,
                                                 LocalDate from, LocalDate to, Pageable pageable) {
+        UUID branchId = resolveCurrentBranchId();
         Page<Lesson> page;
 
         boolean hasDateRange = from != null && to != null;
@@ -191,7 +193,7 @@ public class LessonService {
             } else if (date != null) {
                 page = lessonRepository.findByTeacherIdAndLessonDate(teacherId, date, pageable);
             } else {
-                page = lessonRepository.findByTeacherId(teacherId, pageable);
+                page = lessonRepository.findByTeacherIdAndBranch(teacherId, branchId, pageable);
             }
 
             return PageResponse.from(page, lessonMapper::toDto);
@@ -208,9 +210,9 @@ public class LessonService {
         } else if (status != null) {
             page = lessonRepository.findByStatus(status, pageable);
         } else if (date != null) {
-            page = lessonRepository.findByLessonDate(date, pageable);
+            page = lessonRepository.findByLessonDateAndBranch(date, branchId, pageable);
         } else {
-            page = lessonRepository.findAll(pageable);
+            page = lessonRepository.findAllByBranch(branchId, pageable);
         }
 
         return PageResponse.from(page, lessonMapper::toDto);
@@ -218,6 +220,7 @@ public class LessonService {
 
     @Transactional(readOnly = true)
     public PageResponse<LessonDto> listByGroup(UUID groupId, LocalDate from, LocalDate to, Pageable pageable) {
+        UUID branchId = resolveCurrentBranchId();
         Page<Lesson> page;
 
         if (isTeacherUser()) {
@@ -236,7 +239,7 @@ public class LessonService {
         } else if (from != null && to != null) {
             page = lessonRepository.findByGroupIdAndLessonDateBetween(groupId, from, to, pageable);
         } else {
-            page = lessonRepository.findByGroupId(groupId, pageable);
+            page = lessonRepository.findByGroupIdAndBranch(groupId, branchId, pageable);
         }
 
         return PageResponse.from(page, lessonMapper::toDto);
@@ -290,7 +293,7 @@ public class LessonService {
                     HttpStatus.FORBIDDEN
             );
         }
-        Page<Lesson> page = lessonRepository.findByTeacherId(teacherId, pageable);
+        Page<Lesson> page = lessonRepository.findByTeacherIdAndBranch(teacherId, resolveCurrentBranchId(), pageable);
         return PageResponse.from(page, lessonMapper::toDto);
     }
 
@@ -365,6 +368,16 @@ public class LessonService {
                     "Teacher staff linkage is invalid",
                     HttpStatus.FORBIDDEN
             );
+        }
+    }
+
+    private UUID resolveCurrentBranchId() {
+        String rawBranchId = TenantContext.getBranchId();
+        if (!StringUtils.hasText(rawBranchId)) return null;
+        try {
+            return UUID.fromString(rawBranchId.trim());
+        } catch (IllegalArgumentException e) {
+            throw new BusinessException("BRANCH_ID_INVALID", "Invalid branch_id in tenant context");
         }
     }
 }

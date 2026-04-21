@@ -32,6 +32,9 @@ public class StudentSearchDocument {
     @Field(type = FieldType.Keyword)
     private String tenantId;
 
+    @Field(type = FieldType.Keyword)
+    private String branchId;
+
     @Field(type = FieldType.Text)
     private String firstName;
 
@@ -120,6 +123,7 @@ public class StudentSearchDocument {
         return StudentSearchDocument.builder()
                 .id(student.getId().toString())
                 .tenantId(tenantId)
+                .branchId(student.getBranchId() != null ? student.getBranchId().toString() : null)
                 .firstName(student.getFirstName())
                 .lastName(student.getLastName())
                 .middleName(student.getMiddleName())

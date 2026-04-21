@@ -24,6 +24,7 @@ public interface StudentMapper {
     @Mapping(target = "updatedBy", ignore = true)
     @Mapping(target = "version", ignore = true)
     @Mapping(target = "metadata", ignore = true)
+    @Mapping(target = "branchId", ignore = true)
     Student toEntity(CreateStudentRequest request);
 
     @Mapping(target = "id", ignore = true)
@@ -34,5 +35,6 @@ public interface StudentMapper {
     @Mapping(target = "version", ignore = true)
     @Mapping(target = "status", ignore = true)
     @Mapping(target = "metadata", ignore = true)
+    @Mapping(target = "branchId", ignore = true)
     void updateEntity(@MappingTarget Student student, UpdateStudentRequest request);
 }

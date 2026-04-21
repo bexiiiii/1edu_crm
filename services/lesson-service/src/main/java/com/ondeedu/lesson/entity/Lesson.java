@@ -17,6 +17,9 @@ import java.util.UUID;
 @AllArgsConstructor
 public class Lesson extends BaseEntity {
 
+    @Column(name = "branch_id")
+    private UUID branchId;
+
     @Column(name = "group_id")
     private UUID groupId;           // schedule_id (group from schedule-service), nullable for individual
 
