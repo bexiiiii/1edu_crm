@@ -11,6 +11,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.LocalDate;
 import java.time.YearMonth;
 import java.util.List;
 import java.util.UUID;
@@ -69,10 +70,12 @@ public class StudentPaymentController {
     @GetMapping("/debtors")
     @PreAuthorize("hasRole('TENANT_ADMIN') or hasAuthority('FINANCE_VIEW')")
     @Operation(summary = "Список должников",
-               description = "Студенты с накопленным долгом. Можно указать month (YYYY-MM) для фильтрации по конкретному месяцу")
+               description = "Студенты с накопленным долгом. Поддерживает фильтр по месяцу (month=YYYY-MM) и/или диапазону дат (fromDate/toDate).")
     public ApiResponse<List<StudentDebtDto>> getDebtors(
-            @RequestParam(required = false) String month) {
-        return ApiResponse.success(studentPaymentService.getDebtors(month));
+            @RequestParam(required = false) String month,
+            @RequestParam(required = false) LocalDate fromDate,
+            @RequestParam(required = false) LocalDate toDate) {
+        return ApiResponse.success(studentPaymentService.getDebtors(month, fromDate, toDate));
     }
 
     // ── Delete payment record ────────────────────────────────────────────

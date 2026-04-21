@@ -227,7 +227,7 @@ public class StudentPaymentService {
     // ── Debtors list ──────────────────────────────────────────────────────
 
     @Transactional(readOnly = true)
-    public List<StudentDebtDto> getDebtors(String monthFilter) {
+    public List<StudentDebtDto> getDebtors(String monthFilter, LocalDate fromDate, LocalDate toDate) {
         YearMonth targetMonth;
         if (monthFilter != null && !monthFilter.isBlank()) {
             try {
@@ -239,9 +239,24 @@ public class StudentPaymentService {
             targetMonth = YearMonth.now();
         }
 
-        LocalDate today        = LocalDate.now();
+        if ((fromDate == null) != (toDate == null)) {
+            throw new BusinessException("Both fromDate and toDate must be provided together");
+        }
+        if (fromDate != null && toDate != null && fromDate.isAfter(toDate)) {
+            throw new BusinessException("fromDate must be before or equal to toDate");
+        }
+
         LocalDate firstDayOfMonth = targetMonth.atDay(1);
         LocalDate lastDayOfMonth  = targetMonth.atEndOfMonth();
+
+        if (fromDate != null && toDate != null) {
+            firstDayOfMonth = fromDate;
+            LocalDate cappedToDate = toDate.isAfter(lastDayOfMonth) ? lastDayOfMonth : toDate;
+            if (firstDayOfMonth.isAfter(cappedToDate)) {
+                return List.of();
+            }
+            lastDayOfMonth = cappedToDate;
+        }
 
         // HIGH-3: SQL-level filtering — подписки активные на указанный месяц
         List<Subscription> activeSubs = subscriptionRepository.findActiveInPeriod(
@@ -273,7 +288,15 @@ public class StudentPaymentService {
             Map<String, BigDecimal> paidByMonth = paidBySubAndMonth.getOrDefault(sub.getId(), Map.of());
 
             // Считаем долг от начала подписки до целевого месяца
-            YearMonth m        = YearMonth.from(sub.getStartDate());
+            YearMonth loopStart = YearMonth.from(sub.getStartDate());
+            if (fromDate != null && toDate != null) {
+                YearMonth rangeStart = YearMonth.from(fromDate);
+                if (rangeStart.isAfter(loopStart)) {
+                    loopStart = rangeStart;
+                }
+            }
+
+            YearMonth m = loopStart;
             int debtMonthCount = 0;
             BigDecimal totalDebt = BigDecimal.ZERO;
 

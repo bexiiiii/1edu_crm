@@ -42,8 +42,9 @@ public class StudentCallLogService {
                 .followUpRequired(request.getFollowUpRequired() != null ? request.getFollowUpRequired() : false)
                 .followUpDate(request.getFollowUpDate())
                 .branchId(branchId)
-                .createdBy(currentUserId != null ? UUID.fromString(currentUserId) : null)
                 .build();
+
+            callLog.setCreatedBy(currentUserId);
 
         callLog = callLogRepository.save(callLog);
         log.info("Created call log for student {}", request.getStudentId());
@@ -74,7 +75,7 @@ public class StudentCallLogService {
         callLog.setFollowUpRequired(request.getFollowUpRequired() != null ? request.getFollowUpRequired() : false);
         callLog.setFollowUpDate(request.getFollowUpDate());
         callLog.setUpdateReason(request.getUpdateReason());
-        callLog.setUpdatedBy(currentUserId != null ? UUID.fromString(currentUserId) : null);
+        callLog.setUpdatedBy(currentUserId);
 
         callLog = callLogRepository.save(callLog);
         log.info("Updated call log {}", id);
@@ -142,12 +143,23 @@ public class StudentCallLogService {
                 .notes(callLog.getNotes())
                 .followUpRequired(callLog.getFollowUpRequired())
                 .followUpDate(callLog.getFollowUpDate())
-                .createdBy(callLog.getCreatedBy())
+                .createdBy(parseUuid(callLog.getCreatedBy()))
                 .createdAt(callLog.getCreatedAt())
-                .updatedBy(callLog.getUpdatedBy())
+                .updatedBy(parseUuid(callLog.getUpdatedBy()))
                 .updatedAt(callLog.getUpdatedAt())
                 .updateReason(callLog.getUpdateReason())
                 .build();
+    }
+
+    private UUID parseUuid(String raw) {
+        if (!StringUtils.hasText(raw)) {
+            return null;
+        }
+        try {
+            return UUID.fromString(raw.trim());
+        } catch (IllegalArgumentException ignored) {
+            return null;
+        }
     }
 
     private UUID resolveCurrentBranchId() {

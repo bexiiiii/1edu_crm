@@ -45,12 +45,6 @@ public class StudentCallLog extends BaseEntity {
     @Column(name = "follow_up_date")
     private LocalDate followUpDate;
 
-    @Column(name = "created_by")
-    private UUID createdBy;
-
-    @Column(name = "updated_by")
-    private UUID updatedBy;
-
     @Column(name = "update_reason", columnDefinition = "TEXT")
     private String updateReason;
 }

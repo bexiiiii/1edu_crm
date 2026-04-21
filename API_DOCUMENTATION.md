@@ -35,7 +35,8 @@
 - **Multi-branch support (tenant-scoped)**:
   - добавлены CRUD endpoints филиалов в `settings-service`: `GET/POST/PUT/DELETE /api/v1/settings/branches`;
   - в tenant schema добавлена таблица `tenant_branches` c default-филиалом `Главный филиал` (`code=MAIN`);
-  - context филиала поддерживается через `X-Branch-ID` и JWT claims `branch_id` / `branch_ids`.
+  - context филиала поддерживается через `X-Branch-ID` и JWT claims `branch_id` / `branch_ids`;
+  - активный branch context прокидывается в PostgreSQL через `app.branch_id` и используется branch-aware запросами / RLS; если у пользователя ровно один доступный филиал, backend выбирает его автоматически.
 - **Branch-scoped user access (auth-service)**:
   - в `CreateUserRequest`/`UpdateUserRequest` и `UserDto` добавлено поле `branchIds`;
   - backend не позволяет назначать пользователю филиалы вне скоупа текущего администратора (`BRANCH_ACCESS_DENIED`);
@@ -47,7 +48,8 @@
 
 - **Analytics Excel export**: добавлены отдельные download endpoint'ы (`/export`) для 8 аналитических экранов с табличным `.xlsx` (несколько листов, структурированные колонки, без JSON-blob в одной ячейке).
 - **Today analytics data quality**:
-  - в блоке `debtors` долг считается по подпискам со статусами `ACTIVE | EXPIRED | FROZEN` (и legacy `COMPLETED`), что устраняет пропуски должников;
+  - endpoint `GET /api/v1/payments/student-payments/debtors` поддерживает фильтр по `month=YYYY-MM` и опциональный date-range `fromDate`/`toDate` (оба параметра передаются парой);
+  - в текущей реализации `debtors` считает долг по подпискам, активным в выбранном периоде, со статусами `ACTIVE | EXPIRED`;
   - в блоке `upcomingBirthdays` возраст/`daysUntil` считается на backend с корректной обработкой `29 февраля` в невисокосный год.
 - **Analytics cache freshness**: для analytics-кэшей уменьшены TTL (операционные виджеты обновляются быстрее), плюс добавлена tenant-aware инвалидация через RabbitMQ (`audit.tenant`).
 - **File URL for frontend**: `file-service` теперь возвращает URL на основе `MINIO_PUBLIC_URL` (если задан), fallback — `MINIO_URL`; это нужно для корректных ссылок в браузере.
@@ -125,6 +127,7 @@
 | lesson-service | 8126 | 9126 |
 | settings-service | 8128 | 9128 |
 | audit-service | 8130 | — |
+| inventory-service | 8132 | 9132 |
 
 ### Маршрутная таблица API Gateway (`localhost:8090`)
 
@@ -182,6 +185,15 @@ X-Branch-ID: <branch_uuid>   # optional
 > Если tenant context не удалось определить, backend вернёт `400`:
 > - `TENANT_CONTEXT_REQUIRED` — tenant context отсутствует;
 > - `INVALID_TENANT_ID` — передан некорректный `X-Tenant-ID`.
+
+### Branch context и branch isolation
+
+- `X-Branch-ID` передавай как UUID активного филиала, если пользователь может переключать филиалы в UI.
+- Если в JWT есть `branch_ids`, то переданный `X-Branch-ID` обязан входить в этот список. Иначе backend вернёт `403 BRANCH_ACCESS_DENIED`.
+- Если в `branch_ids` ровно один филиал и заголовок не передан, backend выбирает его автоматически.
+- Если филиалов несколько и заголовок не передан, backend пытается использовать JWT claim `branch_id`. Если и он не определён, branch context остаётся пустым, и branch-aware запросы выполняются в tenant-wide режиме внутри текущего tenant.
+- Активный branch context прокидывается в PostgreSQL session variable `app.branch_id`; branch-aware сервисы и RLS-политики используют её для фильтрации данных.
+- После переключения филиала фронтенд должен отправлять новый `X-Branch-ID` на все последующие запросы, где важна branch-изоляция.
 
 ### Как получить токен
 
@@ -1266,15 +1278,16 @@ interface StudentStatsDto {
 
 **Request Body:**
 ```typescript
-interface CreateStudentCallLogRequest {
+interface SaveStudentCallLogRequest {
   studentId: string;           // UUID студента (обязательно)
-  callerStaffId: string;       // UUID сотрудника который звонил (обязательно)
+  callerStaffId?: string;      // UUID сотрудника, который звонил
   callDate: string;            // YYYY-MM-DD (обязательно)
   callTime: string;            // HH:MM (обязательно)
-  callResult: string;          // Результат звонка (обязательно)
+  callResult?: string;         // Результат звонка
   notes?: string;              // Заметки
   followUpRequired?: boolean;  // Требуется повторный звонок (default: false)
   followUpDate?: string;       // YYYY-MM-DD — дата следующего звонка
+  updateReason?: string;       // Для create не требуется, используется на update
 }
 ```
 
@@ -1283,22 +1296,22 @@ interface CreateStudentCallLogRequest {
 ```typescript
 interface StudentCallLogDto {
   id: string;
-  branchId: string;
   studentId: string;
-  studentName: string;         // ФИО студента (resolved)
-  callerStaffId: string;
-  callerStaffName: string;     // ФИО сотрудника (resolved)
+  callerStaffId: string | null;
+  callerName: string | null;
   callDate: string;
   callTime: string;
-  callResult: string;
+  callResult: string | null;
   notes: string | null;
   followUpRequired: boolean;
   followUpDate: string | null;
   createdBy: string | null;
-  updatedBy: string | null;
-  updateReason: string | null;  // Видна только админам
+  createdByName: string | null;
   createdAt: string;
+  updatedBy: string | null;
+  updatedByName: string | null;
   updatedAt: string;
+  updateReason: string | null;
 }
 ```
 
@@ -1307,9 +1320,11 @@ interface StudentCallLogDto {
 #### `PUT /api/v1/students/call-logs/{id}` — Изменить запись обзвона
 **Доступ:** `TENANT_ADMIN` | `MANAGER` | `RECEPTIONIST` | `STUDENTS_EDIT`
 
-**Request Body:** `UpdateStudentCallLogRequest` (те же поля что и создание, все optional)
+**Request Body:** `SaveStudentCallLogRequest`
 
-**Важно:** Поле `updateReason` обязательно при редактировании.
+**Важно:**
+- backend использует тот же DTO, что и для create, поэтому `studentId`, `callDate`, `callTime` остаются обязательными;
+- поле `updateReason` обязательно при редактировании.
 
 **Ошибки:**
 - `CALL_LOG_UPDATE_REASON_REQUIRED` — не указана причина изменения
@@ -1335,6 +1350,8 @@ interface StudentCallLogDto {
 
 **Response:** `ApiResponse<PageResponse<StudentCallLogDto>>`
 
+> Сортировка: `callDate DESC, callTime DESC`
+
 ---
 
 #### `GET /api/v1/students/call-logs/student/{studentId}/range` — История обзвонов за период
@@ -1347,6 +1364,8 @@ interface StudentCallLogDto {
 
 **Response:** `ApiResponse<PageResponse<StudentCallLogDto>>`
 
+> Диапазон дат включительный (`BETWEEN fromDate AND toDate`), сортировка `callDate DESC, callTime DESC`
+
 ---
 
 #### `GET /api/v1/students/call-logs/caller/{staffId}` — Обзвоны сотрудника
@@ -1357,7 +1376,7 @@ interface StudentCallLogDto {
 
 **Response:** `ApiResponse<PageResponse<StudentCallLogDto>>`
 
-> Поля `createdBy`, `updatedBy`, `updateReason` в ответе отображаются **только админам** (`TENANT_ADMIN`, `MANAGER`). Для остальных ролей эти поля `null`.
+> Все endpoints `call-logs` branch-scoped по активному branch context (`X-Branch-ID` / JWT `branch_id`).
 
 ---
 
@@ -2194,9 +2213,16 @@ interface MonthlyStudentDto {
 **Доступ:** `TENANT_ADMIN` | `FINANCE_VIEW`
 
 **Query Params:**
-- `month` (optional): `YYYY-MM` — месяц для проверки (по умолчанию текущий)
-- `fromDate` (optional): `YYYY-MM-DD` — фильтр по начальной дате
-- `toDate` (optional): `YYYY-MM-DD` — фильтр по конечной дате
+- `month` (optional): `YYYY-MM` — целевой месяц, который задаёт верхнюю границу расчёта долга (по умолчанию текущий)
+- `fromDate` (optional): `YYYY-MM-DD` — нижняя граница периода
+- `toDate` (optional): `YYYY-MM-DD` — верхняя граница периода
+
+**Правила:**
+- `fromDate` и `toDate` используются только парой;
+- `fromDate <= toDate`;
+- если передан диапазон, `toDate` дополнительно ограничивается концом выбранного `month` (или текущего месяца, если `month` не передан);
+- если `fromDate` оказался позже этой верхней границы, endpoint возвращает пустой список `[]`;
+- в текущей реализации долг считается по подпискам, активным в выбранном периоде, со статусами `ACTIVE` и `EXPIRED`.
 
 **Response:** `ApiResponse<List<StudentDebtDto>>`
 
@@ -2209,6 +2235,11 @@ interface StudentDebtDto {
   monthlyExpected: number;
 }
 ```
+
+**Ошибки валидации:** `400 BUSINESS_ERROR`
+- если передан только один из параметров `fromDate` / `toDate`;
+- если `fromDate > toDate`;
+- если `month` не в формате `YYYY-MM`.
 
 ---
 
@@ -2879,7 +2910,7 @@ interface ExpiredSubscriptionDto {
 ```
 
 Примечания по расчётам:
-- `debtors` формируется по отрицательному балансу `SUM(payments) - SUM(subscriptions)` с учётом подписок в статусах `ACTIVE | EXPIRED | FROZEN` (и legacy `COMPLETED`).
+- `debtors` использует `GET /api/v1/payments/student-payments/debtors`: backend считает помесячный долг по подпискам, активным в выбранном периоде, со статусами `ACTIVE | EXPIRED`; опциональный `fromDate/toDate` сужает окно расчёта и ограничивается концом выбранного месяца.
 - `upcomingBirthdays.daysUntil` и `turnsAge` считаются на backend с корректной обработкой даты рождения `29 февраля`.
 
 ---
@@ -5015,34 +5046,36 @@ interface TenantAuditLog {
 
 ## 23. Inventory Service (8132)
 
-`inventory-service` — управление складом и инвентарём: учёт товаров, материалов, оборудования, движение товаров, категории, единицы измерения.
+`inventory-service` — управление складом и инвентарём: позиции склада, движения остатков, категории, единицы измерения и сводная статистика.
 
-### 23.1 Единицы инвентаря (Items)
+> Все endpoints ниже branch-scoped по активному branch context (`X-Branch-ID` / JWT `branch_id`). Если активный филиал не выбран, сервис работает в tenant-wide режиме внутри текущего tenant, поэтому для branch-aware UI фронтенду лучше всегда отправлять `X-Branch-ID`.
 
-#### `POST /api/v1/inventory/items` — Создать единицу инвентаря
+### 23.1 Позиции инвентаря (Items)
+
+#### `POST /api/v1/inventory/items` — Создать позицию инвентаря
 **Доступ:** `TENANT_ADMIN` или `INVENTORY_EDIT`
 
 **Request Body:**
 ```typescript
 interface CreateInventoryItemRequest {
-  categoryId?: string;       // UUID категории (optional)
-  unitId: string;            // UUID единицы измерения
-  sku?: string;              // Артикул (уникален в пределах branch)
-  barcode?: string;          // Штрихкод
-  name: string;              // Название (обязательно)
+  categoryId?: string;       // UUID категории
+  unitId: string;            // UUID единицы измерения (обязательно)
+  sku?: string;              // Уникален в пределах активного branch
+  barcode?: string;
+  name: string;              // Обязательно
   description?: string;
-  brand?: string;            // Бренд/производитель
-  model?: string;            // Модель
-  quantity: number;          // Начальное количество (обязательно)
-  minQuantity?: number;      // Минимальный порог для алертов
-  maxQuantity?: number;      // Максимальный порог
-  pricePerUnit?: number;     // Закупочная цена
-  sellingPrice?: number;     // Цена продажи
-  currency?: string;         // Default: "UZS"
-  location?: string;         // Место хранения (кабинет, склад)
-  supplier?: string;         // Поставщик
-  supplierContact?: string;  // Контакт поставщика
-  isTracked?: boolean;       // Отслеживать остатки (default: true)
+  brand?: string;
+  model?: string;
+  quantity: number;          // BigDecimal, обязательно
+  minQuantity?: number;      // BigDecimal
+  maxQuantity?: number;      // BigDecimal
+  pricePerUnit?: number;     // BigDecimal
+  sellingPrice?: number;     // BigDecimal
+  currency?: string;         // По умолчанию "UZS"
+  location?: string;
+  supplier?: string;
+  supplierContact?: string;
+  isTracked?: boolean;       // По умолчанию true
   imageUrl?: string;
   notes?: string;
 }
@@ -5053,95 +5086,132 @@ interface CreateInventoryItemRequest {
 ```typescript
 interface InventoryItemDto {
   id: string;
-  branchId: string;
-  category: InventoryItemCategory | null;
+  branchId: string | null;
+  categoryId: string | null;
+  categoryName: string | null;
+  unitId: string | null;
+  unitName: string | null;
+  unitAbbreviation: string | null;
   name: string;
   description: string | null;
   sku: string | null;
-  unit: string;
+  barcode: string | null;
+  brand: string | null;
+  model: string | null;
   quantity: number;
   minQuantity: number | null;
+  maxQuantity: number | null;
   pricePerUnit: number | null;
-  totalValue: number;          // Вычисляемое: pricePerUnit * quantity
+  sellingPrice: number | null;
+  currency: string | null;
+  totalValue: number;
   location: string | null;
-  status: InventoryItemStatus; // IN_STOCK | LOW_STOCK | OUT_OF_STOCK | DISCONTINUED
+  supplier: string | null;
+  supplierContact: string | null;
+  status: string;            // Сейчас: IN_STOCK | LOW_STOCK | OUT_OF_STOCK
+  isActive: boolean | null;
+  isTracked: boolean | null;
+  requiresReorder: boolean | null;
+  imageUrl: string | null;
+  notes: string | null;
   createdAt: string;
   updatedAt: string;
 }
 ```
 
+**Примечания:**
+- если `quantity > 0`, backend автоматически создаёт стартовую транзакцию `RECEIVED` с note `Initial stock`;
+- `status` и `requiresReorder` пересчитываются сервером на основе `quantity` / `minQuantity`.
+
 **Ошибки:**
-- `INVENTORY_DUPLICATE_SKU` — SKU уже существует в этом филиале
+- `INVENTORY_DUPLICATE_SKU` — SKU уже существует в текущем branch
 - `RESOURCE_NOT_FOUND` — category или unit не найдены
 
 ---
 
-#### `GET /api/v1/inventory/items/{id}` — Получить единицу инвентаря
+#### `GET /api/v1/inventory/items/{id}` — Получить позицию инвентаря
 **Доступ:** `TENANT_ADMIN` или `INVENTORY_VIEW`
 
 **Response:** `ApiResponse<InventoryItemDto>`
 
 ---
 
-#### `GET /api/v1/inventory/items` — Список единиц инвентаря
+#### `GET /api/v1/inventory/items` — Список позиций инвентаря
 **Доступ:** `TENANT_ADMIN` или `INVENTORY_VIEW`
 
 **Query Params:**
-- `status` (optional): `IN_STOCK` | `LOW_STOCK` | `OUT_OF_STOCK` | `DISCONTINUED`
-- `search` (optional): поиск по названию
+- `status` (optional): строковый статус позиции, обычно `IN_STOCK` | `LOW_STOCK` | `OUT_OF_STOCK`
+- `search` (optional): поиск по `name` (`ILIKE %query%`)
 - `page` (default `0`), `size` (default `20`)
 
 **Response:** `ApiResponse<PageResponse<InventoryItemDto>>`
 
+> Без `search` список сортируется по `createdAt DESC`.
+
 ---
 
-#### `GET /api/v1/inventory/items/category/{categoryId}` — Единицы по категории
+#### `GET /api/v1/inventory/items/category/{categoryId}` — Позиции по категории
 **Доступ:** `TENANT_ADMIN` или `INVENTORY_VIEW`
+
+**Query Params:** `page`, `size`
 
 **Response:** `ApiResponse<PageResponse<InventoryItemDto>>`
 
 ---
 
-#### `GET /api/v1/inventory/items/reorder-required` — Товары требующие пополнения
+#### `GET /api/v1/inventory/items/reorder-required` — Позиции, требующие пополнения
 **Доступ:** `TENANT_ADMIN` или `INVENTORY_VIEW`
 
 **Query Params:** `page`, `size`
 
-**Response:** `ApiResponse<PageResponse<InventoryItemDto>>` — список LOW_STOCK и OUT_OF_STOCK
+**Response:** `ApiResponse<PageResponse<InventoryItemDto>>`
+
+> Возвращаются записи с `requiresReorder = true`, обычно это `LOW_STOCK` и `OUT_OF_STOCK`.
 
 ---
 
-#### `PUT /api/v1/inventory/items/{id}` — Обновить единицу инвентаря
+#### `PUT /api/v1/inventory/items/{id}` — Обновить позицию инвентаря
 **Доступ:** `TENANT_ADMIN` или `INVENTORY_EDIT`
 
 **Request Body:**
 ```typescript
 interface UpdateInventoryItemRequest {
-  category?: InventoryItemCategory;
+  categoryId?: string;       // Поле есть в DTO, но текущая реализация его не применяет
   name?: string;
   description?: string;
   sku?: string;
-  unit?: string;
-  quantity?: number;         // >= 0
-  minQuantity?: number;      // >= 0
-  pricePerUnit?: number;
+  brand?: string;
+  model?: string;
+  quantity?: number;         // BigDecimal, >= 0
+  minQuantity?: number;      // BigDecimal, >= 0
+  maxQuantity?: number;      // BigDecimal
+  pricePerUnit?: number;     // BigDecimal
+  sellingPrice?: number;     // BigDecimal
   location?: string;
-  status?: InventoryItemStatus;
+  supplier?: string;
+  supplierContact?: string;
+  isTracked?: boolean;
+  imageUrl?: string;
+  notes?: string;
 }
 ```
 
 **Response:** `ApiResponse<InventoryItemDto>`
 
-**Ошибки:**
-- `INVENTORY_EDIT_WINDOW_EXPIRED` — изменение запрещено (если настроено окно редактирования)
+**Примечания:**
+- `unitId` через `PUT` не меняется;
+- если изменился `quantity`, backend автоматически пишет служебную транзакцию:
+  - увеличение — `RECEIVED`
+  - уменьшение / ручная коррекция — `ADJUSTMENT`
+  - note: `Manual quantity adjustment`
 
 ---
 
-#### `DELETE /api/v1/inventory/items/{id}` — Удалить единицу инвентаря
+#### `DELETE /api/v1/inventory/items/{id}` — Удалить позицию инвентаря
 **Доступ:** `TENANT_ADMIN` или `INVENTORY_EDIT`
 
 **Ошибки:**
-- `INVENTORY_DELETE_NOT_EMPTY` — нельзя удалить единицу с остатком > 0
+- `INVENTORY_DELETE_NOT_EMPTY` — нельзя удалить позицию с остатком больше 0
 
 ---
 
@@ -5153,12 +5223,12 @@ interface UpdateInventoryItemRequest {
 **Request Body:**
 ```typescript
 interface CreateInventoryTransactionRequest {
-  transactionType: TransactionType;  // RECEIVED | ISSUED | RETURNED | ADJUSTMENT | WRITE_OFF
-  quantity: number;                  // Количество (обязательно)
-  referenceType?: string;            // purchase_order, issue_request, return, adjustment
-  referenceId?: string;              // UUID связанного документа
+  transactionType: string;   // Enum: RECEIVED | ISSUED | RETURNED | ADJUSTMENT | WRITE_OFF | TRANSFER
+  quantity: number;          // BigDecimal, обязательно
+  referenceType?: string;
+  referenceId?: string;      // UUID
   notes?: string;
-  reason?: string;                   // Причина (для списаний/корректировок)
+  reason?: string;
 }
 ```
 
@@ -5167,39 +5237,48 @@ interface CreateInventoryTransactionRequest {
 ```typescript
 interface InventoryTransactionDto {
   id: string;
-  branchId: string;
+  branchId: string | null;
   itemId: string;
-  itemName: string;
-  transactionType: InventoryTransactionType;
+  itemName: string | null;
+  transactionType: string;
   quantity: number;
-  performedBy: string | null;
-  performedByName: string | null;
+  quantityBefore: number | null;
+  quantityAfter: number | null;
   referenceType: string | null;
   referenceId: string | null;
-  notes: string | null;
+  referenceNumber: string | null;
+  performedBy: string | null;
+  approvedBy: string | null;
+  recipientId: string | null;
+  unitCost: number | null;
+  totalCost: number | null;
   transactionDate: string;
+  notes: string | null;
+  reason: string | null;
   createdAt: string;
 }
 ```
 
 **Бизнес-логика:**
-- `RECEIVED` / `RETURNED` — увеличивают количество (quantity += amount)
-- `ISSUED` / `WRITE_OFF` — уменьшают количество (проверка достаточности остатков)
-- `ADJUSTMENT` — устанавливает абсолютное количество
-- Автоматически обновляется статус единицы (IN_STOCK → LOW_STOCK → OUT_OF_STOCK)
+- `RECEIVED`, `RETURNED` — увеличивают остаток;
+- `ISSUED`, `WRITE_OFF` — уменьшают остаток, если хватает количества;
+- `ADJUSTMENT` — устанавливает абсолютное значение остатка;
+- enum содержит `TRANSFER`, но текущая сервисная логика не обрабатывает его и возвращает ошибку.
 
 **Ошибки:**
-- `INVENTORY_INSUFFICIENT_STOCK` — недостаточно остатков для выдачи/списания
-- `INVENTORY_INVALID_TRANSACTION` — неподдерживаемый тип транзакции
+- `INVENTORY_INSUFFICIENT_STOCK` — недостаточно остатков
+- `INVENTORY_INVALID_TRANSACTION` — неподдерживаемый тип транзакции (например, `TRANSFER`)
 
 ---
 
-#### `GET /api/v1/inventory/items/{itemId}/transactions` — История транзакций единицы
+#### `GET /api/v1/inventory/items/{itemId}/transactions` — История транзакций позиции
 **Доступ:** `TENANT_ADMIN` или `INVENTORY_VIEW`
 
 **Query Params:** `page`, `size`
 
 **Response:** `ApiResponse<PageResponse<InventoryTransactionDto>>`
+
+> Сортировка: `transactionDate DESC`
 
 ---
 
@@ -5207,7 +5286,7 @@ interface InventoryTransactionDto {
 **Доступ:** `TENANT_ADMIN` или `INVENTORY_VIEW`
 
 **Query Params:**
-- `transactionType` (обязательно): `RECEIVED` | `ISSUED` | `RETURNED` | `ADJUSTMENT` | `WRITE_OFF`
+- `transactionType` (required): `RECEIVED` | `ISSUED` | `RETURNED` | `ADJUSTMENT` | `WRITE_OFF` | `TRANSFER`
 - `page`, `size`
 
 **Response:** `ApiResponse<PageResponse<InventoryTransactionDto>>`
@@ -5218,32 +5297,43 @@ interface InventoryTransactionDto {
 **Доступ:** `TENANT_ADMIN` или `INVENTORY_VIEW`
 
 **Query Params:**
-- `fromDate` (обязательно): ISO datetime
-- `toDate` (обязательно): ISO datetime
+- `fromDate` (required): ISO datetime
+- `toDate` (required): ISO datetime
 - `page`, `size`
 
 **Response:** `ApiResponse<PageResponse<InventoryTransactionDto>>`
 
+> Диапазон включительный (`transactionDate BETWEEN fromDate AND toDate`), сортировка `transactionDate DESC`
+
 ---
 
 ### 23.3 Категории (Categories)
+
+```typescript
+interface InventoryCategoryDto {
+  id: string;
+  branchId: string | null;
+  name: string;
+  description: string | null;
+  icon: string | null;
+  isActive: boolean | null;
+  sortOrder: number | null;
+}
+```
 
 #### `GET /api/v1/inventory/categories` — Список категорий
 **Доступ:** `TENANT_ADMIN` или `INVENTORY_VIEW`
 
 **Response:** `ApiResponse<InventoryCategoryDto[]>`
 
-```typescript
-interface InventoryCategoryDto {
-  id: string;
-  branchId: string;
-  name: string;
-  description: string | null;
-  icon: string | null;
-  isActive: boolean;
-  sortOrder: number;
-}
-```
+> Сортировка: `sortOrder ASC, name ASC`
+
+---
+
+#### `GET /api/v1/inventory/categories/{id}` — Получить категорию
+**Доступ:** `TENANT_ADMIN` или `INVENTORY_VIEW`
+
+**Response:** `ApiResponse<InventoryCategoryDto>`
 
 ---
 
@@ -5253,17 +5343,17 @@ interface InventoryCategoryDto {
 **Request Body:**
 ```typescript
 interface SaveInventoryCategoryRequest {
-  name: string;             // Обязательно, уникально в branch
+  name: string;             // Обязательно
   description?: string;
   icon?: string;
-  sortOrder?: number;       // Default: 0
+  sortOrder?: number;       // Если не передан, backend ставит 0
 }
 ```
 
 **Response:** `ApiResponse<InventoryCategoryDto>`
 
 **Ошибки:**
-- `INVENTORY_DUPLICATE_CATEGORY` — категория с таким именем уже существует
+- `INVENTORY_DUPLICATE_CATEGORY` — категория с таким именем уже существует в текущем branch
 
 ---
 
@@ -5273,7 +5363,7 @@ interface SaveInventoryCategoryRequest {
 **Request Body:** `SaveInventoryCategoryRequest`
 
 **Ошибки:**
-- `INVENTORY_SYSTEM_CATEGORY` — нельзя изменить системную категорию
+- `INVENTORY_SYSTEM_CATEGORY` — системную категорию нельзя менять
 
 ---
 
@@ -5281,30 +5371,39 @@ interface SaveInventoryCategoryRequest {
 **Доступ:** `TENANT_ADMIN` или `INVENTORY_EDIT`
 
 **Ошибки:**
-- `INVENTORY_SYSTEM_CATEGORY` — нельзя удалить системную категорию
-- `INVENTORY_CATEGORY_IN_USE` — категория используется единицами инвентаря
+- `INVENTORY_SYSTEM_CATEGORY` — системную категорию нельзя удалять
+- `INVENTORY_CATEGORY_IN_USE` — у категории есть связанные inventory items
 
 ---
 
 ### 23.4 Единицы измерения (Units)
+
+```typescript
+interface InventoryUnitDto {
+  id: string;
+  branchId: string | null;
+  name: string;
+  abbreviation: string;
+  unitType: string;         // piece | weight | length | volume | area
+  description: string | null;
+  isSystem: boolean | null;
+  isActive: boolean | null;
+}
+```
 
 #### `GET /api/v1/inventory/units` — Список единиц измерения
 **Доступ:** `TENANT_ADMIN` или `INVENTORY_VIEW`
 
 **Response:** `ApiResponse<InventoryUnitDto[]>`
 
-```typescript
-interface InventoryUnitDto {
-  id: string;
-  branchId: string;
-  name: string;
-  abbreviation: string;
-  unitType: string;     // piece | weight | length | volume | area
-  description: string | null;
-  isSystem: boolean;
-  isActive: boolean;
-}
-```
+> Сортировка: `name ASC`
+
+---
+
+#### `GET /api/v1/inventory/units/{id}` — Получить единицу измерения
+**Доступ:** `TENANT_ADMIN` или `INVENTORY_VIEW`
+
+**Response:** `ApiResponse<InventoryUnitDto>`
 
 ---
 
@@ -5314,9 +5413,9 @@ interface InventoryUnitDto {
 **Request Body:**
 ```typescript
 interface SaveInventoryUnitRequest {
-  name: string;         // Обязательно, уникально в branch
-  abbreviation: string; // Обязательно, уникально в branch
-  unitType: string;     // piece | weight | length | volume | area
+  name: string;             // Обязательно
+  abbreviation: string;     // Обязательно
+  unitType: string;         // Обязательно
   description?: string;
 }
 ```
@@ -5332,8 +5431,10 @@ interface SaveInventoryUnitRequest {
 #### `PUT /api/v1/inventory/units/{id}` — Обновить единицу измерения
 **Доступ:** `TENANT_ADMIN` или `INVENTORY_EDIT`
 
+**Request Body:** `SaveInventoryUnitRequest`
+
 **Ошибки:**
-- `INVENTORY_SYSTEM_UNIT` — нельзя изменить системную единицу
+- `INVENTORY_SYSTEM_UNIT` — системную единицу нельзя менять
 
 ---
 
@@ -5341,7 +5442,7 @@ interface SaveInventoryUnitRequest {
 **Доступ:** `TENANT_ADMIN` или `INVENTORY_EDIT`
 
 **Ошибки:**
-- `INVENTORY_SYSTEM_UNIT` — нельзя удалить системную единицу
+- `INVENTORY_SYSTEM_UNIT` — системную единицу нельзя удалять
 
 ---
 
@@ -5354,11 +5455,11 @@ interface SaveInventoryUnitRequest {
 
 ```typescript
 interface InventoryStatsDto {
-  totalItems: number;        // Общее количество единиц
-  lowStockCount: number;     // Количество LOW_STOCK
-  outOfStockCount: number;   // Количество OUT_OF_STOCK
-  totalTransactions: number; // Общее количество транзакций
-  totalCategories: number;   // Количество активных категорий
+  totalItems: number;
+  lowStockCount: number;
+  outOfStockCount: number;
+  totalTransactions: number;
+  totalCategories: number;   // Считаются только активные категории
 }
 ```
 
@@ -5366,7 +5467,7 @@ interface InventoryStatsDto {
 
 ### 23.6 Системные данные (seed)
 
-При создании нового тенанта автоматически создаются:
+При создании tenant schema миграция создаёт системные записи, которые в API помечены `isSystem = true` и не редактируются / не удаляются через обычные CRUD endpoints.
 
 **Единицы измерения (17 системных):**
 Штука (шт), Комплект (компл), Коробка (кор), Упаковка (упак), Килограмм (кг), Грамм (г), Литр (л), Миллилитр (мл), Метр (м), Сантиметр (см), Квадратный метр (м²), Рулон (рул), Лист (лист), Бутылка (бут), Пачка (пач), Банка (бан), Тюбик (тюб)
@@ -5428,7 +5529,7 @@ enum TenantStatus { TRIAL, ACTIVE, INACTIVE, SUSPENDED, BANNED }
 enum TenantPlan { BASIC, EXTENDED, EXTENDED_PLUS }
 
 // Инвентарь
-enum InventoryItemStatus { IN_STOCK, LOW_STOCK, OUT_OF_STOCK, DISCONTINUED }
+enum InventoryItemStatus { IN_STOCK, LOW_STOCK, OUT_OF_STOCK }
 enum InventoryTransactionType { RECEIVED, ISSUED, RETURNED, ADJUSTMENT, WRITE_OFF, TRANSFER }
 enum InventoryUnitType { piece, weight, length, volume, area }
 ```
