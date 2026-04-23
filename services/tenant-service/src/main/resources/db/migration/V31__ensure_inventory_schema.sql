@@ -155,42 +155,42 @@ BEGIN
     END IF;
 
     -- Insert system units if not exist
-    INSERT INTO inventory_units (name, abbreviation, unit_type, is_system, is_active)
+    EXECUTE format('INSERT INTO %I.inventory_units (name, abbreviation, unit_type, is_system, is_active)
     VALUES
-        ('Штука', 'шт', 'piece', true, true),
-        ('Комплект', 'компл', 'piece', true, true),
-        ('Коробка', 'кор', 'piece', true, true),
-        ('Упаковка', 'упак', 'piece', true, true),
-        ('Килограмм', 'кг', 'weight', true, true),
-        ('Грамм', 'г', 'weight', true, true),
-        ('Литр', 'л', 'volume', true, true),
-        ('Миллилитр', 'мл', 'volume', true, true),
-        ('Метр', 'м', 'length', true, true),
-        ('Сантиметр', 'см', 'length', true, true),
-        ('Квадратный метр', 'м²', 'area', true, true),
-        ('Рулон', 'рул', 'piece', true, true),
-        ('Лист', 'лист', 'piece', true, true),
-        ('Бутылка', 'бут', 'piece', true, true),
-        ('Пачка', 'пач', 'piece', true, true),
-        ('Банка', 'бан', 'piece', true, true),
-        ('Тюбик', 'тюб', 'piece', true, true)
-    ON CONFLICT DO NOTHING;
+        (''Штука'', ''шт'', ''piece'', true, true),
+        (''Комплект'', ''компл'', ''piece'', true, true),
+        (''Коробка'', ''кор'', ''piece'', true, true),
+        (''Упаковка'', ''упак'', ''piece'', true, true),
+        (''Килограмм'', ''кг'', ''weight'', true, true),
+        (''Грамм'', ''г'', ''weight'', true, true),
+        (''Литр'', ''л'', ''volume'', true, true),
+        (''Миллилитр'', ''мл'', ''volume'', true, true),
+        (''Метр'', ''м'', ''length'', true, true),
+        (''Сантиметр'', ''см'', ''length'', true, true),
+        (''Квадратный метр'', ''м²'', ''area'', true, true),
+        (''Рулон'', ''рул'', ''piece'', true, true),
+        (''Лист'', ''лист'', ''piece'', true, true),
+        (''Бутылка'', ''бут'', ''piece'', true, true),
+        (''Пачка'', ''пач'', ''piece'', true, true),
+        (''Банка'', ''бан'', ''piece'', true, true),
+        (''Тюбик'', ''тюб'', ''piece'', true, true)
+    ON CONFLICT DO NOTHING', t_schema);
 
     -- Insert system categories if not exist
-    INSERT INTO inventory_categories (name, description, icon, is_system, is_active, sort_order)
+    EXECUTE format('INSERT INTO %I.inventory_categories (name, description, icon, is_system, is_active, sort_order)
     VALUES
-        ('Учебники', 'Учебники и учебные пособия', '📚', true, true, 1),
-        ('Рабочие тетради', 'Рабочие тетради и задачники', '📝', true, true, 2),
-        ('Канцтовары', 'Ручки, карандаши, ластики и т.д.', '✏️', true, true, 3),
-        ('Бумага и картон', 'Бумага для принтера, картон, ватман', '📄', true, true, 4),
-        ('Оборудование', 'Компьютеры, проекторы, принтеры', '💻', true, true, 5),
-        ('Мебель', 'Парты, стулья, шкафы', '🪑', true, true, 6),
-        ('Расходные материалы', 'Картриджи, батареи, лампочки', '🔧', true, true, 7),
-        ('Хозяйственные товары', 'Моющие средства, салфетки', '🧹', true, true, 8),
-        ('Электроника', 'Флешки, кабели, зарядки', '🔌', true, true, 9),
-        ('Спортинвентарь', 'Мячи, ракетки, ковры', '⚽', true, true, 10),
-        ('Другое', 'Прочие товары', '📦', true, true, 99)
-    ON CONFLICT DO NOTHING;
+        (''Учебники'', ''Учебники и учебные пособия'', ''📚'', true, true, 1),
+        (''Рабочие тетради'', ''Рабочие тетради и задачники'', ''📝'', true, true, 2),
+        (''Канцтовары'', ''Ручки, карандаши, ластики и т.д.'', ''✏️'', true, true, 3),
+        (''Бумага и картон'', ''Бумага для принтера, картон, ватман'', ''📄'', true, true, 4),
+        (''Оборудование'', ''Компьютеры, проекторы, принтеры'', ''💻'', true, true, 5),
+        (''Мебель'', ''Парты, стулья, шкафы'', ''🪑'', true, true, 6),
+        (''Расходные материалы'', ''Картриджи, батареи, лампочки'', ''🔧'', true, true, 7),
+        (''Хозяйственные товары'', ''Моющие средства, салфетки'', ''🧹'', true, true, 8),
+        (''Электроника'', ''Флешки, кабели, зарядки'', ''🔌'', true, true, 9),
+        (''Спортинвентарь'', ''Мячи, ракетки, ковры'', ''⚽'', true, true, 10),
+        (''Другое'', ''Прочие товары'', ''📦'', true, true, 99)
+    ON CONFLICT DO NOTHING', t_schema);
 END;
 $$ LANGUAGE plpgsql;
 
