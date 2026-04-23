@@ -35,7 +35,8 @@
 - **Multi-branch support (tenant-scoped)**:
   - добавлены CRUD endpoints филиалов в `settings-service`: `GET/POST/PUT/DELETE /api/v1/settings/branches`;
   - в tenant schema добавлена таблица `tenant_branches` c default-филиалом `Главный филиал` (`code=MAIN`);
-  - context филиала поддерживается через `X-Branch-ID` и JWT claims `branch_id` / `branch_ids`;
+  - context филиала поддерживается через `X-Branch-ID` header и JWT claims `branch_id` / `branch_ids`;
+  - **API Gateway (`TenantHeaderFilter`)** форвардит `X-Branch-ID` во все downstream сервисы; приоритизация: header > JWT `branch_id` > первый из `branch_ids`;
   - активный branch context прокидывается в PostgreSQL через `app.branch_id` и используется branch-aware запросами / RLS; если у пользователя ровно один доступный филиал, backend выбирает его автоматически.
 - **Branch-scoped user access (auth-service)**:
   - в `CreateUserRequest`/`UpdateUserRequest` и `UserDto` добавлено поле `branchIds`;
@@ -90,6 +91,29 @@
 - **Audit logs**: уточнена работа `/api/v1/audit/system` и `/api/v1/audit/tenant`, добавлены tenant-context требования, порядок фильтров, формат записей и TTL по коллекциям.
 - **Default role permissions**: добавлены default permission-наборы для встроенных ролей `MANAGER`, `RECEPTIONIST`, `TEACHER`, `ACCOUNTANT` и fallback-логика назначения.
 - **Auth user edit**: зафиксировано, что `username` в `PUT /api/v1/auth/users/{id}` read-only, а загрузка permissions работает через `permissionsSource` (`USER` или `ROLE:*`) с обновлением claims после refresh/re-login.
+
+---
+
+## 0.1 Release Notes (2026-04-23)
+
+- **Branch filtering fixed**: API Gateway теперь корректно форвардит `X-Branch-ID` header во все бизнес-сервисы. Ранее header терялся на уровне gateway, из-за чего при переключении филиала отображались данные главного филиала.
+  - `TenantHeaderFilter` извлекает branch context из `X-Branch-ID` header или JWT claims (`branch_id` / `branch_ids`) и прокидывает его downstream;
+  - branch-aware repository methods добавлены в `staff-service` (search), `course-service` (list/search), `lesson-service` (list by date/type/status), `schedule-service` (by room/search);
+  - cache keys обновлены для включения branch context: `schedules`, `rooms`, `courses`, `lessons`, `inventory`, `inventory-categories`, `inventory-units`.
+
+- **Student Call Logs fixed**: исправлена ошибка `500 Internal Server Error` на всех endpoint'ах `/api/v1/students/call-logs/*`.
+  - колонки `created_by` / `updated_by` конвертированы из `UUID` в `VARCHAR(36)` для совместимости с `BaseEntity`;
+  - миграция `V32__fix_call_log_audit_columns.sql` применяется автоматически для всех tenant-схем.
+
+- **Inventory Service available**: исправлена ошибка `404 Not Found` на `/api/v1/inventory/*`.
+  - добавлен маршрут в API Gateway для `inventory-service` (порт 8132);
+  - circuit breaker instance `inventoryService` сконфигурирован с fallback;
+  - все endpoints `/api/v1/inventory/**` теперь доступны через gateway.
+
+- **Branch-scoped data isolation**: все бизнес-сервисы теперь строго фильтруют данные по активному филиалу.
+  - при запросе без `X-Branch-ID` данные всех филиалов возвращаются (поведение для SUPER_ADMIN);
+  - при наличии branch context в запросе — только данные этого филиала;
+  - аналитика (`/api/v1/analytics/*`) также фильтруется по branch — графики и отчёты показывают только данные выбранного филиала.
 
 ---
 
