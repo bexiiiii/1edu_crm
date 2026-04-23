@@ -96,7 +96,7 @@ BEGIN
                 updated_at TIMESTAMP,
                 notes TEXT
             )
-        ', t_schema, t_schema);
+        ', t_schema, t_schema, t_schema);
 
         EXECUTE format('CREATE INDEX idx_inv_items_branch ON %I.inventory_items (branch_id)', t_schema);
         EXECUTE format('CREATE INDEX idx_inv_items_category ON %I.inventory_items (category_id)', t_schema);
