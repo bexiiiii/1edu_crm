@@ -115,7 +115,7 @@ public class StaffService {
     @Transactional(readOnly = true)
     public PageResponse<StaffDto> searchStaff(String query, Pageable pageable) {
         UUID branchId = resolveCurrentBranchId();
-        Page<Staff> page = staffRepository.search(query, pageable);
+        Page<Staff> page = staffRepository.searchByBranch(query, branchId, pageable);
         return PageResponse.from(page, staffMapper::toDto);
     }
 

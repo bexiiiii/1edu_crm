@@ -23,9 +23,9 @@ BEGIN
             follow_up_required BOOLEAN DEFAULT FALSE,
             follow_up_date DATE,
             created_at TIMESTAMP NOT NULL DEFAULT NOW(),
-            created_by UUID,
+            created_by VARCHAR(36),
             updated_at TIMESTAMP,
-            updated_by UUID,
+            updated_by VARCHAR(36),
             update_reason TEXT
         )
     ', t_schema);

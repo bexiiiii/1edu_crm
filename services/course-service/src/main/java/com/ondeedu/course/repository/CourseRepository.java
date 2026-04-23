@@ -30,13 +30,27 @@ public interface CourseRepository extends JpaRepository<Course, UUID> {
         """)
     Page<Course> search(@Param("query") String query, Pageable pageable);
 
+    @Query("SELECT c FROM Course c WHERE c.status = :status AND (:branchId IS NULL OR c.branchId = :branchId)")
+    Page<Course> findByStatusAndBranch(@Param("status") CourseStatus status, @Param("branchId") UUID branchId, Pageable pageable);
+
+    @Query("SELECT c FROM Course c WHERE c.type = :type AND (:branchId IS NULL OR c.branchId = :branchId)")
+    Page<Course> findByTypeAndBranch(@Param("type") CourseType type, @Param("branchId") UUID branchId, Pageable pageable);
+
+    @Query("SELECT c FROM Course c WHERE c.status = :status AND c.type = :type AND (:branchId IS NULL OR c.branchId = :branchId)")
+    Page<Course> findByStatusAndTypeAndBranch(@Param("status") CourseStatus status, @Param("type") CourseType type, @Param("branchId") UUID branchId, Pageable pageable);
+
+    @Query("""
+        SELECT c FROM Course c
+        WHERE (:branchId IS NULL OR c.branchId = :branchId)
+          AND (LOWER(c.name) LIKE LOWER(CONCAT('%', :query, '%'))
+           OR LOWER(c.description) LIKE LOWER(CONCAT('%', :query, '%')))
+        """)
+    Page<Course> searchByBranch(@Param("query") String query, @Param("branchId") UUID branchId, Pageable pageable);
+
     long countByStatus(CourseStatus status);
 
     @Query("SELECT c FROM Course c WHERE (:branchId IS NULL OR c.branchId = :branchId)")
     Page<Course> findAllByBranch(@Param("branchId") UUID branchId, Pageable pageable);
-
-    @Query("SELECT c FROM Course c WHERE c.status = :status AND (:branchId IS NULL OR c.branchId = :branchId)")
-    Page<Course> findByStatusAndBranch(@Param("status") CourseStatus status, @Param("branchId") UUID branchId, Pageable pageable);
 
     @Query("SELECT c FROM Course c WHERE c.teacherId = :teacherId AND (:branchId IS NULL OR c.branchId = :branchId)")
     Page<Course> findByTeacherIdAndBranch(@Param("teacherId") UUID teacherId, @Param("branchId") UUID branchId, Pageable pageable);

@@ -103,7 +103,7 @@ public class ScheduleService {
     }
 
     @Transactional(readOnly = true)
-    @Cacheable(value = "schedules", key = "T(com.ondeedu.common.cache.TenantCacheKeys).id(#id)")
+    @Cacheable(value = "schedules", key = "T(com.ondeedu.common.cache.TenantCacheKeys).id(#id) + '::branch=' + T(com.ondeedu.common.tenant.TenantContext).getBranchId()")
     public ScheduleDto getSchedule(UUID id) {
         Schedule schedule = scheduleRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Schedule", "id", id));
@@ -207,11 +207,12 @@ public class ScheduleService {
 
     @Transactional(readOnly = true)
     public PageResponse<ScheduleDto> getSchedulesByRoom(UUID roomId, Pageable pageable) {
+        UUID branchId = resolveCurrentBranchId();
         Page<Schedule> page;
         if (isTeacherUser()) {
             page = scheduleRepository.findByRoomIdAndTeacherId(roomId, resolveCurrentTeacherStaffId(), pageable);
         } else {
-            page = scheduleRepository.findByRoomId(roomId, pageable);
+            page = scheduleRepository.findByRoomIdAndBranch(roomId, branchId, pageable);
         }
         return PageResponse.from(page, scheduleMapper::toDto);
     }
@@ -223,7 +224,7 @@ public class ScheduleService {
             page = scheduleRepository.searchByTeacherId(query, resolveCurrentTeacherStaffId(), pageable);
         } else {
             UUID branchId = resolveCurrentBranchId();
-            page = scheduleRepository.search(query, pageable);
+            page = scheduleRepository.searchByBranch(query, branchId, pageable);
         }
         return PageResponse.from(page, scheduleMapper::toDto);
     }

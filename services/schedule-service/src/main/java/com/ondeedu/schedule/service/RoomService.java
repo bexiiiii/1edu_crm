@@ -38,7 +38,7 @@ public class RoomService {
     }
 
     @Transactional(readOnly = true)
-    @Cacheable(value = "rooms", key = "T(com.ondeedu.common.cache.TenantCacheKeys).id(#id)")
+    @Cacheable(value = "rooms", key = "T(com.ondeedu.common.cache.TenantCacheKeys).id(#id) + '::branch=' + T(com.ondeedu.common.tenant.TenantContext).getBranchId()")
     public RoomDto getRoom(UUID id) {
         Room room = roomRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Room", "id", id));

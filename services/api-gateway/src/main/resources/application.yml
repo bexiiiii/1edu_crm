@@ -308,6 +308,17 @@ spring:
                 name: reportService
                 fallbackUri: forward:/fallback/report
 
+        # Inventory Service
+        - id: inventory-service
+          uri: lb://inventory-service
+          predicates:
+            - Path=/api/v1/inventory/**
+          filters:
+            - name: CircuitBreaker
+              args:
+                name: inventoryService
+                fallbackUri: forward:/fallback/inventory
+
   data:
     redis:
       host: localhost
@@ -374,6 +385,8 @@ resilience4j:
       tenantService:
         baseConfig: default
       reportService:
+        baseConfig: default
+      inventoryService:
         baseConfig: default
 
   timelimiter:

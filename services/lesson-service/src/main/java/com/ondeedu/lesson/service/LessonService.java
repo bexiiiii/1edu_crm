@@ -64,7 +64,7 @@ public class LessonService {
     }
 
     @Transactional(readOnly = true)
-    @Cacheable(value = "lessons", key = "T(com.ondeedu.common.cache.TenantCacheKeys).id(#id)")
+    @Cacheable(value = "lessons", key = "T(com.ondeedu.common.cache.TenantCacheKeys).id(#id) + '::branch=' + T(com.ondeedu.common.tenant.TenantContext).getBranchId()")
     public LessonDto getLesson(UUID id) {
         Lesson lesson = lessonRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Lesson", "id", id));
@@ -200,15 +200,15 @@ public class LessonService {
         }
 
         if (type != null && hasDateRange) {
-            page = lessonRepository.findByLessonTypeAndLessonDateBetween(type, from, to, pageable);
+            page = lessonRepository.findByLessonTypeAndLessonDateBetweenAndBranch(type, from, to, branchId, pageable);
         } else if (status != null && hasDateRange) {
-            page = lessonRepository.findByStatusAndLessonDateBetween(status, from, to, pageable);
+            page = lessonRepository.findByStatusAndLessonDateBetweenAndBranch(status, from, to, branchId, pageable);
         } else if (hasDateRange) {
-            page = lessonRepository.findByLessonDateBetween(from, to, pageable);
+            page = lessonRepository.findByLessonDateBetweenAndBranch(from, to, branchId, pageable);
         } else if (type != null) {
-            page = lessonRepository.findByLessonType(type, pageable);
+            page = lessonRepository.findByLessonTypeAndBranch(type, branchId, pageable);
         } else if (status != null) {
-            page = lessonRepository.findByStatus(status, pageable);
+            page = lessonRepository.findByStatusAndBranch(status, branchId, pageable);
         } else if (date != null) {
             page = lessonRepository.findByLessonDateAndBranch(date, branchId, pageable);
         } else {

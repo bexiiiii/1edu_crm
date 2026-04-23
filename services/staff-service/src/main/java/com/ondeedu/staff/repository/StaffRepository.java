@@ -33,6 +33,16 @@ public interface StaffRepository extends JpaRepository<Staff, UUID> {
         """)
     Page<Staff> search(@Param("query") String query, Pageable pageable);
 
+    @Query("""
+        SELECT s FROM Staff s
+        WHERE (:branchId IS NULL OR s.branchId = :branchId)
+          AND (LOWER(s.firstName) LIKE LOWER(CONCAT('%', :query, '%'))
+           OR LOWER(s.lastName) LIKE LOWER(CONCAT('%', :query, '%'))
+           OR s.phone LIKE CONCAT('%', :query, '%')
+           OR LOWER(s.email) LIKE LOWER(CONCAT('%', :query, '%')))
+        """)
+    Page<Staff> searchByBranch(@Param("query") String query, @Param("branchId") UUID branchId, Pageable pageable);
+
     long countByStatus(StaffStatus status);
 
     long countByRole(StaffRole role);

@@ -79,6 +79,11 @@ public interface LeadRepository extends JpaRepository<Lead, UUID> {
     Optional<Lead> findLatestByNormalizedPhoneAndBranch(@Param("phone") String phone,
                                                          @Param("branchId") UUID branchId);
 
+    /** Compatibility alias — uses branch=null (searches all branches) */
+    default Optional<Lead> findLatestByNormalizedPhone(String phone) {
+        return findLatestByNormalizedPhoneAndBranch(phone, null);
+    }
+
     Optional<Lead> findFirstByEmailIgnoreCaseOrderByCreatedAtDesc(String email);
 
     long countByStage(LeadStage stage);

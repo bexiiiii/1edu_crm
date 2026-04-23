@@ -82,4 +82,19 @@ public interface LessonRepository extends JpaRepository<Lesson, UUID> {
 
     @Query("SELECT l FROM Lesson l WHERE l.lessonDate = :lessonDate AND (:branchId IS NULL OR l.branchId = :branchId)")
     Page<Lesson> findByLessonDateAndBranch(@Param("lessonDate") LocalDate lessonDate, @Param("branchId") UUID branchId, Pageable pageable);
+
+    @Query("SELECT l FROM Lesson l WHERE l.lessonType = :lessonType AND l.lessonDate BETWEEN :from AND :to AND (:branchId IS NULL OR l.branchId = :branchId)")
+    Page<Lesson> findByLessonTypeAndLessonDateBetweenAndBranch(@Param("lessonType") LessonType lessonType, @Param("from") LocalDate from, @Param("to") LocalDate to, @Param("branchId") UUID branchId, Pageable pageable);
+
+    @Query("SELECT l FROM Lesson l WHERE l.status = :status AND l.lessonDate BETWEEN :from AND :to AND (:branchId IS NULL OR l.branchId = :branchId)")
+    Page<Lesson> findByStatusAndLessonDateBetweenAndBranch(@Param("status") LessonStatus status, @Param("from") LocalDate from, @Param("to") LocalDate to, @Param("branchId") UUID branchId, Pageable pageable);
+
+    @Query("SELECT l FROM Lesson l WHERE l.lessonDate BETWEEN :from AND :to AND (:branchId IS NULL OR l.branchId = :branchId)")
+    Page<Lesson> findByLessonDateBetweenAndBranch(@Param("from") LocalDate from, @Param("to") LocalDate to, @Param("branchId") UUID branchId, Pageable pageable);
+
+    @Query("SELECT l FROM Lesson l WHERE l.lessonType = :lessonType AND (:branchId IS NULL OR l.branchId = :branchId)")
+    Page<Lesson> findByLessonTypeAndBranch(@Param("lessonType") LessonType lessonType, @Param("branchId") UUID branchId, Pageable pageable);
+
+    @Query("SELECT l FROM Lesson l WHERE l.status = :status AND (:branchId IS NULL OR l.branchId = :branchId)")
+    Page<Lesson> findByStatusAndBranch(@Param("status") LessonStatus status, @Param("branchId") UUID branchId, Pageable pageable);
 }

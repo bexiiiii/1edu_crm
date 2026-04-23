@@ -92,7 +92,7 @@ public class InventoryService {
     }
 
     @Transactional(readOnly = true)
-    @Cacheable(value = "inventory", key = "T(com.ondeedu.common.cache.TenantCacheKeys).id(#id)")
+    @Cacheable(value = "inventory", key = "T(com.ondeedu.common.cache.TenantCacheKeys).id(#id) + '::branch=' + T(com.ondeedu.common.tenant.TenantContext).getBranchId()")
     public InventoryItemDto getItem(UUID id) {
         UUID branchId = resolveCurrentBranchId();
         InventoryItem item = findItemByIdInScope(id, branchId);
@@ -251,7 +251,7 @@ public class InventoryService {
     }
 
     @Transactional(readOnly = true)
-    @Cacheable(value = "inventory-categories", key = "T(com.ondeedu.common.cache.TenantCacheKeys).id(#id)")
+    @Cacheable(value = "inventory-categories", key = "T(com.ondeedu.common.cache.TenantCacheKeys).id(#id) + '::branch=' + T(com.ondeedu.common.tenant.TenantContext).getBranchId()")
     public InventoryCategoryDto getCategory(UUID id) {
         UUID branchId = resolveCurrentBranchId();
         InventoryCategory category = findCategoryByIdInScope(id, branchId);
@@ -333,7 +333,7 @@ public class InventoryService {
     }
 
     @Transactional(readOnly = true)
-    @Cacheable(value = "inventory-units", key = "T(com.ondeedu.common.cache.TenantCacheKeys).id(#id)")
+    @Cacheable(value = "inventory-units", key = "T(com.ondeedu.common.cache.TenantCacheKeys).id(#id) + '::branch=' + T(com.ondeedu.common.tenant.TenantContext).getBranchId()")
     public InventoryUnitDto getUnit(UUID id) {
         UUID branchId = resolveCurrentBranchId();
         InventoryUnit unit = findUnitByIdInScope(id, branchId);

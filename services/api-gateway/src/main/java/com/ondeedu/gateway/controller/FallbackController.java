@@ -33,7 +33,8 @@ public class FallbackController {
         Map.entry("finance", "Finance"),
         Map.entry("task", "Task"),
         Map.entry("analytics", "Analytics"),
-        Map.entry("report", "Report")
+        Map.entry("report", "Report"),
+        Map.entry("inventory", "Inventory")
     );
 
     @RequestMapping("/{service}")

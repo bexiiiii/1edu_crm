@@ -64,7 +64,7 @@ public class CourseService {
     }
 
     @Transactional(readOnly = true)
-    @Cacheable(value = "courses", key = "T(com.ondeedu.common.cache.TenantCacheKeys).id(#id)")
+    @Cacheable(value = "courses", key = "T(com.ondeedu.common.cache.TenantCacheKeys).id(#id) + '::branch=' + T(com.ondeedu.common.tenant.TenantContext).getBranchId()")
     public CourseDto getCourse(UUID id) {
         Course course = courseRepository.findById(id)
             .orElseThrow(() -> new ResourceNotFoundException("Course", "id", id));
@@ -109,11 +109,11 @@ public class CourseService {
         UUID branchId = resolveCurrentBranchId();
         Page<Course> page;
         if (status != null && type != null) {
-            page = courseRepository.findByStatusAndType(status, type, pageable);
+            page = courseRepository.findByStatusAndTypeAndBranch(status, type, branchId, pageable);
         } else if (status != null) {
             page = courseRepository.findByStatusAndBranch(status, branchId, pageable);
         } else if (type != null) {
-            page = courseRepository.findByType(type, pageable);
+            page = courseRepository.findByTypeAndBranch(type, branchId, pageable);
         } else {
             page = courseRepository.findAllByBranch(branchId, pageable);
         }
@@ -123,7 +123,7 @@ public class CourseService {
     @Transactional(readOnly = true)
     public PageResponse<CourseDto> searchCourses(String query, Pageable pageable) {
         UUID branchId = resolveCurrentBranchId();
-        Page<Course> page = courseRepository.search(query, pageable);
+        Page<Course> page = courseRepository.searchByBranch(query, branchId, pageable);
         return mapPage(page);
     }
 

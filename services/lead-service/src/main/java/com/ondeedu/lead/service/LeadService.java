@@ -149,7 +149,7 @@ public class LeadService {
         if (StringUtils.hasText(tenantId) && leadSearchService.isPresent()) {
             try {
                 PageResponse<LeadDto> indexedResults =
-                        leadSearchService.get().searchLeads(tenantId, branchId, query, pageable);
+                        leadSearchService.get().searchLeads(tenantId, query, pageable);
                 if (indexedResults.getTotalElements() > 0) {
                     return indexedResults;
                 }
