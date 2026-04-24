@@ -3303,7 +3303,60 @@ interface GroupAttendanceResponse {
 }
 ```
 
-### 14.13 Актуализация данных (cache freshness)
+### 14.13 Посещаемость курса преподавателя (`/api/v1/analytics/teacher-course-attendance`)
+
+**Доступ:** `TENANT_ADMIN`, `MANAGER`, `TEACHER` или permission `ANALYTICS_VIEW` / `LESSONS_VIEW`
+
+---
+
+#### `GET /api/v1/analytics/teacher-course-attendance`
+
+Возвращает детальную посещаемость по занятиям выбранного курса за месяц.
+
+**Query Params:**
+- `teacherId` *(required)*: UUID преподавателя
+- `courseId` *(required)*: UUID курса
+- `month` *(optional)*: `YYYY-MM` (по умолчанию — текущий месяц)
+
+**Response:**
+```typescript
+interface TeacherCourseAttendanceResponse {
+  teacherId: string;
+  teacherName: string;
+  courseId: string;
+  courseName: string;
+  month: string;                    // "YYYY-MM"
+  avgAttendanceRate: number;        // средний % посещаемости
+  totalLessons: number;
+  attendedLessons: number;
+  absentLessons: number;
+  plannedLessons: number;
+  lessons: CourseLessonDetail[];
+}
+
+interface CourseLessonDetail {
+  lessonId: string;
+  lessonDate: string;               // "YYYY-MM-DD"
+  lessonType: string;               // GROUP / INDIVIDUAL / TRIAL
+  totalStudents: number;
+  attendedCount: number;
+  absentCount: number;
+  plannedLessons: number;
+  attendanceRate: number;           // % посещаемости на занятии
+}
+```
+
+---
+
+#### `GET /api/v1/analytics/teacher-course-attendance/export` — Скачать Excel
+
+**Query Params:** те же (`teacherId`, `courseId`, `month`)
+
+**Response:** `Content-Disposition: attachment; filename="teacher-course-attendance.xlsx"`
+
+---
+
+### 14.14 Актуализация данных (cache freshness)
 
 Аналитика использует Redis-кэш с укороченными TTL и tenant-aware invalidation:
 
@@ -4690,6 +4743,10 @@ interface RoleConfigDto {
 ---
 
 ### 21.3 Источники оплаты (`/api/v1/settings/payment-sources`)
+
+> **Branch isolation**: все каталоги (21.3–21.6) фильтруются по `X-Branch-ID`. Запись принадлежит тому филиалу, в контексте которого была создана. При `null` branch (TENANT_ADMIN без фильтра) возвращаются общие записи (`branch_id IS NULL`). Настройки компании (21.1) и роли (21.2) не имеют branch-изоляции.
+
+
 
 #### `GET /api/v1/settings/payment-sources` — Список источников
 **Доступ:** `TENANT_ADMIN`, `MANAGER`, `RECEPTIONIST` или permission `SETTINGS_VIEW` / `FINANCE_VIEW` / `FINANCE_CREATE`
