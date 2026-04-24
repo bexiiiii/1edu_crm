@@ -5231,7 +5231,7 @@ interface CreateInventoryItemRequest {
   maxQuantity?: number;      // BigDecimal
   pricePerUnit?: number;     // BigDecimal
   sellingPrice?: number;     // BigDecimal
-  currency?: string;         // По умолчанию "UZS"
+  currency?: string;         // По умолчанию "KZT"
   location?: string;
   supplier?: string;
   supplierContact?: string;
@@ -5619,13 +5619,72 @@ interface InventoryStatsDto {
   lowStockCount: number;
   outOfStockCount: number;
   totalTransactions: number;
-  totalCategories: number;   // Считаются только активные категории
+  totalCategories: number;        // Считаются только активные категории
+  totalInventoryValue: number;    // Общая стоимость склада (сумма quantity * pricePerUnit)
 }
 ```
 
 ---
 
-### 23.6 Системные данные (seed)
+### 23.6 Отчёт и Excel-экспорт
+
+#### `GET /api/v1/inventory/report` — Инвентаризационный отчёт (JSON)
+**Доступ:** `TENANT_ADMIN` или `INVENTORY_VIEW`
+
+Возвращает полный список товаров с остатками и общей стоимостью — для проведения инвентаризации.
+
+**Response:** `ApiResponse<InventoryReportDto>`
+
+```typescript
+interface InventoryReportDto {
+  reportDate: string;             // Дата отчёта (YYYY-MM-DD)
+  totalItems: number;             // Всего позиций
+  inStockCount: number;           // В наличии
+  lowStockCount: number;          // Мало на складе
+  outOfStockCount: number;        // Нет в наличии
+  totalInventoryValue: number;    // Общая стоимость склада (KZT)
+  items: InventoryItemDto[];      // Полный список товаров
+}
+```
+
+---
+
+#### `GET /api/v1/inventory/report/export` — Скачать инвентаризационный отчёт (Excel)
+**Доступ:** `TENANT_ADMIN` или `INVENTORY_VIEW`
+
+Файл: `inventory-report.xlsx`
+
+Содержит 2 листа:
+- **Сводка** — дата, кол-во позиций по статусам, общая стоимость склада
+- **Опись товаров** — полная таблица: №, Наименование, Категория, Ед.изм., Факт.кол-во, Мин.кол-во, Цена за ед. (KZT), Стоимость (KZT), Статус, Местонахождение + строка для подписи
+
+---
+
+#### `GET /api/v1/inventory/items/export` — Скачать список товаров (Excel)
+**Доступ:** `TENANT_ADMIN` или `INVENTORY_VIEW`
+
+Файл: `inventory-items.xlsx`
+
+Таблица: №, Наименование, Категория, Ед.изм., Кол-во, Мин.кол-во, Цена за ед. (KZT), Стоимость (KZT), Статус, Местонахождение, Поставщик, Артикул + итоговая строка с суммарной стоимостью.
+
+---
+
+#### `GET /api/v1/inventory/transactions/export` — Скачать журнал движения товаров (Excel)
+**Доступ:** `TENANT_ADMIN` или `INVENTORY_VIEW`
+
+**Query params:**
+| Параметр | Тип | Обязателен | Описание |
+|---|---|---|---|
+| `fromDate` | `LocalDate` | Нет | Дата от (ISO: `YYYY-MM-DD`). По умолчанию: 1 января текущего года |
+| `toDate` | `LocalDate` | Нет | Дата до (ISO: `YYYY-MM-DD`). По умолчанию: сегодня |
+
+Файл: `inventory-transactions.xlsx`
+
+Таблица: Дата/Время, Товар, Тип операции (рус.), Кол-во, До операции, После операции, Цена (KZT), Сумма (KZT), Причина/Примечание, Документ.
+
+---
+
+### 23.7 Системные данные (seed)
 
 При создании tenant schema миграция создаёт системные записи, которые в API помечены `isSystem = true` и не редактируются / не удаляются через обычные CRUD endpoints.
 
