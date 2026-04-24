@@ -65,7 +65,7 @@ public class InventoryItem extends BaseEntity {
 
     @Column(name = "currency", length = 3)
     @Builder.Default
-    private String currency = "UZS";
+    private String currency = "KZT";
 
     // Location & Storage
     @Column(name = "location", length = 100)

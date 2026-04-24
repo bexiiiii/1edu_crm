@@ -8,6 +8,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -77,4 +78,19 @@ public interface InventoryItemRepository extends JpaRepository<InventoryItem, UU
           AND (:branchId IS NULL OR i.branchId = :branchId)
         """)
     Page<InventoryItem> findReorderRequired(@Param("branchId") UUID branchId, Pageable pageable);
+
+    @Query("""
+        SELECT i FROM InventoryItem i
+        WHERE (:branchId IS NULL OR i.branchId = :branchId)
+        ORDER BY i.name ASC
+        """)
+    List<InventoryItem> findAllByBranchForExport(@Param("branchId") UUID branchId);
+
+    @Query("""
+        SELECT COALESCE(SUM(i.pricePerUnit * i.quantity), 0)
+        FROM InventoryItem i
+        WHERE (:branchId IS NULL OR i.branchId = :branchId)
+          AND i.pricePerUnit IS NOT NULL
+        """)
+    java.math.BigDecimal sumTotalValueByBranch(@Param("branchId") UUID branchId);
 }

@@ -5,15 +5,20 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.util.List;
+
 @Data
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class InventoryStatsDto {
+public class InventoryReportDto {
+    private LocalDate reportDate;
     private long totalItems;
+    private long inStockCount;
     private long lowStockCount;
     private long outOfStockCount;
-    private long totalTransactions;
-    private long totalCategories;
-    private java.math.BigDecimal totalInventoryValue;
+    private BigDecimal totalInventoryValue;
+    private List<InventoryItemDto> items;
 }

@@ -10,6 +10,7 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.UUID;
 
 @Repository
@@ -86,4 +87,14 @@ public interface InventoryTransactionRepository extends JpaRepository<InventoryT
         WHERE (:branchId IS NULL OR t.branchId = :branchId)
         """)
     long countAllByBranch(@Param("branchId") UUID branchId);
+
+    @Query("""
+        SELECT t FROM InventoryTransaction t
+        WHERE t.transactionDate BETWEEN :fromDate AND :toDate
+          AND (:branchId IS NULL OR t.branchId = :branchId)
+        ORDER BY t.transactionDate DESC
+        """)
+    List<InventoryTransaction> findAllByDateRangeForExport(@Param("fromDate") LocalDateTime fromDate,
+                                                           @Param("toDate") LocalDateTime toDate,
+                                                           @Param("branchId") UUID branchId);
 }

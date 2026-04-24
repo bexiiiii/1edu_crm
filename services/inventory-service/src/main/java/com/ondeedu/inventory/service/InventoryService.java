@@ -31,6 +31,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
@@ -416,6 +417,7 @@ public class InventoryService {
         long outOfStock = itemRepository.countOutOfStockByBranch(branchId);
         long totalTransactions = transactionRepository.countAllByBranch(branchId);
         long totalCategories = categoryRepository.countActiveByBranch(branchId);
+        BigDecimal totalValue = itemRepository.sumTotalValueByBranch(branchId);
 
         return InventoryStatsDto.builder()
             .totalItems(itemRepository.findAllByBranch(branchId, PageRequest.of(0, 1)).getTotalElements())
@@ -423,6 +425,52 @@ public class InventoryService {
             .outOfStockCount(outOfStock)
             .totalTransactions(totalTransactions)
             .totalCategories(totalCategories)
+            .totalInventoryValue(totalValue != null ? totalValue : BigDecimal.ZERO)
+            .build();
+    }
+
+    // ==================== Export & Report ====================
+
+    @Transactional(readOnly = true)
+    public List<InventoryItemDto> listAllItemsForExport() {
+        UUID branchId = resolveCurrentBranchId();
+        return itemRepository.findAllByBranchForExport(branchId).stream()
+            .map(itemMapper::toDto)
+            .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public List<InventoryTransactionDto> listAllTransactionsForExport(LocalDate from, LocalDate to) {
+        UUID branchId = resolveCurrentBranchId();
+        LocalDateTime fromDt = (from != null ? from : LocalDate.now().withDayOfYear(1)).atStartOfDay();
+        LocalDateTime toDt = (to != null ? to : LocalDate.now()).atTime(23, 59, 59);
+        return transactionRepository.findAllByDateRangeForExport(fromDt, toDt, branchId).stream()
+            .map(transactionMapper::toDto)
+            .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public InventoryReportDto getInventoryReport() {
+        UUID branchId = resolveCurrentBranchId();
+        List<InventoryItemDto> items = itemRepository.findAllByBranchForExport(branchId).stream()
+            .map(itemMapper::toDto)
+            .toList();
+
+        long inStock = items.stream().filter(i -> "IN_STOCK".equals(i.getStatus())).count();
+        long lowStock = items.stream().filter(i -> "LOW_STOCK".equals(i.getStatus())).count();
+        long outOfStock = items.stream().filter(i -> "OUT_OF_STOCK".equals(i.getStatus())).count();
+        BigDecimal totalValue = items.stream()
+            .map(i -> i.getTotalValue() != null ? i.getTotalValue() : BigDecimal.ZERO)
+            .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+        return InventoryReportDto.builder()
+            .reportDate(LocalDate.now())
+            .totalItems(items.size())
+            .inStockCount(inStock)
+            .lowStockCount(lowStock)
+            .outOfStockCount(outOfStock)
+            .totalInventoryValue(totalValue)
+            .items(items)
             .build();
     }
 

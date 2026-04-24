@@ -3,15 +3,19 @@ package com.ondeedu.inventory.controller;
 import com.ondeedu.common.dto.ApiResponse;
 import com.ondeedu.common.dto.PageResponse;
 import com.ondeedu.inventory.dto.*;
+import com.ondeedu.inventory.service.InventoryExcelExportService;
 import com.ondeedu.inventory.service.InventoryService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
@@ -23,6 +27,7 @@ import java.util.UUID;
 public class InventoryController {
 
     private final InventoryService inventoryService;
+    private final InventoryExcelExportService excelExportService;
 
     // ==================== Items ====================
 
@@ -220,5 +225,43 @@ public class InventoryController {
     @Operation(summary = "Get inventory stats", description = "Get dashboard statistics for inventory")
     public ApiResponse<InventoryStatsDto> getStats() {
         return ApiResponse.success(inventoryService.getStats());
+    }
+
+    // ==================== Report & Export ====================
+
+    @GetMapping("/report")
+    @PreAuthorize("hasRole('TENANT_ADMIN') or hasAuthority('INVENTORY_VIEW')")
+    @Operation(summary = "Инвентаризационный отчёт (JSON)", description = "Полный список товаров с остатками и общей стоимостью")
+    public ApiResponse<InventoryReportDto> getInventoryReport() {
+        return ApiResponse.success(inventoryService.getInventoryReport());
+    }
+
+    @GetMapping("/report/export")
+    @PreAuthorize("hasRole('TENANT_ADMIN') or hasAuthority('INVENTORY_VIEW')")
+    @Operation(summary = "Скачать инвентаризационный отчёт (Excel)")
+    public ResponseEntity<byte[]> exportInventoryReport() {
+        InventoryReportDto report = inventoryService.getInventoryReport();
+        byte[] file = excelExportService.exportInventoryReport(report);
+        return ExcelResponseFactory.attachment("inventory-report.xlsx", file);
+    }
+
+    @GetMapping("/items/export")
+    @PreAuthorize("hasRole('TENANT_ADMIN') or hasAuthority('INVENTORY_VIEW')")
+    @Operation(summary = "Скачать список товаров (Excel)")
+    public ResponseEntity<byte[]> exportItems() {
+        List<InventoryItemDto> items = inventoryService.listAllItemsForExport();
+        byte[] file = excelExportService.exportItems(items);
+        return ExcelResponseFactory.attachment("inventory-items.xlsx", file);
+    }
+
+    @GetMapping("/transactions/export")
+    @PreAuthorize("hasRole('TENANT_ADMIN') or hasAuthority('INVENTORY_VIEW')")
+    @Operation(summary = "Скачать журнал движения товаров (Excel)")
+    public ResponseEntity<byte[]> exportTransactions(
+        @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fromDate,
+        @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate toDate) {
+        List<InventoryTransactionDto> transactions = inventoryService.listAllTransactionsForExport(fromDate, toDate);
+        byte[] file = excelExportService.exportTransactions(transactions, fromDate, toDate);
+        return ExcelResponseFactory.attachment("inventory-transactions.xlsx", file);
     }
 }
