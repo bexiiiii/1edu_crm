@@ -65,7 +65,7 @@ public class SalaryQueryRepository {
             conditions.add("s.branch_id = :branchId");
         }
         if (!conditions.isEmpty()) {
-            sql.append(" WHERE ").append(String.join(" AND ", conditions));
+            sql.append(" WHERE ").append(String.join(" AND ", conditions)).append("\n");
         }
 
         sql.append("""
