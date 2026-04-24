@@ -3422,6 +3422,18 @@ interface BranchMetricsDto {
 
 ---
 
+#### `GET /api/v1/analytics/branches/export` — Скачать Excel
+
+**Query Params:** те же (`from`, `to`)
+
+**Response:** `Content-Disposition: attachment; filename="branch-analytics.xlsx"`
+
+Файл содержит два листа:
+- **Сводка** — итоговые показатели (студенты, лиды, выручка, расходы, прибыль, средняя посещаемость)
+- **По филиалам** — строка на каждый филиал со всеми метриками
+
+---
+
 ### 14.15 Актуализация данных (cache freshness)
 
 Аналитика использует Redis-кэш с укороченными TTL и tenant-aware invalidation:

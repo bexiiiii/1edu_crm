@@ -443,6 +443,57 @@ public class AnalyticsExcelExportService {
         }
     }
 
+    public byte[] exportBranchAnalytics(BranchAnalyticsResponse data, LocalDate from, LocalDate to) {
+        try (XSSFWorkbook workbook = new XSSFWorkbook(); ByteArrayOutputStream baos = new ByteArrayOutputStream()) {
+            CellStyle headerStyle = createHeaderStyle(workbook);
+
+            Sheet summary = workbook.createSheet("Сводка");
+            int r = 0;
+            r = writeSectionHeader(summary, r, "Период", headerStyle);
+            r = writeKv(summary, r, "С", from.toString());
+            r = writeKv(summary, r, "По", to.toString());
+            r++;
+            r = writeSectionHeader(summary, r, "Итого по всем филиалам", headerStyle);
+            r = writeKv(summary, r, "Студентов", data.getTotalStudents());
+            r = writeKv(summary, r, "Лидов", data.getTotalLeads());
+            r = writeKv(summary, r, "Выручка", data.getTotalRevenue());
+            r = writeKv(summary, r, "Расходы", data.getTotalExpenses());
+            r = writeKv(summary, r, "Прибыль", data.getTotalRevenue() != null ? data.getTotalRevenue().subtract(data.getTotalExpenses() != null ? data.getTotalExpenses() : BigDecimal.ZERO) : BigDecimal.ZERO);
+            r = writeKv(summary, r, "Средняя посещаемость (%)", data.getAvgAttendance());
+            autoSize(summary, 2);
+
+            Sheet branches = workbook.createSheet("По филиалам");
+            writeHeader(branches, 0, headerStyle,
+                    "Филиал", "Студентов", "Лидов", "Активных абонементов",
+                    "Выручка", "Расходы", "Прибыль",
+                    "Посещаемость (%)", "Загрузка групп (%)", "Занятий", "Сотрудников");
+            int br = 1;
+            for (BranchMetricsDto b : safeList(data.getBranches())) {
+                Row x = branches.createRow(br++);
+                BigDecimal profit = b.getRevenue() != null
+                        ? b.getRevenue().subtract(b.getExpenses() != null ? b.getExpenses() : BigDecimal.ZERO)
+                        : BigDecimal.ZERO;
+                setCell(x, 0, b.getBranchName());
+                setCell(x, 1, b.getStudentCount());
+                setCell(x, 2, b.getLeadCount());
+                setCell(x, 3, b.getActiveSubscriptions());
+                setCell(x, 4, b.getRevenue());
+                setCell(x, 5, b.getExpenses());
+                setCell(x, 6, profit);
+                setCell(x, 7, b.getAttendanceRate());
+                setCell(x, 8, b.getGroupLoad());
+                setCell(x, 9, b.getLessonsCount());
+                setCell(x, 10, b.getStaffCount());
+            }
+            autoSize(branches, 11);
+
+            workbook.write(baos);
+            return baos.toByteArray();
+        } catch (IOException e) {
+            throw new IllegalStateException("Failed to generate branch analytics Excel report", e);
+        }
+    }
+
     private void writeCategorySheet(Workbook workbook, CellStyle headerStyle, String sheetName, List<CategoryAmountDto> rows) {
         Sheet sheet = workbook.createSheet(sheetName);
         writeHeader(sheet, 0, headerStyle, "Категория", "Сумма");
