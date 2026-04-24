@@ -2764,9 +2764,28 @@ interface SalaryPaymentDto {
 
 Все эндпоинты аналитики доступны для `TENANT_ADMIN`, `MANAGER` или любой роли с permission `ANALYTICS_VIEW`.
 
-Исключение: `group-attendance` также доступен `TEACHER` и ролям с `LESSONS_VIEW`.
+Исключение: `group-attendance` и `teacher-course-attendance` также доступны `TEACHER` и ролям с `LESSONS_VIEW`.
 
-### Excel export (новое)
+### Список эндпоинтов
+
+| Раздел | Эндпоинт |
+|---|---|
+| 14.1 | `GET /api/v1/analytics/dashboard` |
+| 14.2 | `GET /api/v1/analytics/today` |
+| 14.3 | `GET /api/v1/analytics/finance-report` |
+| 14.4 | `GET /api/v1/analytics/subscriptions` |
+| 14.5 | `GET /api/v1/analytics/funnel` |
+| 14.6 | `GET /api/v1/analytics/lead-conversions` |
+| 14.7 | `GET /api/v1/analytics/managers` |
+| 14.8 | `GET /api/v1/analytics/teachers` |
+| 14.9 | `GET /api/v1/analytics/retention` |
+| 14.10 | `GET /api/v1/analytics/group-load` |
+| 14.11 | `GET /api/v1/analytics/room-load` |
+| 14.12 | `GET /api/v1/analytics/group-attendance` |
+| 14.13 | `GET /api/v1/analytics/teacher-course-attendance` |
+| 14.14 | `GET /api/v1/analytics/branches` |
+
+### Excel export
 
 Для ключевых аналитических экранов добавлены отдельные download endpoint'ы в формате `.xlsx`.
 
@@ -2781,6 +2800,7 @@ interface SalaryPaymentDto {
   - `group-load-report.xlsx`
   - `room-load-report.xlsx`
   - `group-attendance-report.xlsx`
+  - `teacher-course-attendance.xlsx`
 
 > Эти экспортные endpoint'ы используют ту же модель доступа и те же query params, что и соответствующие JSON endpoint'ы.
 
@@ -3356,12 +3376,59 @@ interface CourseLessonDetail {
 
 ---
 
-### 14.14 Актуализация данных (cache freshness)
+### 14.14 Аналитика по филиалам (`/api/v1/analytics/branches`)
+
+Сравнительная аналитика по всем филиалам тенанта за период. Доступно только `TENANT_ADMIN` и `MANAGER` (или `ANALYTICS_VIEW`) — без branch-scope фильтрации (показывает ВСЕ филиалы).
+
+---
+
+#### `GET /api/v1/analytics/branches`
+
+**Доступ:** `TENANT_ADMIN`, `MANAGER` или permission `ANALYTICS_VIEW`
+
+**Query Params:**
+- `from` *(required)*: `YYYY-MM-DD` — начало периода
+- `to` *(required)*: `YYYY-MM-DD` — конец периода
+
+**Response:**
+```typescript
+interface BranchAnalyticsResponse {
+  branches: BranchMetricsDto[];
+  totalRevenue: number;       // суммарная выручка по всем филиалам
+  totalExpenses: number;      // суммарные расходы
+  totalStudents: number;      // всего студентов
+  totalLeads: number;         // всего лидов за период
+  avgAttendance: number;      // средняя посещаемость (%) по всем филиалам
+}
+
+interface BranchMetricsDto {
+  branchId: string;
+  branchName: string;
+  studentCount: number;        // студентов в филиале
+  leadCount: number;           // лидов за период
+  activeSubscriptions: number; // активных абонементов
+  revenue: number;             // выручка за период
+  expenses: number;            // расходы за период
+  attendanceRate: number;      // посещаемость (%)
+  groupLoad: number;           // загрузка групп (%)
+  lessonsCount: number;        // занятий за период
+  staffCount: number;          // сотрудников
+}
+```
+
+**Примеры запросов:**
+- `GET /api/v1/analytics/branches?from=2026-04-01&to=2026-04-30` — апрель
+- `GET /api/v1/analytics/branches?from=2026-01-01&to=2026-03-31` — Q1
+
+---
+
+### 14.15 Актуализация данных (cache freshness)
 
 Аналитика использует Redis-кэш с укороченными TTL и tenant-aware invalidation:
 
 - `analytics:today` — ~30 сек
-- `dashboard`, `finance`, `subscriptions`, `funnel`, `lead-conversions`, `managers`, `teachers`, `group-load`, `room-load`, `group-attendance` — ~2 мин
+- `dashboard`, `finance`, `subscriptions`, `funnel`, `lead-conversions`, `managers`, `teachers`, `group-load`, `room-load`, `group-attendance`, `branch-analytics` — ~2 мин
+- `teacher-course-attendance` (использует кэш `group-attendance`) — ~2 мин
 - `retention` — ~5 мин
 
 Дополнительно при релевантных tenant-аудит событиях (`audit.exchange` / routing key `audit.tenant`) выполняется сброс tenant-ключей аналитики, чтобы dashboard/отчёты обновлялись быстрее после CRUD операций.
