@@ -21,4 +21,5 @@ public class AttendanceStatusConfigDto {
     private String color;
     private Integer sortOrder;
     private Boolean systemStatus;
+    private UUID branchId;
 }

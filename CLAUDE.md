@@ -237,6 +237,44 @@ Manages Keycloak users (staff members) via Keycloak Admin Client. No database, n
 
 ### Known Issues & Solutions
 
+#### Keycloak dev mode при одновременном рестарте с Postgres (401 + автовыход из UI)
+При одновременном рестарте Postgres и Keycloak, KC не может подключиться к БД → активирует **dev mode** с embedded H2 → игнорирует `KC_HOSTNAME` → выдаёт токены с issuer `http://localhost:8080/auth/realms/ondeedu` → все сервисы с `ISSUER_URI=https://api.1edu.kz/auth/...` получают 401 → фронтенд автоматически выходит.
+
+**Симптомы**:
+- В логах Keycloak: `Profile dev activated. DO NOT use this configuration in production.`
+- В логах api-gateway / сервисов: ошибки 401 на все запросы после логина
+- Analytics даёт 500 (отдельная проблема с типом параметра)
+
+**Решение**:
+1. Убедиться что Postgres healthy: `docker inspect --format "{{.State.Health.Status}}" 1edu-postgres`
+2. Перезапустить Keycloak: `docker compose -f docker-compose.prod.yml up -d --force-recreate --no-deps keycloak`
+3. Дождаться `Profile prod activated` в логах: `docker compose logs keycloak --tail=5`
+4. Проверить issuer: `curl -s http://localhost:8080/auth/realms/ondeedu/.well-known/openid-configuration | python3 -c "import sys,json; print(json.load(sys.stdin)['issuer'])"`
+5. Перезапустить все бизнес-сервисы: `docker compose -f docker-compose.prod.yml up -d --force-recreate --no-deps api-gateway tenant-service student-service ...`
+6. Перезагрузить nginx: `docker exec 1edu-nginx nginx -s reload`
+
+**Корень**: `KC_HOSTNAME=${KEYCLOAK_PUBLIC_URL}` (= `https://api.1edu.kz/auth`) корректен для KC 26.0.8, но только когда Postgres доступен при старте.
+
+**ISSUER_URI в docker-compose**: В `x-spring-env` добавлено `SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI: ${KEYCLOAK_PUBLIC_URL}/realms/${KEYCLOAK_REALM}` — переопределяет `http://localhost:8080/...` из application.yml всех сервисов. Без этого после фикса KC сервисы продолжали бы отклонять правильные токены.
+
+#### Analytics 500 — `could not determine data type of parameter`
+PostgreSQL не может инферить тип NULL-параметра `:branchId` в WHERE-условии `AND (:branchId IS NULL OR branch_id = :branchId)`.
+
+**Симптом**: все analytics эндпоинты возвращают 500, в логах `PSQLException: could not determine data type of parameter $1`.
+
+**Решение**: `resolveCurrentBranchId()` должен возвращать `String`, а не `UUID` — тогда NPJT передаёт параметр как VARCHAR, и PostgreSQL корректно резолвит тип в `CAST(:branchId AS UUID) IS NULL OR col = CAST(:branchId AS UUID)`. Уже исправлено в `AnalyticsRepository.java`.
+
+**Дополнительно**: при дублировании SQL-блока в методе (например `getSubscriptions` — два `JOIN`/`WHERE` блока) PostgreSQL выдаёт `syntax error at or near "JOIN"`. Проверять SQL через `grep -n "FROM\|JOIN\|WHERE" repository/AnalyticsRepository.java` для обнаружения дублей.
+
+#### Inventory/Call-logs 500 — `column does not exist` (version, created_by, updated_at)
+Таблицы created by V31/V30 миграциями не имеют всех колонок `BaseEntity`.
+
+**V34** добавляет `version BIGINT NOT NULL DEFAULT 0` к: `inventory_items`, `inventory_transactions`, `inventory_categories`, `inventory_units`, `student_call_logs`.
+
+**V35** добавляет `updated_at`, `created_by`, `updated_by` к: `inventory_units`, `inventory_categories`, `inventory_transactions` (были созданы без этих audit-колонок).
+
+**Правило**: при создании новых таблиц через `ensure_*_schema()` функции всегда включать все колонки `BaseEntity`: `id`, `created_at`, `updated_at`, `created_by`, `updated_by`, `version`.
+
 #### nginx 502 после рестарта api-gateway
 nginx кэширует IP контейнера — после рестарта api-gateway старый IP устаревает.
 

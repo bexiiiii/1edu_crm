@@ -49,11 +49,13 @@ public interface SubscriptionRepository extends JpaRepository<Subscription, UUID
             WHERE s.status IN :statuses
               AND s.startDate <= :lastDay
               AND (s.endDate IS NULL OR s.endDate >= :firstDay)
+              AND (:branchId IS NULL OR s.branchId = :branchId)
             """)
     List<Subscription> findActiveInPeriod(
             @Param("statuses") List<SubscriptionStatus> statuses,
             @Param("firstDay") LocalDate firstDay,
-            @Param("lastDay") LocalDate lastDay);
+            @Param("lastDay") LocalDate lastDay,
+            @Param("branchId") UUID branchId);
 
     /**
      * Активные подписки, ещё не истёкшие на дату today — для debtors.
@@ -62,10 +64,12 @@ public interface SubscriptionRepository extends JpaRepository<Subscription, UUID
             SELECT s FROM Subscription s
             WHERE s.status = :status
               AND (s.endDate IS NULL OR s.endDate >= :today)
+              AND (:branchId IS NULL OR s.branchId = :branchId)
             """)
     List<Subscription> findActiveNotExpiredBefore(
             @Param("status") SubscriptionStatus status,
-            @Param("today") LocalDate today);
+            @Param("today") LocalDate today,
+            @Param("branchId") UUID branchId);
 
     // ── Branch filtering ──────────────────────────────────────────────
 

@@ -2,6 +2,7 @@ package com.ondeedu.settings.service;
 
 import com.ondeedu.common.exception.BusinessException;
 import com.ondeedu.common.exception.ResourceNotFoundException;
+import com.ondeedu.common.tenant.TenantContext;
 import com.ondeedu.settings.dto.SaveStaffStatusRequest;
 import com.ondeedu.settings.dto.StaffStatusConfigDto;
 import com.ondeedu.settings.entity.StaffStatusConfig;
@@ -13,6 +14,7 @@ import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
 
 import java.util.List;
 import java.util.UUID;
@@ -27,9 +29,10 @@ public class StaffStatusConfigService {
     private final StaffStatusConfigMapper mapper;
 
     @Transactional(readOnly = true)
-    @Cacheable(value = "staff-statuses", key = "T(com.ondeedu.common.cache.TenantCacheKeys).fixed('all')")
+    @Cacheable(value = "staff-statuses", key = "T(com.ondeedu.common.cache.TenantCacheKeys).fixed('all') + '::branch=' + T(com.ondeedu.common.tenant.TenantContext).getBranchId()")
     public List<StaffStatusConfigDto> getAll() {
-        return repository.findAllByOrderBySortOrderAscNameAsc()
+        UUID branchId = resolveCurrentBranchId();
+        return repository.findAllByBranchOrderBySortOrderAscNameAsc(branchId)
                 .stream()
                 .map(mapper::toDto)
                 .collect(Collectors.toList());
@@ -38,11 +41,13 @@ public class StaffStatusConfigService {
     @Transactional
     @CacheEvict(value = "staff-statuses", allEntries = true)
     public StaffStatusConfigDto create(SaveStaffStatusRequest request) {
-        if (repository.existsByNameIgnoreCase(request.getName())) {
+        UUID branchId = resolveCurrentBranchId();
+        if (repository.existsByNameIgnoreCaseAndBranchId(request.getName(), branchId)) {
             throw new BusinessException("DUPLICATE_STAFF_STATUS", "Staff status with name '" + request.getName() + "' already exists");
         }
 
         StaffStatusConfig entity = mapper.toEntity(request);
+        entity.setBranchId(branchId);
         entity = repository.save(entity);
         log.info("Created staff status config: {}", entity.getName());
         return mapper.toDto(entity);
@@ -54,7 +59,8 @@ public class StaffStatusConfigService {
         StaffStatusConfig entity = repository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("StaffStatusConfig", "id", id));
 
-        if (!entity.getName().equalsIgnoreCase(request.getName()) && repository.existsByNameIgnoreCase(request.getName())) {
+        UUID branchId = resolveCurrentBranchId();
+        if (!entity.getName().equalsIgnoreCase(request.getName()) && repository.existsByNameIgnoreCaseAndBranchId(request.getName(), branchId)) {
             throw new BusinessException("DUPLICATE_STAFF_STATUS", "Staff status with name '" + request.getName() + "' already exists");
         }
 
@@ -72,5 +78,15 @@ public class StaffStatusConfigService {
         }
         repository.deleteById(id);
         log.info("Deleted staff status config: {}", id);
+    }
+
+    private UUID resolveCurrentBranchId() {
+        String rawBranchId = TenantContext.getBranchId();
+        if (!StringUtils.hasText(rawBranchId)) return null;
+        try {
+            return UUID.fromString(rawBranchId.trim());
+        } catch (IllegalArgumentException e) {
+            return null;
+        }
     }
 }

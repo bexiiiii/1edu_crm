@@ -3,6 +3,7 @@ package com.ondeedu.finance.service;
 import com.ondeedu.common.exception.BusinessException;
 import com.ondeedu.common.exception.ResourceNotFoundException;
 import com.ondeedu.common.payroll.SalaryType;
+import com.ondeedu.common.tenant.TenantContext;
 import com.ondeedu.finance.dto.CreateSalaryPaymentRequest;
 import com.ondeedu.finance.dto.SalaryMonthBreakdownDto;
 import com.ondeedu.finance.dto.SalaryOverviewDto;
@@ -53,8 +54,10 @@ public class SalaryService {
         LocalDate monthEnd = yearMonth.atEndOfMonth();
         String salaryMonth = yearMonth.format(MONTH_FORMATTER);
 
+        UUID branchId = resolveCurrentBranchId();
+
         List<Transaction> monthlyPayments = transactionRepository
-                .findBySalaryMonthAndStaffIdIsNotNullOrderByTransactionDateDescCreatedAtDesc(salaryMonth);
+                .findBySalaryMonthAndStaffIdIsNotNullAndBranch(salaryMonth, branchId);
         Map<UUID, List<SalaryPaymentDto>> paymentsByStaffId = monthlyPayments.stream()
                 .map(this::toSalaryPaymentDto)
                 .collect(java.util.stream.Collectors.groupingBy(
@@ -63,7 +66,7 @@ public class SalaryService {
                         java.util.stream.Collectors.toList()
                 ));
 
-        List<StaffSalarySummaryDto> entries = salaryQueryRepository.listSalaryRows(monthStart, monthEnd).stream()
+        List<StaffSalarySummaryDto> entries = salaryQueryRepository.listSalaryRows(monthStart, monthEnd, branchId).stream()
                 .map(row -> toStaffSalarySummary(row, salaryMonth, paymentsByStaffId.getOrDefault(row.staffId(), List.of())))
                 .toList();
 
@@ -279,5 +282,15 @@ public class SalaryService {
                 .status(transaction.getStatus())
                 .createdAt(transaction.getCreatedAt())
                 .build();
+    }
+
+    private UUID resolveCurrentBranchId() {
+        String rawBranchId = TenantContext.getBranchId();
+        if (!StringUtils.hasText(rawBranchId)) return null;
+        try {
+            return UUID.fromString(rawBranchId.trim());
+        } catch (IllegalArgumentException e) {
+            return null;
+        }
     }
 }

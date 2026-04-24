@@ -3,6 +3,8 @@ package com.ondeedu.settings.dto;
 import jakarta.validation.constraints.NotBlank;
 import lombok.Data;
 
+import java.util.UUID;
+
 @Data
 public class SaveFinanceCategoryRequest {
 
@@ -12,4 +14,6 @@ public class SaveFinanceCategoryRequest {
     private String color;
     private Integer sortOrder;
     private Boolean active;
+
+    private UUID branchId;
 }

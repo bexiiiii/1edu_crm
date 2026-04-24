@@ -52,6 +52,8 @@ public class InventoryService {
 
     // ==================== Inventory Items ====================
 
+    private static final UUID NIL_UUID = new UUID(0, 0);
+
     @Transactional
     @CacheEvict(value = "inventory", allEntries = true)
     public InventoryItemDto createItem(CreateInventoryItemRequest request) {
@@ -64,12 +66,15 @@ public class InventoryService {
 
         // Validate category exists
         InventoryCategory category = null;
-        if (request.getCategoryId() != null) {
+        if (request.getCategoryId() != null && !NIL_UUID.equals(request.getCategoryId())) {
             category = categoryRepository.findById(request.getCategoryId())
                 .orElseThrow(() -> new ResourceNotFoundException("InventoryCategory", "id", request.getCategoryId()));
         }
 
-        // Validate unit exists
+        // Validate unit exists (reject nil UUID — frontend sends 00000000-...-0000 when nothing selected)
+        if (request.getUnitId() == null || NIL_UUID.equals(request.getUnitId())) {
+            throw new BusinessException("INVENTORY_UNIT_REQUIRED", "Unit of measurement is required");
+        }
         InventoryUnit unit = unitRepository.findById(request.getUnitId())
             .orElseThrow(() -> new ResourceNotFoundException("InventoryUnit", "id", request.getUnitId()));
 

@@ -101,7 +101,7 @@ public class ApiPayInvoiceService {
         LocalDate lastDay = targetMonth.atEndOfMonth();
 
         List<Subscription> subscriptions = subscriptionRepository.findActiveInPeriod(
-                List.of(SubscriptionStatus.ACTIVE, SubscriptionStatus.EXPIRED), firstDay, lastDay);
+                List.of(SubscriptionStatus.ACTIVE, SubscriptionStatus.EXPIRED), firstDay, lastDay, resolveCurrentBranchId());
 
         if (subscriptions.isEmpty()) {
             return GenerateApiPayInvoicesResponse.builder()
@@ -800,5 +800,11 @@ public class ApiPayInvoiceService {
                 .createdAt(invoice.getCreatedAt())
                 .updatedAt(invoice.getUpdatedAt())
                 .build();
+    }
+
+    private UUID resolveCurrentBranchId() {
+        String raw = TenantContext.getBranchId();
+        if (!org.springframework.util.StringUtils.hasText(raw)) return null;
+        try { return UUID.fromString(raw.trim()); } catch (IllegalArgumentException e) { return null; }
     }
 }

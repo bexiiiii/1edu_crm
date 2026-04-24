@@ -8,6 +8,7 @@ import org.springframework.stereotype.Repository;
 import java.math.BigDecimal;
 import java.sql.Timestamp;
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -19,16 +20,16 @@ public class SalaryQueryRepository {
     private final EntityManager entityManager;
     private final SalarySchemaResolver salarySchemaResolver;
 
-    public List<SalaryComputationRow> listSalaryRows(LocalDate monthStart, LocalDate monthEnd) {
-        return execute(monthStart, monthEnd, null);
+    public List<SalaryComputationRow> listSalaryRows(LocalDate monthStart, LocalDate monthEnd, UUID branchId) {
+        return execute(monthStart, monthEnd, null, branchId);
     }
 
     public Optional<SalaryComputationRow> findSalaryRow(UUID staffId, LocalDate monthStart, LocalDate monthEnd) {
-        return execute(monthStart, monthEnd, staffId).stream().findFirst();
+        return execute(monthStart, monthEnd, staffId, null).stream().findFirst();
     }
 
     @SuppressWarnings("unchecked")
-    private List<SalaryComputationRow> execute(LocalDate monthStart, LocalDate monthEnd, UUID staffId) {
+    private List<SalaryComputationRow> execute(LocalDate monthStart, LocalDate monthEnd, UUID staffId, UUID branchId) {
         String schema = salarySchemaResolver.resolveCurrentSchema();
         StringBuilder sql = new StringBuilder("""
                 SELECT
@@ -56,8 +57,15 @@ public class SalaryQueryRepository {
                   ON c.id = sch.course_id
                 """.formatted(schema, schema, schema, schema));
 
+        List<String> conditions = new ArrayList<>();
         if (staffId != null) {
-            sql.append(" WHERE s.id = :staffId ");
+            conditions.add("s.id = :staffId");
+        }
+        if (branchId != null) {
+            conditions.add("s.branch_id = :branchId");
+        }
+        if (!conditions.isEmpty()) {
+            sql.append(" WHERE ").append(String.join(" AND ", conditions));
         }
 
         sql.append("""
@@ -83,12 +91,23 @@ public class SalaryQueryRepository {
         if (staffId != null) {
             query.setParameter("staffId", staffId);
         }
+        if (branchId != null) {
+            query.setParameter("branchId", branchId);
+        }
 
         List<Object[]> rows = query.getResultList();
         return rows.stream().map(this::mapRow).toList();
     }
 
     private SalaryComputationRow mapRow(Object[] row) {
+        String salaryTypeStr = (String) row[6];
+        SalaryType salaryType;
+        try {
+            salaryType = salaryTypeStr != null ? SalaryType.valueOf(salaryTypeStr) : SalaryType.FIXED;
+        } catch (IllegalArgumentException e) {
+            salaryType = SalaryType.FIXED;
+        }
+
         return new SalaryComputationRow(
                 (UUID) row[0],
                 (String) row[1],
@@ -96,7 +115,7 @@ public class SalaryQueryRepository {
                 (String) row[3],
                 (String) row[4],
                 toBigDecimal(row[5]),
-                SalaryType.valueOf((String) row[6]),
+                salaryType,
                 toBigDecimal(row[7]),
                 row[8] != null ? ((java.sql.Date) row[8]).toLocalDate() : null,
                 toBigDecimal(row[9]),

@@ -1,6 +1,7 @@
 package com.ondeedu.settings.service;
 
 import com.ondeedu.common.exception.ResourceNotFoundException;
+import com.ondeedu.common.tenant.TenantContext;
 import com.ondeedu.settings.dto.PaymentSourceDto;
 import com.ondeedu.settings.dto.SavePaymentSourceRequest;
 import com.ondeedu.settings.entity.PaymentSource;
@@ -12,6 +13,7 @@ import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
 
 import java.util.List;
 import java.util.UUID;
@@ -26,9 +28,10 @@ public class PaymentSourceService {
     private final PaymentSourceMapper mapper;
 
     @Transactional(readOnly = true)
-    @Cacheable(value = "payment-sources", key = "T(com.ondeedu.common.cache.TenantCacheKeys).fixed('all')")
+    @Cacheable(value = "payment-sources", key = "T(com.ondeedu.common.cache.TenantCacheKeys).fixed('all') + '::branch=' + T(com.ondeedu.common.tenant.TenantContext).getBranchId()")
     public List<PaymentSourceDto> getAll() {
-        return repository.findAllByOrderBySortOrderAsc()
+        UUID branchId = resolveCurrentBranchId();
+        return repository.findAllByBranchOrderBySortOrderAsc(branchId)
                 .stream().map(mapper::toDto).collect(Collectors.toList());
     }
 
@@ -36,6 +39,7 @@ public class PaymentSourceService {
     @CacheEvict(value = "payment-sources", allEntries = true)
     public PaymentSourceDto create(SavePaymentSourceRequest request) {
         PaymentSource entity = mapper.toEntity(request);
+        entity.setBranchId(resolveCurrentBranchId());
         entity = repository.save(entity);
         log.info("Created payment source: {}", entity.getName());
         return mapper.toDto(entity);
@@ -60,5 +64,15 @@ public class PaymentSourceService {
         }
         repository.deleteById(id);
         log.info("Deleted payment source: {}", id);
+    }
+
+    private UUID resolveCurrentBranchId() {
+        String rawBranchId = TenantContext.getBranchId();
+        if (!StringUtils.hasText(rawBranchId)) return null;
+        try {
+            return UUID.fromString(rawBranchId.trim());
+        } catch (IllegalArgumentException e) {
+            return null;
+        }
     }
 }

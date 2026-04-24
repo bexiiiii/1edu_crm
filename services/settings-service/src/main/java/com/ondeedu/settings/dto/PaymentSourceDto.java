@@ -17,4 +17,5 @@ public class PaymentSourceDto {
     private String name;
     private Integer sortOrder;
     private Boolean active;
+    private UUID branchId;
 }

@@ -26,6 +26,9 @@ public interface TransactionRepository extends JpaRepository<Transaction, UUID> 
 
     List<Transaction> findBySalaryMonthAndStaffIdIsNotNullOrderByTransactionDateDescCreatedAtDesc(String salaryMonth);
 
+    @Query("SELECT t FROM Transaction t WHERE t.salaryMonth = :salaryMonth AND t.staffId IS NOT NULL AND (:branchId IS NULL OR t.branchId = :branchId) ORDER BY t.transactionDate DESC, t.createdAt DESC")
+    List<Transaction> findBySalaryMonthAndStaffIdIsNotNullAndBranch(@Param("salaryMonth") String salaryMonth, @Param("branchId") UUID branchId);
+
     List<Transaction> findByStaffIdAndSalaryMonthIsNotNullOrderByTransactionDateDescCreatedAtDesc(UUID staffId);
 
     Page<Transaction> findByTransactionDateBetween(LocalDate from, LocalDate to, Pageable pageable);

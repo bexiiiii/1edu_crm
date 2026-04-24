@@ -12,6 +12,8 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
+import java.util.UUID;
+
 @Entity
 @Table(name = "finance_category_configs")
 @Getter
@@ -39,4 +41,7 @@ public class FinanceCategoryConfig extends BaseEntity {
     @Column(name = "active", nullable = false)
     @Builder.Default
     private Boolean active = true;
+
+    @Column(name = "branch_id")
+    private UUID branchId;
 }

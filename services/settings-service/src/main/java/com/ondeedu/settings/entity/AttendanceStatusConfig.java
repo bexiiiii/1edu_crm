@@ -10,6 +10,8 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
+import java.util.UUID;
+
 @Entity
 @Table(name = "attendance_status_configs")
 @Getter
@@ -49,4 +51,7 @@ public class AttendanceStatusConfig extends BaseEntity {
     @Column(name = "system_status", nullable = false)
     @Builder.Default
     private Boolean systemStatus = false;
+
+    @Column(name = "branch_id")
+    private UUID branchId;
 }

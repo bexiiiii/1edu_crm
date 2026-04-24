@@ -106,6 +106,9 @@ public class TenantService {
             entityManager.createNativeQuery("SELECT system.ensure_inventory_schema(:schemaName)")
                 .setParameter("schemaName", schemaName)
                 .getSingleResult();
+            entityManager.createNativeQuery("SELECT system.ensure_settings_catalog_branch_schema(:schemaName)")
+                .setParameter("schemaName", schemaName)
+                .getSingleResult();
             entityManager.createNativeQuery("SELECT system.add_performance_indexes(:schemaName)")
                 .setParameter("schemaName", schemaName)
                 .getSingleResult();

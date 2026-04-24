@@ -601,6 +601,7 @@ services:
       JAVA_OPTS: "-Xms${JVM_XMS_SMALL:-128m} -Xmx${JVM_XMX_SMALL:-256m}"
       SPRING_CLOUD_CONFIG_ENABLED: "false"
       SPRING_CLOUD_CONFIG_IMPORT_CHECK_ENABLED: "false"
+      SPRING_CONFIG_IMPORT: "optional:configserver:"
     depends_on:
       keycloak:
         condition: service_healthy
@@ -869,6 +870,7 @@ services:
       <<: *spring-env
       SERVER_PORT: "8114"
       GRPC_SERVER_PORT: "9114"
+      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI: ${KEYCLOAK_PUBLIC_URL}/realms/${KEYCLOAK_REALM}
       JAVA_OPTS: "-Xms${JVM_XMS_LARGE:-256m} -Xmx${JVM_XMX_LARGE:-512m}"
     depends_on:
       postgres:
@@ -957,6 +959,7 @@ services:
       MANAGEMENT_ZIPKIN_TRACING_ENDPOINT: ${ZIPKIN_ENDPOINT}
       SPRING_CLOUD_CONFIG_ENABLED: "false"
       SPRING_CLOUD_CONFIG_IMPORT_CHECK_ENABLED: "false"
+      SPRING_CONFIG_IMPORT: "optional:configserver:"
       JAVA_OPTS: "-Xms${JVM_XMS_SMALL:-128m} -Xmx${JVM_XMX_SMALL:-256m}"
     depends_on:
       minio:
@@ -1153,6 +1156,7 @@ services:
       MANAGEMENT_ZIPKIN_TRACING_ENDPOINT: ${ZIPKIN_ENDPOINT}
       SPRING_CLOUD_CONFIG_ENABLED: "false"
       SPRING_CLOUD_CONFIG_IMPORT_CHECK_ENABLED: "false"
+      SPRING_CONFIG_IMPORT: "optional:configserver:"
       JAVA_OPTS: "-Xms${JVM_XMS_SMALL:-128m} -Xmx${JVM_XMX_SMALL:-256m}"
     depends_on:
       analytics-service:
@@ -1199,6 +1203,7 @@ services:
       MANAGEMENT_ZIPKIN_TRACING_ENDPOINT: ${ZIPKIN_ENDPOINT}
       SPRING_CLOUD_CONFIG_ENABLED: "false"
       SPRING_CLOUD_CONFIG_IMPORT_CHECK_ENABLED: "false"
+      SPRING_CONFIG_IMPORT: "optional:configserver:"
       JAVA_OPTS: "-Xms${JVM_XMS_SMALL:-128m} -Xmx${JVM_XMX_SMALL:-256m}"
     depends_on:
       mongodb:

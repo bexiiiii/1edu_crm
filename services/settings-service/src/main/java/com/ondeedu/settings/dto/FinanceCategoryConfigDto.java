@@ -20,6 +20,7 @@ public class FinanceCategoryConfigDto {
     private String color;
     private Integer sortOrder;
     private Boolean active;
+    private UUID branchId;
     private Instant createdAt;
     private Instant updatedAt;
 }

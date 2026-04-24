@@ -2,6 +2,7 @@ package com.ondeedu.settings.service;
 
 import com.ondeedu.common.exception.BusinessException;
 import com.ondeedu.common.exception.ResourceNotFoundException;
+import com.ondeedu.common.tenant.TenantContext;
 import com.ondeedu.settings.dto.FinanceCategoryConfigDto;
 import com.ondeedu.settings.dto.SaveFinanceCategoryRequest;
 import com.ondeedu.settings.entity.FinanceCategoryConfig;
@@ -14,6 +15,7 @@ import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
 
 import java.util.List;
 import java.util.UUID;
@@ -28,9 +30,10 @@ public class FinanceCategoryConfigService {
     private final FinanceCategoryConfigMapper mapper;
 
     @Transactional(readOnly = true)
-    @Cacheable(value = "finance-categories", key = "T(com.ondeedu.common.cache.TenantCacheKeys).fixed(#type.name())")
+    @Cacheable(value = "finance-categories", key = "T(com.ondeedu.common.cache.TenantCacheKeys).fixed(#type.name()) + '::branch=' + T(com.ondeedu.common.tenant.TenantContext).getBranchId()")
     public List<FinanceCategoryConfigDto> getAll(FinanceCategoryType type) {
-        return repository.findAllByTypeOrderBySortOrderAscNameAsc(type)
+        UUID branchId = resolveCurrentBranchId();
+        return repository.findAllByTypeAndBranchOrderBySortOrderAscNameAsc(type, branchId)
                 .stream()
                 .map(mapper::toDto)
                 .collect(Collectors.toList());
@@ -39,13 +42,15 @@ public class FinanceCategoryConfigService {
     @Transactional
     @CacheEvict(value = "finance-categories", allEntries = true)
     public FinanceCategoryConfigDto create(FinanceCategoryType type, SaveFinanceCategoryRequest request) {
-        if (repository.existsByTypeAndNameIgnoreCase(type, request.getName())) {
+        UUID branchId = resolveCurrentBranchId();
+        if (repository.existsByTypeAndNameIgnoreCaseAndBranchId(type, request.getName(), branchId)) {
             throw new BusinessException("DUPLICATE_FINANCE_CATEGORY",
                     type + " category with name '" + request.getName() + "' already exists");
         }
 
         FinanceCategoryConfig entity = mapper.toEntity(request);
         entity.setType(type);
+        entity.setBranchId(branchId);
         entity = repository.save(entity);
         log.info("Created finance category config: {} [{}]", entity.getName(), type);
         return mapper.toDto(entity);
@@ -62,8 +67,9 @@ public class FinanceCategoryConfigService {
                     "Category belongs to " + entity.getType() + ", not " + type);
         }
 
+        UUID branchId = resolveCurrentBranchId();
         if (!entity.getName().equalsIgnoreCase(request.getName())
-                && repository.existsByTypeAndNameIgnoreCase(type, request.getName())) {
+                && repository.existsByTypeAndNameIgnoreCaseAndBranchId(type, request.getName(), branchId)) {
             throw new BusinessException("DUPLICATE_FINANCE_CATEGORY",
                     type + " category with name '" + request.getName() + "' already exists");
         }
@@ -87,5 +93,15 @@ public class FinanceCategoryConfigService {
 
         repository.delete(entity);
         log.info("Deleted finance category config: {} [{}]", id, type);
+    }
+
+    private UUID resolveCurrentBranchId() {
+        String rawBranchId = TenantContext.getBranchId();
+        if (!StringUtils.hasText(rawBranchId)) return null;
+        try {
+            return UUID.fromString(rawBranchId.trim());
+        } catch (IllegalArgumentException e) {
+            return null;
+        }
     }
 }

@@ -1,6 +1,8 @@
 package com.ondeedu.analytics.export;
 
 import com.ondeedu.analytics.dto.response.*;
+import com.ondeedu.analytics.dto.response.TeacherCourseAttendanceResponse;
+import com.ondeedu.analytics.dto.response.TeacherCourseAttendanceResponse.CourseLessonDetail;
 import org.apache.poi.ss.usermodel.Cell;
 import org.apache.poi.ss.usermodel.CellStyle;
 import org.apache.poi.ss.usermodel.Font;
@@ -398,6 +400,46 @@ public class AnalyticsExcelExportService {
             return baos.toByteArray();
         } catch (IOException e) {
             throw new IllegalStateException("Failed to generate group attendance Excel report", e);
+        }
+    }
+
+    public byte[] exportTeacherCourseAttendance(TeacherCourseAttendanceResponse data) {
+        try (XSSFWorkbook workbook = new XSSFWorkbook(); ByteArrayOutputStream baos = new ByteArrayOutputStream()) {
+            CellStyle headerStyle = createHeaderStyle(workbook);
+
+            Sheet summary = workbook.createSheet("Сводка");
+            int r = 0;
+            r = writeSectionHeader(summary, r, "Параметры отчета", headerStyle);
+            r = writeKv(summary, r, "Преподаватель", data.getTeacherName());
+            r = writeKv(summary, r, "Курс", data.getCourseName());
+            r = writeKv(summary, r, "Месяц", data.getMonth());
+            r = writeKv(summary, r, "Средняя посещаемость (%)", data.getAvgAttendanceRate());
+            r = writeKv(summary, r, "Всего занятий", data.getTotalLessons());
+            r = writeKv(summary, r, "Посещено", data.getAttendedLessons());
+            r = writeKv(summary, r, "Отсутствовали", data.getAbsentLessons());
+            r = writeKv(summary, r, "Планируется", data.getPlannedLessons());
+            autoSize(summary, 2);
+
+            Sheet lessons = workbook.createSheet("Занятия");
+            writeHeader(lessons, 0, headerStyle, "Дата", "Тип", "Всего студентов",
+                    "Посетили", "Отсутствовали", "Планируется", "Посещаемость (%)");
+            int lr = 1;
+            for (CourseLessonDetail row : safeList(data.getLessons())) {
+                Row x = lessons.createRow(lr++);
+                setCell(x, 0, row.getLessonDate());
+                setCell(x, 1, row.getLessonType());
+                setCell(x, 2, row.getTotalStudents());
+                setCell(x, 3, row.getAttendedCount());
+                setCell(x, 4, row.getAbsentCount());
+                setCell(x, 5, row.getPlannedLessons());
+                setCell(x, 6, row.getAttendanceRate());
+            }
+            autoSize(lessons, 7);
+
+            workbook.write(baos);
+            return baos.toByteArray();
+        } catch (IOException e) {
+            throw new IllegalStateException("Failed to generate teacher course attendance Excel report", e);
         }
     }
 

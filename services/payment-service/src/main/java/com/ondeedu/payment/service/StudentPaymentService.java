@@ -155,7 +155,7 @@ public class StudentPaymentService {
         // HIGH-3: SQL-level filtering — no findAll() + Java filter
         List<Subscription> activeSubs = subscriptionRepository.findActiveInPeriod(
                 List.of(SubscriptionStatus.ACTIVE, SubscriptionStatus.EXPIRED),
-                firstDay, lastDay);
+                firstDay, lastDay, resolveCurrentBranchId());
 
         if (activeSubs.isEmpty()) {
             return MonthlyOverviewResponse.builder()
@@ -261,7 +261,7 @@ public class StudentPaymentService {
         // HIGH-3: SQL-level filtering — подписки активные на указанный месяц
         List<Subscription> activeSubs = subscriptionRepository.findActiveInPeriod(
                 List.of(SubscriptionStatus.ACTIVE, SubscriptionStatus.EXPIRED),
-                firstDayOfMonth, lastDayOfMonth);
+                firstDayOfMonth, lastDayOfMonth, resolveCurrentBranchId());
 
         if (activeSubs.isEmpty()) return List.of();
 

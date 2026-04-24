@@ -3,6 +3,8 @@ package com.ondeedu.settings.dto;
 import jakarta.validation.constraints.NotBlank;
 import lombok.Data;
 
+import java.util.UUID;
+
 @Data
 public class SaveAttendanceStatusRequest {
 
@@ -18,4 +20,6 @@ public class SaveAttendanceStatusRequest {
     private String color = "#4CAF50";
 
     private Integer sortOrder = 0;
+
+    private UUID branchId;
 }

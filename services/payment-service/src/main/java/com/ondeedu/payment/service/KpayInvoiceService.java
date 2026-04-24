@@ -92,7 +92,7 @@ public class KpayInvoiceService {
         LocalDate lastDay = targetMonth.atEndOfMonth();
 
         List<Subscription> subscriptions = subscriptionRepository.findActiveInPeriod(
-                List.of(SubscriptionStatus.ACTIVE, SubscriptionStatus.EXPIRED), firstDay, lastDay);
+                List.of(SubscriptionStatus.ACTIVE, SubscriptionStatus.EXPIRED), firstDay, lastDay, resolveCurrentBranchId());
 
         if (subscriptions.isEmpty()) {
             return GenerateKpayInvoicesResponse.builder()
@@ -608,5 +608,11 @@ public class KpayInvoiceService {
                 .createdAt(invoice.getCreatedAt())
                 .updatedAt(invoice.getUpdatedAt())
                 .build();
+    }
+
+    private UUID resolveCurrentBranchId() {
+        String raw = com.ondeedu.common.tenant.TenantContext.getBranchId();
+        if (!StringUtils.hasText(raw)) return null;
+        try { return UUID.fromString(raw.trim()); } catch (IllegalArgumentException e) { return null; }
     }
 }
