@@ -165,12 +165,16 @@ public class AnalyticsRepository {
     // ФИНАНСЫ
     // ─────────────────────────────────────────────────────────────────────────
 
-    /** Доходы / расходы итого за период */
+    /** Доходы / расходы итого за период (включая student_payments как доход) */
     public Map<String, Object> getFinanceSummary(String schema, LocalDate from, LocalDate to) {
         String branchId = resolveCurrentBranchId();
         String sql = """
                 SELECT
-                    COALESCE(SUM(CASE WHEN type = 'INCOME' THEN amount ELSE 0 END), 0) AS revenue,
+                    COALESCE(SUM(CASE WHEN type = 'INCOME' THEN amount ELSE 0 END), 0)
+                    + COALESCE((SELECT SUM(sp.amount) FROM :schema.student_payments sp
+                                WHERE sp.paid_at BETWEEN :from AND :to
+                                  AND (CAST(:branchId AS UUID) IS NULL OR sp.branch_id = CAST(:branchId AS UUID))), 0)
+                    AS revenue,
                     COALESCE(SUM(CASE WHEN type = 'EXPENSE' THEN amount ELSE 0 END), 0) AS expenses
                 FROM :schema.transactions
                 WHERE transaction_date BETWEEN :from AND :to
@@ -180,20 +184,30 @@ public class AnalyticsRepository {
         return jdbc.queryForMap(sql, new MapSqlParameterSource("from", from).addValue("to", to).addValue("branchId", branchId));
     }
 
-    /** Финансы по месяцам */
+    /** Финансы по месяцам (включая student_payments как доход) */
     public List<Map<String, Object>> getMonthlyFinance(String schema, LocalDate from, LocalDate to) {
         String branchId = resolveCurrentBranchId();
         String sql = """
-                SELECT
-                    TO_CHAR(transaction_date, 'YYYY-MM') AS month,
-                    COALESCE(SUM(CASE WHEN type = 'INCOME' THEN amount ELSE 0 END), 0) AS revenue,
-                    COALESCE(SUM(CASE WHEN type = 'EXPENSE' THEN amount ELSE 0 END), 0) AS expenses
-                FROM :schema.transactions
-                WHERE transaction_date BETWEEN :from AND :to
-                  AND status = 'COMPLETED'
-                  AND (CAST(:branchId AS UUID) IS NULL OR branch_id = CAST(:branchId AS UUID))
-                GROUP BY TO_CHAR(transaction_date, 'YYYY-MM')
-                ORDER BY 1
+                SELECT month, SUM(revenue) AS revenue, SUM(expenses) AS expenses
+                FROM (
+                    SELECT TO_CHAR(transaction_date, 'YYYY-MM') AS month,
+                           SUM(CASE WHEN type = 'INCOME' THEN amount ELSE 0 END) AS revenue,
+                           SUM(CASE WHEN type = 'EXPENSE' THEN amount ELSE 0 END) AS expenses
+                    FROM :schema.transactions
+                    WHERE transaction_date BETWEEN :from AND :to AND status = 'COMPLETED'
+                      AND (CAST(:branchId AS UUID) IS NULL OR branch_id = CAST(:branchId AS UUID))
+                    GROUP BY TO_CHAR(transaction_date, 'YYYY-MM')
+                    UNION ALL
+                    SELECT TO_CHAR(paid_at, 'YYYY-MM') AS month,
+                           SUM(amount) AS revenue,
+                           0 AS expenses
+                    FROM :schema.student_payments
+                    WHERE paid_at BETWEEN :from AND :to
+                      AND (CAST(:branchId AS UUID) IS NULL OR branch_id = CAST(:branchId AS UUID))
+                    GROUP BY TO_CHAR(paid_at, 'YYYY-MM')
+                ) combined
+                GROUP BY month
+                ORDER BY month
                 """.replace(":schema", schema);
         return jdbc.queryForList(sql, new MapSqlParameterSource("from", from).addValue("to", to).addValue("branchId", branchId));
     }
@@ -289,7 +303,7 @@ public class AnalyticsRepository {
                       WHERE a.student_id = s.student_id
                         AND COALESCE(l.group_id, l.service_id) = COALESCE(s.group_id, s.service_id, s.course_id)
                         AND a.status = 'ATTENDED'
-                        AND (:branchId IS NULL OR l.branch_id = CAST(:branchId AS UUID))
+                        AND (CAST(:branchId AS UUID) IS NULL OR l.branch_id = CAST(:branchId AS UUID))
                     ) AS attendance_count
                 FROM :schema.subscriptions s
                 JOIN :schema.students st ON st.id = s.student_id
@@ -354,12 +368,17 @@ public class AnalyticsRepository {
                          FROM :schema.transactions
                          WHERE type = 'INCOME' AND status = 'COMPLETED'
                            AND transaction_date BETWEEN :from AND :to
-                           AND (:branchId IS NULL OR branch_id = CAST(:branchId AS UUID))) AS total_revenue,
+                           AND (CAST(:branchId AS UUID) IS NULL OR branch_id = CAST(:branchId AS UUID)))
+                        + (SELECT COALESCE(SUM(amount), 0)
+                           FROM :schema.student_payments
+                           WHERE paid_at BETWEEN :from AND :to
+                             AND (CAST(:branchId AS UUID) IS NULL OR branch_id = CAST(:branchId AS UUID)))
+                        AS total_revenue,
                         (SELECT COUNT(DISTINCT student_id)
                          FROM :schema.attendances a
                          JOIN :schema.lessons l ON l.id = a.lesson_id
                          WHERE l.lesson_date BETWEEN :from AND :to
-                           AND (:branchId IS NULL OR l.branch_id = CAST(:branchId AS UUID))) AS active_count
+                           AND (CAST(:branchId AS UUID) IS NULL OR l.branch_id = CAST(:branchId AS UUID))) AS active_count
                 ) sub
                 """.replace(":schema", schema);
         BigDecimal result = jdbc.queryForObject(sql,
@@ -436,7 +455,7 @@ public class AnalyticsRepository {
                 LEFT JOIN (
                     SELECT lead_id, MIN(created_at) AS first_action_at
                     FROM :schema.lead_activities
-                    WHERE (:branchId IS NULL OR branch_id = CAST(:branchId AS UUID))
+                    WHERE (CAST(:branchId AS UUID) IS NULL OR branch_id = CAST(:branchId AS UUID))
                     GROUP BY lead_id
                 ) la ON la.lead_id = l.id
                 WHERE l.created_at::date BETWEEN :from AND :to
@@ -513,8 +532,8 @@ public class AnalyticsRepository {
     public List<Map<String, Object>> getCohortRetention(String schema, LocalDate from, LocalDate to, String cohortType) {
         String branchId = resolveCurrentBranchId();
         String cohortDateExpr = "FIRST_PAYMENT".equals(cohortType)
-                ? "(SELECT MIN(transaction_date) FROM :schema.transactions t WHERE t.student_id = s.id AND t.type = 'INCOME' AND t.status = 'COMPLETED' AND (:branchId IS NULL OR t.branch_id = CAST(:branchId AS UUID)))"
-                : "(SELECT MIN(l.lesson_date) FROM :schema.attendances a JOIN :schema.lessons l ON l.id = a.lesson_id WHERE a.student_id = s.id AND a.status = 'ATTENDED' AND (:branchId IS NULL OR l.branch_id = CAST(:branchId AS UUID)))";
+                ? "(SELECT MIN(transaction_date) FROM :schema.transactions t WHERE t.student_id = s.id AND t.type = 'INCOME' AND t.status = 'COMPLETED' AND (CAST(:branchId AS UUID) IS NULL OR t.branch_id = CAST(:branchId AS UUID)))"
+                : "(SELECT MIN(l.lesson_date) FROM :schema.attendances a JOIN :schema.lessons l ON l.id = a.lesson_id WHERE a.student_id = s.id AND a.status = 'ATTENDED' AND (CAST(:branchId AS UUID) IS NULL OR l.branch_id = CAST(:branchId AS UUID)))";
 
         String sql = """
                 WITH cohorts AS (
@@ -525,7 +544,7 @@ public class AnalyticsRepository {
                     CROSS JOIN LATERAL (SELECT %s AS cohort_date) cd
                     WHERE cohort_date IS NOT NULL
                       AND cohort_date BETWEEN :from AND :to
-                      AND (:branchId IS NULL OR s.branch_id = CAST(:branchId AS UUID))
+                      AND (CAST(:branchId AS UUID) IS NULL OR s.branch_id = CAST(:branchId AS UUID))
                 ),
                 activity AS (
                     SELECT DISTINCT
@@ -534,7 +553,7 @@ public class AnalyticsRepository {
                     FROM :schema.attendances a
                     JOIN :schema.lessons l ON l.id = a.lesson_id
                     WHERE a.status = 'ATTENDED'
-                      AND (:branchId IS NULL OR l.branch_id = CAST(:branchId AS UUID))
+                      AND (CAST(:branchId AS UUID) IS NULL OR l.branch_id = CAST(:branchId AS UUID))
                 )
                 SELECT
                     TO_CHAR(c.cohort_month, 'YYYY-MM') AS cohort_key,
@@ -958,7 +977,7 @@ public class AnalyticsRepository {
                     JOIN :schema.lessons l ON l.id = a.lesson_id
                     WHERE a.status = 'ATTENDED'
                       AND l.lesson_date BETWEEN :from AND :to
-                      AND (:branchId IS NULL OR l.branch_id = CAST(:branchId AS UUID))
+                      AND (CAST(:branchId AS UUID) IS NULL OR l.branch_id = CAST(:branchId AS UUID))
                     GROUP BY student_id
                 ),
                 m1_active AS (
@@ -966,7 +985,7 @@ public class AnalyticsRepository {
                     FROM :schema.attendances a
                     JOIN :schema.lessons l ON l.id = a.lesson_id
                     WHERE a.status = 'ATTENDED'
-                      AND (:branchId IS NULL OR l.branch_id = CAST(:branchId AS UUID))
+                      AND (CAST(:branchId AS UUID) IS NULL OR l.branch_id = CAST(:branchId AS UUID))
                 ),
                 joined AS (
                     SELECT c.student_id,
@@ -975,7 +994,7 @@ public class AnalyticsRepository {
                                JOIN :schema.lessons l2 ON TRUE
                                WHERE m.student_id = c.student_id
                                  AND DATE_TRUNC('month', l2.lesson_date) = c.cohort_month + INTERVAL '1 month'
-                                 AND (:branchId IS NULL OR l2.branch_id = CAST(:branchId AS UUID))
+                                 AND (CAST(:branchId AS UUID) IS NULL OR l2.branch_id = CAST(:branchId AS UUID))
                            ) THEN 1 ELSE 0 END AS retained
                     FROM cohort c
                 )
@@ -998,7 +1017,11 @@ public class AnalyticsRepository {
         String branchId = resolveCurrentBranchId();
         String sql = """
                 SELECT
-                    COALESCE(SUM(CASE WHEN type = 'INCOME'  AND status = 'COMPLETED' THEN amount ELSE 0 END), 0) AS revenue,
+                    COALESCE(SUM(CASE WHEN type = 'INCOME' AND status = 'COMPLETED' THEN amount ELSE 0 END), 0)
+                    + COALESCE((SELECT SUM(sp.amount) FROM :schema.student_payments sp
+                                WHERE sp.paid_at = :date
+                                  AND (CAST(:branchId AS UUID) IS NULL OR sp.branch_id = CAST(:branchId AS UUID))), 0)
+                    AS revenue,
                     COALESCE(SUM(CASE WHEN type = 'EXPENSE' AND status = 'COMPLETED' THEN amount ELSE 0 END), 0) AS expenses
                 FROM :schema.transactions
                 WHERE transaction_date = :date
@@ -1156,16 +1179,20 @@ public class AnalyticsRepository {
                 FROM :schema.students s
                 LEFT JOIN (
                     SELECT student_id, SUM(amount) AS total
-                    FROM :schema.transactions
-                    WHERE type = 'INCOME' AND status = 'COMPLETED'
-                      AND (:branchId IS NULL OR branch_id = CAST(:branchId AS UUID))
-                    GROUP BY student_id
+                    FROM (
+                        SELECT student_id, amount FROM :schema.transactions
+                        WHERE type = 'INCOME' AND status = 'COMPLETED'
+                          AND (CAST(:branchId AS UUID) IS NULL OR branch_id = CAST(:branchId AS UUID))
+                        UNION ALL
+                        SELECT student_id, amount FROM :schema.student_payments
+                        WHERE (CAST(:branchId AS UUID) IS NULL OR branch_id = CAST(:branchId AS UUID))
+                    ) all_income GROUP BY student_id
                 ) paid ON paid.student_id = s.id
                 LEFT JOIN (
                     SELECT student_id, SUM(amount) AS total
                     FROM :schema.subscriptions
                     WHERE status IN ('ACTIVE', 'EXPIRED', 'COMPLETED', 'FROZEN')
-                      AND (:branchId IS NULL OR branch_id = CAST(:branchId AS UUID))
+                      AND (CAST(:branchId AS UUID) IS NULL OR branch_id = CAST(:branchId AS UUID))
                     GROUP BY student_id
                 ) subs ON subs.student_id = s.id
                 WHERE s.status = 'ACTIVE'
@@ -1200,7 +1227,7 @@ public class AnalyticsRepository {
                 LEFT JOIN :schema.courses c ON c.id = l.service_id
                 WHERE a.status = 'ATTENDED'
                   AND l.lesson_date >= CURRENT_DATE - :limitDays
-                  AND (:branchId IS NULL OR l.branch_id = CAST(:branchId AS UUID))
+                  AND (CAST(:branchId AS UUID) IS NULL OR l.branch_id = CAST(:branchId AS UUID))
                   AND NOT EXISTS (
                       SELECT 1
                       FROM :schema.subscriptions sub
@@ -1208,7 +1235,7 @@ public class AnalyticsRepository {
                         AND COALESCE(sub.group_id, sub.service_id, sub.course_id) = COALESCE(l.group_id, l.service_id)
                         AND sub.status = 'ACTIVE'
                         AND sub.lessons_left > 0
-                        AND (:branchId IS NULL OR sub.branch_id = CAST(:branchId AS UUID))
+                        AND (CAST(:branchId AS UUID) IS NULL OR sub.branch_id = CAST(:branchId AS UUID))
                   )
                 ORDER BY l.lesson_date DESC, student_name
                 """.replace(":schema", schema);
