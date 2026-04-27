@@ -16,7 +16,7 @@ public interface InventoryCategoryRepository extends JpaRepository<InventoryCate
 
     @Query("""
         SELECT c FROM InventoryCategory c
-        WHERE (:branchId IS NULL OR c.branchId = :branchId)
+        WHERE (:branchId IS NULL OR c.branchId = :branchId OR c.isSystem = true)
         ORDER BY c.sortOrder ASC, c.name ASC
         """)
     List<InventoryCategory> findAllByBranchOrdered(@Param("branchId") UUID branchId);
@@ -24,7 +24,7 @@ public interface InventoryCategoryRepository extends JpaRepository<InventoryCate
     @Query("""
         SELECT c FROM InventoryCategory c
         WHERE c.isActive = true
-          AND (:branchId IS NULL OR c.branchId = :branchId)
+          AND (:branchId IS NULL OR c.branchId = :branchId OR c.isSystem = true)
         ORDER BY c.sortOrder ASC, c.name ASC
         """)
     List<InventoryCategory> findActiveByBranch(@Param("branchId") UUID branchId);

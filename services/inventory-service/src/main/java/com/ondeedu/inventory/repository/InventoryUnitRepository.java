@@ -16,7 +16,7 @@ public interface InventoryUnitRepository extends JpaRepository<InventoryUnit, UU
 
     @Query("""
         SELECT u FROM InventoryUnit u
-        WHERE (:branchId IS NULL OR u.branchId = :branchId)
+        WHERE (:branchId IS NULL OR u.branchId = :branchId OR u.isSystem = true)
         ORDER BY u.name ASC
         """)
     List<InventoryUnit> findAllByBranchOrdered(@Param("branchId") UUID branchId);
@@ -24,7 +24,7 @@ public interface InventoryUnitRepository extends JpaRepository<InventoryUnit, UU
     @Query("""
         SELECT u FROM InventoryUnit u
         WHERE u.isActive = true
-          AND (:branchId IS NULL OR u.branchId = :branchId)
+          AND (:branchId IS NULL OR u.branchId = :branchId OR u.isSystem = true)
         ORDER BY u.name ASC
         """)
     List<InventoryUnit> findActiveByBranch(@Param("branchId") UUID branchId);
