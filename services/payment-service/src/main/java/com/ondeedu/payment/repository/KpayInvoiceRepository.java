@@ -14,6 +14,8 @@ public interface KpayInvoiceRepository extends JpaRepository<KpayInvoice, UUID>,
 
     boolean existsBySubscriptionIdAndPaymentMonth(UUID subscriptionId, String paymentMonth);
 
+    Optional<KpayInvoice> findBySubscriptionIdAndPaymentMonth(UUID subscriptionId, String paymentMonth);
+
     Optional<KpayInvoice> findByMerchantInvoiceId(String merchantInvoiceId);
 
     long countByPaymentMonthAndStatus(String paymentMonth, KpayInvoiceStatus status);

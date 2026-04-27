@@ -22,6 +22,8 @@ public interface StudentPaymentRepository extends JpaRepository<StudentPayment, 
 
     List<StudentPayment> findByStudentIdAndPaymentMonthOrderByPaidAtDesc(UUID studentId, String paymentMonth);
 
+    boolean existsBySubscriptionIdAndPaymentMonth(UUID subscriptionId, String paymentMonth);
+
     @Query("SELECT sp FROM StudentPayment sp WHERE sp.paymentMonth = :month ORDER BY sp.paidAt DESC")
     List<StudentPayment> findByPaymentMonth(@Param("month") String month);
 

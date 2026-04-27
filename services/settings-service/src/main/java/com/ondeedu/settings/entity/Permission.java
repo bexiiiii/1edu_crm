@@ -71,5 +71,10 @@ public enum Permission {
 
     // Настройки
     SETTINGS_VIEW,
-    SETTINGS_EDIT
+    SETTINGS_EDIT,
+
+    // Складской учёт (инвентаризация)
+    INVENTORY_VIEW,
+    INVENTORY_EDIT,
+    INVENTORY_DELETE,
 }

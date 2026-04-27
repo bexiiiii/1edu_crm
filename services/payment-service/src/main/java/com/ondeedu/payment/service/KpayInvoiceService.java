@@ -23,6 +23,7 @@ import com.ondeedu.payment.entity.Subscription;
 import com.ondeedu.payment.entity.SubscriptionStatus;
 import com.ondeedu.payment.repository.KpayInvoiceRepository;
 import com.ondeedu.payment.repository.PriceListRepository;
+import com.ondeedu.payment.repository.StudentPaymentRepository;
 import com.ondeedu.payment.repository.SubscriptionRepository;
 import jakarta.persistence.criteria.Predicate;
 import lombok.RequiredArgsConstructor;
@@ -65,6 +66,7 @@ public class KpayInvoiceService {
     private final SettingsGrpcClient settingsGrpcClient;
     private final KpayApiClient kpayApiClient;
     private final StudentPaymentService studentPaymentService;
+    private final StudentPaymentRepository studentPaymentRepository;
     private final ObjectMapper objectMapper;
 
     @Transactional
@@ -217,9 +219,18 @@ public class KpayInvoiceService {
 
         Subscription subscription = resolveSubscriptionForStudent(request.getStudentId(), request.getSubscriptionId(), targetMonth);
 
-        if (kpayInvoiceRepository.existsBySubscriptionIdAndPaymentMonth(subscription.getId(), targetMonth.toString())) {
-            throw new BusinessException("KPAY_INVOICE_ALREADY_EXISTS",
-                    "KPAY invoice for selected subscription and month already exists");
+        // Block if already paid via student_payments (regardless of invoice existence)
+        if (studentPaymentRepository.existsBySubscriptionIdAndPaymentMonth(subscription.getId(), targetMonth.toString())) {
+            throw new BusinessException("KPAY_SUBSCRIPTION_ALREADY_PAID",
+                    "Student has already paid for this subscription and month");
+        }
+
+        KpayInvoice existingInvoice = kpayInvoiceRepository
+                .findBySubscriptionIdAndPaymentMonth(subscription.getId(), targetMonth.toString())
+                .orElse(null);
+        if (existingInvoice != null && existingInvoice.getStatus() == KpayInvoiceStatus.PAID) {
+            throw new BusinessException("KPAY_INVOICE_ALREADY_PAID",
+                    "KPAY invoice for selected subscription and month is already paid");
         }
 
         StudentGrpcClient.StudentContactData student = studentGrpcClient.getStudentContact(request.getStudentId())
@@ -247,18 +258,44 @@ public class KpayInvoiceService {
                 : "KZT";
 
         String merchantInvoiceId = buildMerchantInvoiceId(tenantId);
-        KpayInvoice invoice = KpayInvoice.builder()
-                .studentId(subscription.getStudentId())
-                .subscriptionId(subscription.getId())
-                .paymentMonth(targetMonth.toString())
-                .recipientField(recipientField.name())
-                .recipientValue(recipient)
-                .amount(amount)
-                .currency(currency)
-                .merchantInvoiceId(merchantInvoiceId)
-                .status(KpayInvoiceStatus.CREATED)
-                .requestPayload(buildRequestPayload(merchantInvoiceId, amount, recipient, currency))
-                .build();
+        KpayInvoice invoice;
+        if (existingInvoice == null) {
+            invoice = KpayInvoice.builder()
+                    .studentId(subscription.getStudentId())
+                    .subscriptionId(subscription.getId())
+                    .paymentMonth(targetMonth.toString())
+                    .recipientField(recipientField.name())
+                    .recipientValue(recipient)
+                    .amount(amount)
+                    .currency(currency)
+                    .merchantInvoiceId(merchantInvoiceId)
+                    .status(KpayInvoiceStatus.CREATED)
+                    .requestPayload(buildRequestPayload(merchantInvoiceId, amount, recipient, currency))
+                    .build();
+        } else {
+            invoice = existingInvoice;
+            invoice.setStudentId(subscription.getStudentId());
+            invoice.setSubscriptionId(subscription.getId());
+            invoice.setPaymentMonth(targetMonth.toString());
+            invoice.setRecipientField(recipientField.name());
+            invoice.setRecipientValue(recipient);
+            invoice.setAmount(amount);
+            invoice.setCurrency(currency);
+            invoice.setMerchantInvoiceId(merchantInvoiceId);
+            invoice.setStatus(KpayInvoiceStatus.CREATED);
+            invoice.setRequestPayload(buildRequestPayload(merchantInvoiceId, amount, recipient, currency));
+            invoice.setExternalInvoiceId(null);
+            invoice.setPaymentUrl(null);
+            invoice.setResponsePayload(null);
+            invoice.setWebhookPayload(null);
+            invoice.setExternalPaymentMethod(null);
+            invoice.setExternalTransactionId(null);
+            invoice.setPaidAt(null);
+            invoice.setStudentPaymentId(null);
+            invoice.setErrorMessage(null);
+            log.info("Reissuing KPAY invoice for subscription={} month={} previousStatus={}",
+                    subscription.getId(), targetMonth, existingInvoice.getStatus());
+        }
 
         invoice = kpayInvoiceRepository.save(invoice);
 

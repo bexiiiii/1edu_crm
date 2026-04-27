@@ -76,4 +76,9 @@ public enum SystemPermission {
     // Settings
     SETTINGS_VIEW,
     SETTINGS_EDIT,
+
+    // Inventory (warehouse management)
+    INVENTORY_VIEW,
+    INVENTORY_EDIT,
+    INVENTORY_DELETE,
 }

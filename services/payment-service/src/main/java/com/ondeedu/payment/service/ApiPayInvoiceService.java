@@ -226,6 +226,13 @@ public class ApiPayInvoiceService {
         }
 
         Subscription subscription = resolveSubscriptionForStudent(request.getStudentId(), request.getSubscriptionId(), targetMonth);
+
+        // Block if already paid via student_payments (regardless of invoice existence)
+        if (studentPaymentService.hasPaymentForSubscriptionAndMonth(subscription.getId(), targetMonth.toString())) {
+            throw new BusinessException("APIPAY_SUBSCRIPTION_ALREADY_PAID",
+                "Student has already paid for this subscription and month");
+        }
+
         ApiPayInvoice existingInvoice = apiPayInvoiceRepository
             .findBySubscriptionIdAndPaymentMonth(subscription.getId(), targetMonth.toString())
             .orElse(null);

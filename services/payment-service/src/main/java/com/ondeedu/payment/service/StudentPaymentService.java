@@ -459,6 +459,11 @@ public class StudentPaymentService {
         }
     }
 
+    @Transactional(readOnly = true)
+    public boolean hasPaymentForSubscriptionAndMonth(UUID subscriptionId, String paymentMonth) {
+        return paymentRepository.existsBySubscriptionIdAndPaymentMonth(subscriptionId, paymentMonth);
+    }
+
     private UUID resolveCurrentBranchId() {
         String rawBranchId = TenantContext.getBranchId();
         if (!StringUtils.hasText(rawBranchId)) return null;
