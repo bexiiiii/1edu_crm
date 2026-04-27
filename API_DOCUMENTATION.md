@@ -2,6 +2,8 @@
 
 ## Содержание
 
+0. [Release Notes (2026-04-27)](#02-release-notes-2026-04-27)
+0. [Release Notes (2026-04-23)](#01-release-notes-2026-04-23)
 0. [Release Notes (2026-04-18)](#0-release-notes-2026-04-18)
 1. [Общая информация](#1-общая-информация)
 2. [Аутентификация](#2-аутентификация)
@@ -91,6 +93,23 @@
 - **Audit logs**: уточнена работа `/api/v1/audit/system` и `/api/v1/audit/tenant`, добавлены tenant-context требования, порядок фильтров, формат записей и TTL по коллекциям.
 - **Default role permissions**: добавлены default permission-наборы для встроенных ролей `MANAGER`, `RECEPTIONIST`, `TEACHER`, `ACCOUNTANT` и fallback-логика назначения.
 - **Auth user edit**: зафиксировано, что `username` в `PUT /api/v1/auth/users/{id}` read-only, а загрузка permissions работает через `permissionsSource` (`USER` или `ROLE:*`) с обновлением claims после refresh/re-login.
+
+---
+
+## 0.2 Release Notes (2026-04-27)
+
+- **INVENTORY permissions в RBAC**: добавлены права `INVENTORY_VIEW`, `INVENTORY_EDIT`, `INVENTORY_DELETE` в `SystemPermission` и `settings Permission` enum.
+  - `MANAGER` (default) теперь включает `INVENTORY_VIEW`, `INVENTORY_EDIT`;
+  - `ACCOUNTANT` (default) теперь включает `INVENTORY_VIEW`, `INVENTORY_EDIT`;
+  - права доступны для назначения через `RoleConfig` (кастомные роли) и прямой user permissions override.
+
+- **KPAY single invoice — reissue behaviour**: `POST /api/v1/payments/kpay/invoices/single` теперь работает аналогично ApiPay:
+  - если счёт за `subscriptionId + month` уже существует и НЕ оплачен (`CREATED/PENDING/FAILED/CANCELLED/EXPIRED`) — перевыставляет (reissue) вместо ошибки дубликата;
+  - если счёт уже `PAID` — возвращает `KPAY_INVOICE_ALREADY_PAID`.
+
+- **Двойная защита от повторной оплаты (ApiPay + KPAY)**: при создании единичного инвойса (`/single`) сервис проверяет наличие записи в `student_payments` для данного `subscriptionId + month`. Если оплата уже зафиксирована — инвойс не создаётся (`APIPAY_SUBSCRIPTION_ALREADY_PAID` / `KPAY_SUBSCRIPTION_ALREADY_PAID`).
+
+- **Inventory seed data backfill**: миграция `V38__backfill_inventory_seed_data.sql` заполняет системные единицы измерения (17 шт.) и категории (11 шт.) для всех существующих тенантов, у которых дропдауны были пустые из-за отсутствия UNIQUE constraint в V31.
 
 ---
 
@@ -416,6 +435,9 @@ grant_type=password&client_id=1edu-web-app&username=<login>&password=<pass>
 | `REPORTS_VIEW` | Просмотр и генерация отчётов |
 | `SETTINGS_VIEW` | Просмотр tenant settings |
 | `SETTINGS_EDIT` | Изменение tenant settings |
+| `INVENTORY_VIEW` | Просмотр складского учёта (позиции, транзакции, категории, единицы измерения) |
+| `INVENTORY_EDIT` | Создание и редактирование позиций, запись транзакций движения товаров |
+| `INVENTORY_DELETE` | Удаление позиций инвентаря (только при нулевом остатке) |
 
 ### Default permissions для встроенных ролей
 
@@ -424,7 +446,7 @@ grant_type=password&client_id=1edu-web-app&username=<login>&password=<pass>
 2. если role attributes пусты и роль встроенная (`MANAGER`, `RECEPTIONIST`, `TEACHER`, `ACCOUNTANT`) — применяется встроенный default permission-набор.
 
 **MANAGER (default):**
-`STUDENTS_VIEW`, `STUDENTS_CREATE`, `STUDENTS_EDIT`, `GROUPS_VIEW`, `GROUPS_CREATE`, `GROUPS_EDIT`, `ROOMS_VIEW`, `LESSONS_VIEW`, `LESSONS_CREATE`, `LESSONS_EDIT`, `LESSONS_MARK_ATTENDANCE`, `LEADS_VIEW`, `LEADS_CREATE`, `LEADS_EDIT`, `SUBSCRIPTIONS_VIEW`, `SUBSCRIPTIONS_CREATE`, `SUBSCRIPTIONS_EDIT`, `PRICE_LISTS_VIEW`, `TASKS_VIEW`, `TASKS_CREATE`, `TASKS_EDIT`, `STAFF_VIEW`, `FINANCE_VIEW`, `ANALYTICS_VIEW`, `SETTINGS_VIEW`.
+`STUDENTS_VIEW`, `STUDENTS_CREATE`, `STUDENTS_EDIT`, `GROUPS_VIEW`, `GROUPS_CREATE`, `GROUPS_EDIT`, `ROOMS_VIEW`, `LESSONS_VIEW`, `LESSONS_CREATE`, `LESSONS_EDIT`, `LESSONS_MARK_ATTENDANCE`, `LEADS_VIEW`, `LEADS_CREATE`, `LEADS_EDIT`, `SUBSCRIPTIONS_VIEW`, `SUBSCRIPTIONS_CREATE`, `SUBSCRIPTIONS_EDIT`, `PRICE_LISTS_VIEW`, `TASKS_VIEW`, `TASKS_CREATE`, `TASKS_EDIT`, `STAFF_VIEW`, `FINANCE_VIEW`, `ANALYTICS_VIEW`, `SETTINGS_VIEW`, `INVENTORY_VIEW`, `INVENTORY_EDIT`.
 
 **RECEPTIONIST (default):**
 `STUDENTS_VIEW`, `STUDENTS_CREATE`, `STUDENTS_EDIT`, `GROUPS_VIEW`, `ROOMS_VIEW`, `LESSONS_VIEW`, `LESSONS_MARK_ATTENDANCE`, `LEADS_VIEW`, `LEADS_CREATE`, `LEADS_EDIT`, `SUBSCRIPTIONS_VIEW`, `SUBSCRIPTIONS_CREATE`, `PRICE_LISTS_VIEW`, `TASKS_VIEW`, `TASKS_CREATE`, `FINANCE_VIEW`, `SETTINGS_VIEW`.
@@ -433,7 +455,7 @@ grant_type=password&client_id=1edu-web-app&username=<login>&password=<pass>
 `STUDENTS_VIEW`, `GROUPS_VIEW`, `ROOMS_VIEW`, `LESSONS_VIEW`, `LESSONS_MARK_ATTENDANCE`, `TASKS_VIEW`, `ANALYTICS_VIEW`.
 
 **ACCOUNTANT (default):**
-`STUDENTS_VIEW`, `SUBSCRIPTIONS_VIEW`, `SUBSCRIPTIONS_CREATE`, `SUBSCRIPTIONS_EDIT`, `PRICE_LISTS_VIEW`, `PRICE_LISTS_CREATE`, `PRICE_LISTS_EDIT`, `FINANCE_VIEW`, `FINANCE_CREATE`, `FINANCE_EDIT`, `ANALYTICS_VIEW`, `REPORTS_VIEW`.
+`STUDENTS_VIEW`, `SUBSCRIPTIONS_VIEW`, `SUBSCRIPTIONS_CREATE`, `SUBSCRIPTIONS_EDIT`, `PRICE_LISTS_VIEW`, `PRICE_LISTS_CREATE`, `PRICE_LISTS_EDIT`, `FINANCE_VIEW`, `FINANCE_CREATE`, `FINANCE_EDIT`, `ANALYTICS_VIEW`, `REPORTS_VIEW`, `INVENTORY_VIEW`, `INVENTORY_EDIT`.
 
 > `RoleConfig` в Settings Service хранит tenant-scoped custom roles и синкает их в реальные Keycloak realm roles.
 > Built-in names (`SUPER_ADMIN`, `TENANT_ADMIN`, `MANAGER`, `TEACHER`, `RECEPTIONIST`, `ACCOUNTANT`) зарезервированы и не создаются через `RoleConfig`.
@@ -2359,8 +2381,24 @@ interface GenerateKpayInvoicesResponse {
 Пояснения:
 - `subscriptionId` optional: если не передан, backend выберет подходящий активный/expired абонемент ученика для указанного месяца;
 - `recipientField`: `PHONE | STUDENT_PHONE | PARENT_PHONE | ADDITIONAL_PHONE_1`;
-- `amount` optional: если не передан, сумма считается автоматически из абонемента.
-- при наличии нескольких релевантных абонементов у ученика рекомендуется передавать `subscriptionId` явно.
+- `amount` optional: если не передан, сумма считается автоматически из абонемента;
+- при наличии нескольких релевантных абонементов у ученика рекомендуется передавать `subscriptionId` явно;
+- если счёт за этот `subscriptionId + month` уже существует и НЕ оплачен (`CREATED/PENDING/FAILED/CANCELLED/EXPIRED`), endpoint **перевыставляет счёт (reissue)** вместо ошибки дубликата — новый `merchantInvoiceId` отправляется в KPAY;
+- если счёт уже `PAID` — endpoint возвращает `KPAY_INVOICE_ALREADY_PAID`;
+- если в `student_payments` уже есть запись оплаты за этот `subscriptionId + month` — endpoint возвращает `KPAY_SUBSCRIPTION_ALREADY_PAID` (защита от двойной оплаты).
+
+**Коды ошибок:**
+| Код | Статус | Описание |
+|-----|--------|----------|
+| `KPAY_CONFIG_NOT_FOUND` | 400 | KPAY не настроен в settings |
+| `KPAY_DISABLED` | 400 | KPAY интеграция отключена |
+| `KPAY_KEYS_REQUIRED` | 400 | Не заданы API credentials |
+| `KPAY_SUBSCRIPTION_ALREADY_PAID` | 400 | Ученик уже оплатил данный абонемент за этот месяц |
+| `KPAY_INVOICE_ALREADY_PAID` | 400 | KPAY-инвойс за этот месяц уже помечен как оплаченный |
+| `SUBSCRIPTION_NOT_FOUND` | 404 | Нет активного абонемента для ученика |
+| `STUDENT_NOT_FOUND` | 404 | Данные ученика недоступны |
+| `RECIPIENT_EMPTY` | 400 | Телефон получателя не заполнен |
+| `AMOUNT_INVALID` | 400 | Сумма должна быть больше 0 |
 
 **Response:** `ApiResponse<KpayInvoiceDto>`
 
@@ -2477,8 +2515,22 @@ interface GenerateApiPayInvoicesResponse {
 - `amount` optional: если не передан, сумма считается автоматически из абонемента;
 - для ApiPay телефон автоматически нормализуется к формату `8XXXXXXXXXX`.
 - при наличии нескольких релевантных абонементов у ученика рекомендуется передавать `subscriptionId` явно.
-- если счёт за этот `subscriptionId + month` уже существует и НЕ оплачен (`CREATED/PENDING/FAILED/CANCELLED/EXPIRED/REFUNDED`), endpoint перевыставляет счёт (reissue) вместо ошибки дубликата;
-- если счёт уже `PAID`, endpoint возвращает `APIPAY_INVOICE_ALREADY_PAID`.
+- если счёт за этот `subscriptionId + month` уже существует и НЕ оплачен (`CREATED/PENDING/FAILED/CANCELLED/EXPIRED/REFUNDED`), endpoint перевыставляет счёт (reissue) вместо ошибки дубликата — новый `merchantInvoiceId` отправляется в ApiPay;
+- если счёт уже `PAID`, endpoint возвращает `APIPAY_INVOICE_ALREADY_PAID`;
+- если в `student_payments` уже есть запись оплаты за этот `subscriptionId + month` — endpoint возвращает `APIPAY_SUBSCRIPTION_ALREADY_PAID` (защита от двойной оплаты).
+
+**Коды ошибок:**
+| Код | Статус | Описание |
+|-----|--------|----------|
+| `APIPAY_CONFIG_NOT_FOUND` | 400 | ApiPay не настроен в settings |
+| `APIPAY_DISABLED` | 400 | ApiPay интеграция отключена |
+| `APIPAY_API_KEY_REQUIRED` | 400 | Не задан API key |
+| `APIPAY_SUBSCRIPTION_ALREADY_PAID` | 400 | Ученик уже оплатил данный абонемент за этот месяц |
+| `APIPAY_INVOICE_ALREADY_PAID` | 400 | ApiPay-инвойс за этот месяц уже помечен как оплаченный |
+| `SUBSCRIPTION_NOT_FOUND` | 404 | Нет активного абонемента для ученика |
+| `STUDENT_NOT_FOUND` | 404 | Данные ученика недоступны |
+| `RECIPIENT_INVALID` | 400 | Телефон не соответствует формату `8XXXXXXXXXX` |
+| `AMOUNT_INVALID` | 400 | Сумма должна быть больше 0 |
 
 **Response:** `ApiResponse<ApiPayInvoiceDto>`
 
@@ -5209,6 +5261,26 @@ interface TenantAuditLog {
 `inventory-service` — управление складом и инвентарём: позиции склада, движения остатков, категории, единицы измерения и сводная статистика.
 
 > Все endpoints ниже branch-scoped по активному branch context (`X-Branch-ID` / JWT `branch_id`). Если активный филиал не выбран, сервис работает в tenant-wide режиме внутри текущего tenant, поэтому для branch-aware UI фронтенду лучше всегда отправлять `X-Branch-ID`.
+
+#### Права доступа (RBAC)
+
+| Действие | Необходимый permission |
+|----------|----------------------|
+| Просмотр позиций, транзакций, категорий, единиц измерения, статистики | `INVENTORY_VIEW` или `TENANT_ADMIN` |
+| Создание/редактирование позиций, запись транзакций, создание категорий/единиц | `INVENTORY_EDIT` или `TENANT_ADMIN` |
+| Удаление позиций, категорий, единиц измерения | `INVENTORY_DELETE` или `TENANT_ADMIN` |
+
+Встроенные роли с inventory доступом по умолчанию: **MANAGER** (`INVENTORY_VIEW`, `INVENTORY_EDIT`), **ACCOUNTANT** (`INVENTORY_VIEW`, `INVENTORY_EDIT`).
+
+#### Системные единицы измерения и категории
+
+При создании нового тенанта (и при применении миграции V38 для существующих тенантов) автоматически создаются:
+
+**17 системных единиц:** Штука (шт), Комплект (компл), Коробка (кор), Упаковка (упак), Килограмм (кг), Грамм (г), Литр (л), Миллилитр (мл), Метр (м), Сантиметр (см), Квадратный метр (м²), Рулон (рул), Лист (лист), Бутылка (бут), Пачка (пач), Банка (бан), Тюбик (тюб).
+
+**11 системных категорий:** Учебники, Рабочие тетради, Канцтовары, Бумага и картон, Оборудование, Мебель, Расходные материалы, Хозяйственные товары, Электроника, Спортинвентарь, Другое.
+
+> Системные единицы и категории (`is_system = true`) защищены от изменения и удаления. Если дропдауны пустые для существующего тенанта — это исправляется автоматически миграцией V38 при рестарте `tenant-service`.
 
 ### 23.1 Позиции инвентаря (Items)
 
