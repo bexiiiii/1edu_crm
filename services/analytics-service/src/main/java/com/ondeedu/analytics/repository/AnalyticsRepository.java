@@ -738,28 +738,70 @@ public class AnalyticsRepository {
      */
     public List<Map<String, Object>> getTeacherCourseLessonDays(String schema, UUID teacherId, UUID courseId, LocalDate monthStart, LocalDate monthEnd) {
         String branchId = resolveCurrentBranchId();
+        // Берём дни занятий из двух источников:
+        // 1) реальные уроки из таблицы lessons (приоритет 1)
+        // 2) ожидаемые даты из паттерна schedule_days (если урок ещё не создан, приоритет 2)
+        // DISTINCT ON (lesson_date) гарантирует один столбец на дату; реальный урок приоритетнее.
         String sql = """
-                SELECT
-                    l.id AS lesson_id,
-                    TO_CHAR(l.lesson_date, 'YYYY-MM-DD') AS lesson_date,
-                    EXTRACT(DAY FROM l.lesson_date)::INT AS day_number,
-                    CASE EXTRACT(DOW FROM l.lesson_date)
-                        WHEN 0 THEN 'ВС'
-                        WHEN 1 THEN 'ПН'
-                        WHEN 2 THEN 'ВТ'
-                        WHEN 3 THEN 'СР'
-                        WHEN 4 THEN 'ЧТ'
-                        WHEN 5 THEN 'ПТ'
-                        WHEN 6 THEN 'СБ'
-                    END AS day_of_week
-                FROM :schema.courses c
-                JOIN :schema.schedules sch ON sch.course_id = c.id AND sch.status = 'ACTIVE'
-                JOIN :schema.lessons l ON l.group_id = sch.id
-                WHERE c.id = :courseId
-                  AND sch.teacher_id = :teacherId
-                  AND l.lesson_date BETWEEN :monthStart AND :monthEnd
-                  AND (CAST(:branchId AS UUID) IS NULL OR l.branch_id = CAST(:branchId AS UUID))
-                ORDER BY l.lesson_date
+                SELECT DISTINCT ON (lesson_date)
+                    lesson_id,
+                    lesson_date,
+                    day_number,
+                    day_of_week
+                FROM (
+                    -- реальные занятия
+                    SELECT
+                        l.id                                   AS lesson_id,
+                        TO_CHAR(l.lesson_date, 'YYYY-MM-DD')   AS lesson_date,
+                        EXTRACT(DAY  FROM l.lesson_date)::INT  AS day_number,
+                        CASE EXTRACT(DOW FROM l.lesson_date)
+                            WHEN 0 THEN 'ВС' WHEN 1 THEN 'ПН' WHEN 2 THEN 'ВТ'
+                            WHEN 3 THEN 'СР' WHEN 4 THEN 'ЧТ' WHEN 5 THEN 'ПТ' WHEN 6 THEN 'СБ'
+                        END                                    AS day_of_week,
+                        1                                      AS src_priority
+                    FROM :schema.schedules sch
+                    JOIN :schema.lessons l ON l.group_id = sch.id
+                    WHERE sch.course_id = :courseId
+                      AND sch.teacher_id = :teacherId
+                      AND sch.status = 'ACTIVE'
+                      AND l.lesson_date BETWEEN :monthStart AND :monthEnd
+                      AND (CAST(:branchId AS UUID) IS NULL OR l.branch_id = CAST(:branchId AS UUID))
+
+                    UNION ALL
+
+                    -- ожидаемые даты из расписания (если урока ещё нет)
+                    SELECT
+                        gen_random_uuid()                      AS lesson_id,
+                        TO_CHAR(d::date, 'YYYY-MM-DD')         AS lesson_date,
+                        EXTRACT(DAY  FROM d::date)::INT        AS day_number,
+                        CASE EXTRACT(DOW FROM d::date)
+                            WHEN 0 THEN 'ВС' WHEN 1 THEN 'ПН' WHEN 2 THEN 'ВТ'
+                            WHEN 3 THEN 'СР' WHEN 4 THEN 'ЧТ' WHEN 5 THEN 'ПТ' WHEN 6 THEN 'СБ'
+                        END                                    AS day_of_week,
+                        2                                      AS src_priority
+                    FROM :schema.schedules sch
+                    JOIN :schema.schedule_days sd ON sd.schedule_id = sch.id
+                    CROSS JOIN generate_series(
+                        CAST(:monthStart AS date), CAST(:monthEnd AS date), INTERVAL '1 day'
+                    ) AS d
+                    WHERE sch.course_id = :courseId
+                      AND sch.teacher_id = :teacherId
+                      AND sch.status = 'ACTIVE'
+                      AND d::date >= sch.start_date
+                      AND (sch.end_date IS NULL OR d::date <= sch.end_date)
+                      AND (CAST(:branchId AS UUID) IS NULL OR sch.branch_id = CAST(:branchId AS UUID))
+                      AND CASE EXTRACT(DOW FROM d::date)
+                              WHEN 1 THEN 'MONDAY'    WHEN 2 THEN 'TUESDAY'
+                              WHEN 3 THEN 'WEDNESDAY' WHEN 4 THEN 'THURSDAY'
+                              WHEN 5 THEN 'FRIDAY'    WHEN 6 THEN 'SATURDAY'
+                              WHEN 0 THEN 'SUNDAY'
+                          END = sd.day
+                      AND NOT EXISTS (
+                          SELECT 1 FROM :schema.lessons l2
+                          WHERE l2.group_id = sch.id AND l2.lesson_date = d::date
+                      )
+                ) combined
+                ORDER BY lesson_date, src_priority
                 """.replace(":schema", schema);
         return jdbc.queryForList(sql, new MapSqlParameterSource("teacherId", teacherId)
                 .addValue("courseId", courseId)
@@ -772,25 +814,56 @@ public class AnalyticsRepository {
      */
     public List<Map<String, Object>> getTeacherCourseAttendancePivot(String schema, UUID teacherId, UUID courseId, LocalDate monthStart, LocalDate monthEnd) {
         String branchId = resolveCurrentBranchId();
+        // Студенты берутся из student_groups напрямую.
+        // Даты занятий — LATERAL UNION: реальные уроки + ожидаемые из schedule_days.
+        // Для ожидаемых дат lesson_id = NULL, attendance_status = NOT_MARKED.
+        // Сервис фильтрует null lesson_id перед построением карты статусов.
         String sql = """
                 SELECT
-                    s.id AS student_id,
-                    CONCAT(s.first_name, ' ', s.last_name) AS student_name,
-                    s.status AS student_status,
-                    l.id AS lesson_id,
-                    TO_CHAR(l.lesson_date, 'YYYY-MM-DD') AS lesson_date,
-                    COALESCE(a.status, 'NOT_MARKED') AS attendance_status
-                FROM :schema.courses c
-                JOIN :schema.schedules sch ON sch.course_id = c.id AND sch.status = 'ACTIVE'
-                JOIN :schema.lessons l ON l.group_id = sch.id
+                    s.id                                              AS student_id,
+                    CONCAT(s.first_name, ' ', s.last_name)           AS student_name,
+                    s.status                                          AS student_status,
+                    ld.lesson_id,
+                    TO_CHAR(ld.lesson_date, 'YYYY-MM-DD')            AS lesson_date,
+                    COALESCE(a.status, 'NOT_MARKED')                 AS attendance_status
+                FROM :schema.schedules sch
                 JOIN :schema.student_groups sg ON sg.group_id = sch.id AND sg.status = 'ACTIVE'
                 JOIN :schema.students s ON s.id = sg.student_id
-                LEFT JOIN :schema.attendances a ON a.lesson_id = l.id AND a.student_id = s.id
-                WHERE c.id = :courseId
+                CROSS JOIN LATERAL (
+                    -- реальные занятия
+                    SELECT l.id AS lesson_id, l.lesson_date
+                    FROM :schema.lessons l
+                    WHERE l.group_id = sch.id
+                      AND l.lesson_date BETWEEN :monthStart AND :monthEnd
+
+                    UNION ALL
+
+                    -- ожидаемые даты из расписания (без реального урока)
+                    SELECT NULL::uuid AS lesson_id, d::date AS lesson_date
+                    FROM :schema.schedule_days sd
+                    CROSS JOIN generate_series(
+                        CAST(:monthStart AS date), CAST(:monthEnd AS date), INTERVAL '1 day'
+                    ) AS d
+                    WHERE sd.schedule_id = sch.id
+                      AND d::date >= sch.start_date
+                      AND (sch.end_date IS NULL OR d::date <= sch.end_date)
+                      AND CASE EXTRACT(DOW FROM d::date)
+                              WHEN 1 THEN 'MONDAY'    WHEN 2 THEN 'TUESDAY'
+                              WHEN 3 THEN 'WEDNESDAY' WHEN 4 THEN 'THURSDAY'
+                              WHEN 5 THEN 'FRIDAY'    WHEN 6 THEN 'SATURDAY'
+                              WHEN 0 THEN 'SUNDAY'
+                          END = sd.day
+                      AND NOT EXISTS (
+                          SELECT 1 FROM :schema.lessons l2
+                          WHERE l2.group_id = sch.id AND l2.lesson_date = d::date
+                      )
+                ) ld
+                LEFT JOIN :schema.attendances a ON a.lesson_id = ld.lesson_id AND a.student_id = s.id
+                WHERE sch.course_id = :courseId
                   AND sch.teacher_id = :teacherId
-                  AND l.lesson_date BETWEEN :monthStart AND :monthEnd
-                  AND (CAST(:branchId AS UUID) IS NULL OR l.branch_id = CAST(:branchId AS UUID))
-                ORDER BY s.last_name, s.first_name, l.lesson_date
+                  AND sch.status = 'ACTIVE'
+                  AND (CAST(:branchId AS UUID) IS NULL OR sch.branch_id = CAST(:branchId AS UUID))
+                ORDER BY s.last_name, s.first_name, ld.lesson_date
                 """.replace(":schema", schema);
         return jdbc.queryForList(sql, new MapSqlParameterSource("teacherId", teacherId)
                 .addValue("courseId", courseId)

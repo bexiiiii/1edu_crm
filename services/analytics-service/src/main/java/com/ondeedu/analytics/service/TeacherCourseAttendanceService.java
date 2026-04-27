@@ -106,7 +106,10 @@ public class TeacherCourseAttendanceService {
             UUID studentId = entry.getKey();
 
             // map lessonId -> status для данного студента
+            // Строки с null lesson_id — ожидаемые даты без реального урока;
+            // они пропускаются, а getOrDefault ниже вернёт NOT_MARKED автоматически.
             Map<UUID, String> lessonStatusMap = entry.getValue().stream()
+                    .filter(r -> r.get("lesson_id") != null)
                     .collect(Collectors.toMap(
                             r -> (UUID) r.get("lesson_id"),
                             r -> (String) r.get("attendance_status"),
