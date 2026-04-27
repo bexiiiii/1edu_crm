@@ -2,7 +2,8 @@ package com.ondeedu.analytics.export;
 
 import com.ondeedu.analytics.dto.response.*;
 import com.ondeedu.analytics.dto.response.TeacherCourseAttendanceResponse;
-import com.ondeedu.analytics.dto.response.TeacherCourseAttendanceResponse.CourseLessonDetail;
+import com.ondeedu.analytics.dto.response.TeacherCourseAttendanceResponse.LessonDayDto;
+import com.ondeedu.analytics.dto.response.TeacherCourseAttendanceResponse.StudentAttendanceRow;
 import org.apache.poi.ss.usermodel.Cell;
 import org.apache.poi.ss.usermodel.CellStyle;
 import org.apache.poi.ss.usermodel.Font;
@@ -407,40 +408,62 @@ public class AnalyticsExcelExportService {
         try (XSSFWorkbook workbook = new XSSFWorkbook(); ByteArrayOutputStream baos = new ByteArrayOutputStream()) {
             CellStyle headerStyle = createHeaderStyle(workbook);
 
+            // ── Сводка ────────────────────────────────────────────────────────
             Sheet summary = workbook.createSheet("Сводка");
             int r = 0;
-            r = writeSectionHeader(summary, r, "Параметры отчета", headerStyle);
+            r = writeSectionHeader(summary, r, "Параметры отчёта", headerStyle);
             r = writeKv(summary, r, "Преподаватель", data.getTeacherName());
             r = writeKv(summary, r, "Курс", data.getCourseName());
             r = writeKv(summary, r, "Месяц", data.getMonth());
             r = writeKv(summary, r, "Средняя посещаемость (%)", data.getAvgAttendanceRate());
             r = writeKv(summary, r, "Всего занятий", data.getTotalLessons());
-            r = writeKv(summary, r, "Посещено", data.getAttendedLessons());
-            r = writeKv(summary, r, "Отсутствовали", data.getAbsentLessons());
-            r = writeKv(summary, r, "Планируется", data.getPlannedLessons());
             autoSize(summary, 2);
 
-            Sheet lessons = workbook.createSheet("Занятия");
-            writeHeader(lessons, 0, headerStyle, "Дата", "Тип", "Всего студентов",
-                    "Посетили", "Отсутствовали", "Планируется", "Посещаемость (%)");
-            int lr = 1;
-            for (CourseLessonDetail row : safeList(data.getLessons())) {
-                Row x = lessons.createRow(lr++);
-                setCell(x, 0, row.getLessonDate());
-                setCell(x, 1, row.getLessonType());
-                setCell(x, 2, row.getTotalStudents());
-                setCell(x, 3, row.getAttendedCount());
-                setCell(x, 4, row.getAbsentCount());
-                setCell(x, 5, row.getPlannedLessons());
-                setCell(x, 6, row.getAttendanceRate());
+            // ── Pivot-таблица посещаемости ────────────────────────────────────
+            Sheet pivot = workbook.createSheet("Посещаемость");
+            java.util.List<LessonDayDto> lessonDays = safeList(data.getLessonDays());
+            java.util.List<StudentAttendanceRow> students = safeList(data.getStudents());
+
+            // Заголовки: Студент | Статус | день1 | день2 | … | Посетил | Отмечено | Ритм %
+            Row headerRow = pivot.createRow(0);
+            setStyledCell(headerRow, 0, "Студент", headerStyle);
+            setStyledCell(headerRow, 1, "Статус", headerStyle);
+            for (int i = 0; i < lessonDays.size(); i++) {
+                LessonDayDto ld = lessonDays.get(i);
+                setStyledCell(headerRow, 2 + i, ld.getDayNumber() + " " + ld.getDayOfWeek(), headerStyle);
             }
-            autoSize(lessons, 7);
+            int colAfter = 2 + lessonDays.size();
+            setStyledCell(headerRow, colAfter,     "Посетил",  headerStyle);
+            setStyledCell(headerRow, colAfter + 1, "Отмечено", headerStyle);
+            setStyledCell(headerRow, colAfter + 2, "Ритм %",   headerStyle);
+
+            // Строки студентов
+            int pr = 1;
+            for (StudentAttendanceRow student : students) {
+                Row row = pivot.createRow(pr++);
+                setCell(row, 0, student.getStudentName());
+                setCell(row, 1, student.getStudentStatus());
+                java.util.List<TeacherCourseAttendanceResponse.AttendanceCellDto> cells = safeList(student.getAttendance());
+                for (int i = 0; i < cells.size(); i++) {
+                    setCell(row, 2 + i, cells.get(i).getStatus());
+                }
+                setCell(row, colAfter,     student.getAttendedCount() + "/" + student.getTotalLessons());
+                setCell(row, colAfter + 1, student.getMarkedCount() + "/" + student.getTotalLessons());
+                setCell(row, colAfter + 2, student.getRhythmPercent());
+            }
+            autoSize(pivot, colAfter + 3);
 
             workbook.write(baos);
             return baos.toByteArray();
         } catch (IOException e) {
             throw new IllegalStateException("Failed to generate teacher course attendance Excel report", e);
         }
+    }
+
+    private void setStyledCell(Row row, int col, String value, CellStyle style) {
+        Cell cell = row.createCell(col);
+        cell.setCellValue(value);
+        cell.setCellStyle(style);
     }
 
     public byte[] exportBranchAnalytics(BranchAnalyticsResponse data, LocalDate from, LocalDate to) {

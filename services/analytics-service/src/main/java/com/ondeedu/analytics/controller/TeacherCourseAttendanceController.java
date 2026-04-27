@@ -1,6 +1,7 @@
 package com.ondeedu.analytics.controller;
 
 import com.ondeedu.analytics.dto.response.TeacherCourseAttendanceResponse;
+import com.ondeedu.analytics.dto.response.TeacherCourseAttendanceResponse.TeacherCourseDto;
 import com.ondeedu.analytics.export.AnalyticsExcelExportService;
 import com.ondeedu.analytics.service.TeacherCourseAttendanceService;
 import com.ondeedu.common.dto.ApiResponse;
@@ -14,6 +15,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.List;
 import java.util.UUID;
 
 @RestController
@@ -24,6 +26,13 @@ public class TeacherCourseAttendanceController {
 
     private final TeacherCourseAttendanceService teacherCourseAttendanceService;
     private final AnalyticsExcelExportService excelExportService;
+
+    @GetMapping("/courses")
+    @PreAuthorize("hasAnyRole('TENANT_ADMIN', 'MANAGER', 'TEACHER') or hasAuthority('ANALYTICS_VIEW') or hasAuthority('LESSONS_VIEW')")
+    @Operation(summary = "Курсы преподавателя для дропдауна")
+    public ApiResponse<List<TeacherCourseDto>> getTeacherCourses(@RequestParam UUID teacherId) {
+        return ApiResponse.success(teacherCourseAttendanceService.getTeacherCourses(teacherId));
+    }
 
     @GetMapping
     @PreAuthorize("hasAnyRole('TENANT_ADMIN', 'MANAGER', 'TEACHER') or hasAuthority('ANALYTICS_VIEW') or hasAuthority('LESSONS_VIEW')")

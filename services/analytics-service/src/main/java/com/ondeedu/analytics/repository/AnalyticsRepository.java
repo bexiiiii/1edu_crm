@@ -734,6 +734,71 @@ public class AnalyticsRepository {
     }
 
     /**
+     * Pivot: занятия месяца для курса преподавателя (заголовки таблицы — колонки).
+     */
+    public List<Map<String, Object>> getTeacherCourseLessonDays(String schema, UUID teacherId, UUID courseId, LocalDate monthStart, LocalDate monthEnd) {
+        String branchId = resolveCurrentBranchId();
+        String sql = """
+                SELECT
+                    l.id AS lesson_id,
+                    TO_CHAR(l.lesson_date, 'YYYY-MM-DD') AS lesson_date,
+                    EXTRACT(DAY FROM l.lesson_date)::INT AS day_number,
+                    CASE EXTRACT(DOW FROM l.lesson_date)
+                        WHEN 0 THEN 'ВС'
+                        WHEN 1 THEN 'ПН'
+                        WHEN 2 THEN 'ВТ'
+                        WHEN 3 THEN 'СР'
+                        WHEN 4 THEN 'ЧТ'
+                        WHEN 5 THEN 'ПТ'
+                        WHEN 6 THEN 'СБ'
+                    END AS day_of_week
+                FROM :schema.courses c
+                JOIN :schema.schedules sch ON sch.course_id = c.id AND sch.status = 'ACTIVE'
+                JOIN :schema.lessons l ON l.group_id = sch.id
+                WHERE c.id = :courseId
+                  AND sch.teacher_id = :teacherId
+                  AND l.lesson_date BETWEEN :monthStart AND :monthEnd
+                  AND (CAST(:branchId AS UUID) IS NULL OR l.branch_id = CAST(:branchId AS UUID))
+                ORDER BY l.lesson_date
+                """.replace(":schema", schema);
+        return jdbc.queryForList(sql, new MapSqlParameterSource("teacherId", teacherId)
+                .addValue("courseId", courseId)
+                .addValue("monthStart", monthStart).addValue("monthEnd", monthEnd)
+                .addValue("branchId", branchId));
+    }
+
+    /**
+     * Pivot: посещаемость по каждому студенту на каждое занятие курса.
+     */
+    public List<Map<String, Object>> getTeacherCourseAttendancePivot(String schema, UUID teacherId, UUID courseId, LocalDate monthStart, LocalDate monthEnd) {
+        String branchId = resolveCurrentBranchId();
+        String sql = """
+                SELECT
+                    s.id AS student_id,
+                    CONCAT(s.first_name, ' ', s.last_name) AS student_name,
+                    s.status AS student_status,
+                    l.id AS lesson_id,
+                    TO_CHAR(l.lesson_date, 'YYYY-MM-DD') AS lesson_date,
+                    COALESCE(a.status, 'NOT_MARKED') AS attendance_status
+                FROM :schema.courses c
+                JOIN :schema.schedules sch ON sch.course_id = c.id AND sch.status = 'ACTIVE'
+                JOIN :schema.lessons l ON l.group_id = sch.id
+                JOIN :schema.student_groups sg ON sg.group_id = sch.id AND sg.status = 'ACTIVE'
+                JOIN :schema.students s ON s.id = sg.student_id
+                LEFT JOIN :schema.attendances a ON a.lesson_id = l.id AND a.student_id = s.id
+                WHERE c.id = :courseId
+                  AND sch.teacher_id = :teacherId
+                  AND l.lesson_date BETWEEN :monthStart AND :monthEnd
+                  AND (CAST(:branchId AS UUID) IS NULL OR l.branch_id = CAST(:branchId AS UUID))
+                ORDER BY s.last_name, s.first_name, l.lesson_date
+                """.replace(":schema", schema);
+        return jdbc.queryForList(sql, new MapSqlParameterSource("teacherId", teacherId)
+                .addValue("courseId", courseId)
+                .addValue("monthStart", monthStart).addValue("monthEnd", monthEnd)
+                .addValue("branchId", branchId));
+    }
+
+    /**
      * Информация о преподавателе.
      */
     public Map<String, Object> getTeacherInfo(String schema, UUID teacherId) {
