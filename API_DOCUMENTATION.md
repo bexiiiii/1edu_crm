@@ -2834,7 +2834,8 @@ interface SalaryPaymentDto {
 | 14.10 | `GET /api/v1/analytics/group-load` |
 | 14.11 | `GET /api/v1/analytics/room-load` |
 | 14.12 | `GET /api/v1/analytics/group-attendance` |
-| 14.13 | `GET /api/v1/analytics/teacher-course-attendance` |
+| 14.13 | `GET /api/v1/analytics/teacher-course-attendance/courses` — дропдаун курсов преподавателя |
+| 14.13 | `GET /api/v1/analytics/teacher-course-attendance` — pivot-таблица посещаемости |
 | 14.14 | `GET /api/v1/analytics/branches` |
 
 ### Excel export
@@ -3379,11 +3380,32 @@ interface GroupAttendanceResponse {
 
 **Доступ:** `TENANT_ADMIN`, `MANAGER`, `TEACHER` или permission `ANALYTICS_VIEW` / `LESSONS_VIEW`
 
+**Флоу использования:**
+1. Выбрать преподавателя → `GET /courses?teacherId=` → список курсов для дропдауна
+2. Выбрать курс и месяц → `GET ?teacherId=&courseId=&month=` → pivot-таблица
+
 ---
 
-#### `GET /api/v1/analytics/teacher-course-attendance`
+#### `GET /api/v1/analytics/teacher-course-attendance/courses` — Курсы преподавателя (дропдаун)
 
-Возвращает детальную посещаемость по занятиям выбранного курса за месяц.
+**Query Params:**
+- `teacherId` *(required)*: UUID преподавателя
+
+**Response:**
+```typescript
+interface TeacherCourseDto {
+  id: string;       // UUID курса
+  name: string;     // название курса
+  status: string;   // статус курса (ACTIVE, ARCHIVED, ...)
+}
+// Response: ApiResponse<TeacherCourseDto[]>
+```
+
+---
+
+#### `GET /api/v1/analytics/teacher-course-attendance` — Pivot-таблица посещаемости
+
+Возвращает сводную pivot-таблицу посещаемости: строки = студенты, колонки = дни занятий в выбранном месяце.
 
 **Query Params:**
 - `teacherId` *(required)*: UUID преподавателя
@@ -3397,24 +3419,42 @@ interface TeacherCourseAttendanceResponse {
   teacherName: string;
   courseId: string;
   courseName: string;
-  month: string;                    // "YYYY-MM"
-  avgAttendanceRate: number;        // средний % посещаемости
-  totalLessons: number;
-  attendedLessons: number;
-  absentLessons: number;
-  plannedLessons: number;
-  lessons: CourseLessonDetail[];
+  month: string;              // "YYYY-MM"
+  totalLessons: number;       // кол-во занятий в месяце (колонок в таблице)
+  avgAttendanceRate: number;  // средний ритм по всем студентам (%)
+
+  // Колонки таблицы — занятия месяца, упорядочены по дате
+  lessonDays: LessonDayDto[];
+
+  // Строки таблицы — студенты курса
+  students: StudentAttendanceRow[];
 }
 
-interface CourseLessonDetail {
+interface LessonDayDto {
+  lessonId: string;    // UUID занятия
+  date: string;        // "YYYY-MM-DD"
+  dayNumber: number;   // число месяца: 1, 5, 12 ...
+  dayOfWeek: string;   // "ПН" | "ВТ" | "СР" | "ЧТ" | "ПТ" | "СБ" | "ВС"
+}
+
+interface StudentAttendanceRow {
+  studentId: string;
+  studentName: string;
+  studentStatus: string;          // ACTIVE, INACTIVE ...
+
+  // Ячейки строки — по одной на каждое занятие из lessonDays (порядок совпадает)
+  attendance: AttendanceCellDto[];
+
+  attendedCount: number;    // посетил (ATTENDED + AUTO_ATTENDED)
+  markedCount: number;      // отмечено хоть как (не NOT_MARKED)
+  totalLessons: number;     // всего занятий в месяце
+  rhythmPercent: number;    // attendedCount / totalLessons * 100
+}
+
+interface AttendanceCellDto {
   lessonId: string;
-  lessonDate: string;               // "YYYY-MM-DD"
-  lessonType: string;               // GROUP / INDIVIDUAL / TRIAL
-  totalStudents: number;
-  attendedCount: number;
-  absentCount: number;
-  plannedLessons: number;
-  attendanceRate: number;           // % посещаемости на занятии
+  date: string;      // "YYYY-MM-DD"
+  status: string;    // ATTENDED | AUTO_ATTENDED | ABSENT | PLANNED | NOT_MARKED | VACATION | SICK | TRIAL
 }
 ```
 
@@ -3425,6 +3465,10 @@ interface CourseLessonDetail {
 **Query Params:** те же (`teacherId`, `courseId`, `month`)
 
 **Response:** `Content-Disposition: attachment; filename="teacher-course-attendance.xlsx"`
+
+Excel содержит два листа:
+- **Сводка** — параметры отчёта (преподаватель, курс, месяц, средняя посещаемость, кол-во занятий)
+- **Посещаемость** — pivot-таблица: колонки = дни занятий (`dayNumber dayOfWeek`), строки = студенты, ячейки = статус посещаемости + итоговые колонки (Посетил X/N, Отмечено X/N, Ритм %)
 
 ---
 
