@@ -5768,7 +5768,128 @@ interface InventoryStatsDto {
 
 ---
 
-### 23.6 Отчёт и Excel-экспорт
+### 23.6 Ревизия (Revision)
+
+Ревизия — сверка фактических остатков с учётными. Каждая ревизия:
+- фиксирует **период** (`periodFrom` / `periodTo`) и **дату проведения** (`revisionDate`)
+- для каждой позиции классифицирует отклонение: **SURPLUS** (излишек), **SHORTAGE** (недостача), **OK**
+- автоматически создаёт транзакцию `ADJUSTMENT` для каждой позиции с отклонением
+- сохраняется в историю — следующая ревизия стартует с уже откорректированных остатков
+
+```typescript
+interface InventoryRevisionDto {
+  id: string;
+  branchId: string | null;
+  revisionDate: string;        // "YYYY-MM-DD" — дата проведения
+  periodFrom: string | null;   // с какой даты проверяли движение
+  periodTo: string | null;     // по какую дату
+  status: string;              // "COMPLETED"
+  notes: string | null;
+  performedBy: string | null;  // UUID сотрудника
+  totalItems: number;
+  surplusItems: number;        // позиций с излишком
+  shortageItems: number;       // позиций с недостачей
+  okItems: number;             // позиций без отклонений
+  createdAt: string;
+}
+
+interface InventoryRevisionResultDto {
+  revisionId: string;
+  revisionDate: string;
+  periodFrom: string | null;
+  periodTo: string | null;
+  notes: string | null;
+  totalItems: number;
+  surplusItems: number;
+  shortageItems: number;
+  okItems: number;
+  lines: RevisionLineDto[];
+}
+
+interface RevisionLineDto {
+  itemId: string;
+  itemName: string;
+  systemQuantity: number;    // учётный остаток до ревизии
+  actualQuantity: number;    // фактический остаток по пересчёту
+  difference: number;        // actual - system (+излишек, -недостача)
+  discrepancyType: string;   // "OK" | "SURPLUS" | "SHORTAGE"
+  transactionId: string | null;  // UUID созданной ADJUSTMENT транзакции (null если OK)
+  notes: string | null;
+}
+```
+
+---
+
+#### `POST /api/v1/inventory/revision` — Провести ревизию
+**Доступ:** `TENANT_ADMIN` или `INVENTORY_EDIT`
+
+**Request Body:**
+```typescript
+interface InventoryRevisionRequest {
+  revisionDate: string;       // required: "YYYY-MM-DD" — дата проведения
+  periodFrom?: string;        // "YYYY-MM-DD" — начало проверяемого периода
+  periodTo?: string;          // "YYYY-MM-DD" — конец проверяемого периода
+  notes?: string;
+  items: RevisionItemRequest[];
+}
+
+interface RevisionItemRequest {
+  itemId: string;             // UUID позиции инвентаря
+  actualQuantity: number;     // фактическое количество (>= 0)
+  notes?: string;
+}
+```
+
+**Response:** `ApiResponse<InventoryRevisionResultDto>`
+
+**Пример запроса:**
+```json
+{
+  "revisionDate": "2026-04-28",
+  "periodFrom": "2026-04-01",
+  "periodTo": "2026-04-28",
+  "notes": "Плановая ревизия апрель",
+  "items": [
+    { "itemId": "uuid-1", "actualQuantity": 15.5 },
+    { "itemId": "uuid-2", "actualQuantity": 0,   "notes": "все израсходованы" },
+    { "itemId": "uuid-3", "actualQuantity": 42   }
+  ]
+}
+```
+
+**Логика:**
+- `difference > 0` → `SURPLUS` (излишек): фактически больше чем по учёту
+- `difference < 0` → `SHORTAGE` (недостача): фактически меньше чем по учёту
+- `difference = 0` → `OK`: расхождений нет, `ADJUSTMENT` не создаётся
+- Остаток каждой позиции с отклонением корректируется до `actualQuantity`
+- Результат сохраняется в историю — следующая ревизия видит уже откорректированные остатки
+
+**Ошибки:**
+- `RESOURCE_NOT_FOUND` — позиция не найдена или не в текущем филиале
+
+---
+
+#### `GET /api/v1/inventory/revisions` — История ревизий
+**Доступ:** `TENANT_ADMIN` или `INVENTORY_VIEW`
+
+**Query Params:** `page` (default `0`), `size` (default `20`)
+
+**Response:** `ApiResponse<PageResponse<InventoryRevisionDto>>`
+
+> Сортировка: `revisionDate DESC`, затем `createdAt DESC`
+
+---
+
+#### `GET /api/v1/inventory/revisions/{id}` — Детали ревизии
+**Доступ:** `TENANT_ADMIN` или `INVENTORY_VIEW`
+
+**Response:** `ApiResponse<InventoryRevisionResultDto>`
+
+> Включает полный список позиций с системным/фактическим остатком и классификацией отклонения.
+
+---
+
+### 23.7 Отчёт и Excel-экспорт
 
 #### `GET /api/v1/inventory/report` — Инвентаризационный отчёт (JSON)
 **Доступ:** `TENANT_ADMIN` или `INVENTORY_VIEW`
