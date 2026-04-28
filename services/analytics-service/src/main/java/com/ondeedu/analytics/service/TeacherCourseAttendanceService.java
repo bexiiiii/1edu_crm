@@ -96,6 +96,18 @@ public class TeacherCourseAttendanceService {
             studentStatuses.putIfAbsent(studentId, (String) row.get("student_status"));
         }
 
+        // Если pivot вернул 0 строк (CROSS JOIN LATERAL без совпадений) — подтягиваем
+        // студентов напрямую через student_groups, чтобы курс не выглядел пустым.
+        if (byStudent.isEmpty()) {
+            List<Map<String, Object>> enrolled = repo.getTeacherCourseEnrolledStudents(schema, teacherId, courseId);
+            for (Map<String, Object> row : enrolled) {
+                UUID studentId = (UUID) row.get("student_id");
+                byStudent.put(studentId, List.of());
+                studentNames.put(studentId, (String) row.get("student_name"));
+                studentStatuses.put(studentId, (String) row.get("student_status"));
+            }
+        }
+
         // 5. Строим строки таблицы
         Set<UUID> lessonIdSet = new LinkedHashSet<>(lessonIdOrder);
         List<StudentAttendanceRow> studentRows = new ArrayList<>();

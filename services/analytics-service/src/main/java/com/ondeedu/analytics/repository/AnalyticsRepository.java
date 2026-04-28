@@ -734,6 +734,31 @@ public class AnalyticsRepository {
     }
 
     /**
+     * Студенты курса преподавателя (через student_groups → schedules).
+     * Используется когда для выбранного месяца нет ни одного занятия.
+     */
+    public List<Map<String, Object>> getTeacherCourseEnrolledStudents(String schema, UUID teacherId, UUID courseId) {
+        String branchId = resolveCurrentBranchId();
+        String sql = """
+                SELECT DISTINCT
+                    s.id   AS student_id,
+                    CONCAT(s.first_name, ' ', s.last_name) AS student_name,
+                    s.status AS student_status
+                FROM :schema.schedules sch
+                JOIN :schema.student_groups sg ON sg.group_id = sch.id AND sg.status = 'ACTIVE'
+                JOIN :schema.students s ON s.id = sg.student_id
+                WHERE sch.course_id = :courseId
+                  AND sch.teacher_id = :teacherId
+                  AND sch.status = 'ACTIVE'
+                  AND (CAST(:branchId AS UUID) IS NULL OR sch.branch_id = CAST(:branchId AS UUID))
+                ORDER BY student_name
+                """.replace(":schema", schema);
+        return jdbc.queryForList(sql, new MapSqlParameterSource("teacherId", teacherId)
+                .addValue("courseId", courseId)
+                .addValue("branchId", branchId));
+    }
+
+    /**
      * Pivot: занятия месяца для курса преподавателя (заголовки таблицы — колонки).
      */
     public List<Map<String, Object>> getTeacherCourseLessonDays(String schema, UUID teacherId, UUID courseId, LocalDate monthStart, LocalDate monthEnd) {

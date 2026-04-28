@@ -136,6 +136,19 @@ public class InventoryController {
         return ApiResponse.success(inventoryService.getTransactionsByDateRange(fromDate, toDate, page, size));
     }
 
+    @GetMapping("/transactions/history")
+    @PreAuthorize("hasRole('TENANT_ADMIN') or hasAuthority('INVENTORY_VIEW')")
+    @Operation(summary = "История движения товаров", description = "Объединённый фильтр: дата, тип транзакции, поиск по названию товара")
+    public ApiResponse<PageResponse<InventoryTransactionDto>> getTransactionHistory(
+        @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fromDate,
+        @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate toDate,
+        @RequestParam(required = false) String transactionType,
+        @RequestParam(required = false) String search,
+        @RequestParam(defaultValue = "0") int page,
+        @RequestParam(defaultValue = "20") int size) {
+        return ApiResponse.success(inventoryService.getTransactionHistory(fromDate, toDate, transactionType, search, page, size));
+    }
+
     // ==================== Categories ====================
 
     @GetMapping("/categories")

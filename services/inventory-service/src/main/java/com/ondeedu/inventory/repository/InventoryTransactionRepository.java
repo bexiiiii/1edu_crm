@@ -97,4 +97,31 @@ public interface InventoryTransactionRepository extends JpaRepository<InventoryT
     List<InventoryTransaction> findAllByDateRangeForExport(@Param("fromDate") LocalDateTime fromDate,
                                                            @Param("toDate") LocalDateTime toDate,
                                                            @Param("branchId") UUID branchId);
+
+    @Query(value = """
+        SELECT t.* FROM inventory_transactions t
+        JOIN inventory_items i ON i.id = t.item_id
+        WHERE (:fromDate IS NULL OR t.transaction_date >= CAST(:fromDate AS TIMESTAMP))
+          AND (:toDate IS NULL OR t.transaction_date <= CAST(:toDate AS TIMESTAMP))
+          AND (:transactionType IS NULL OR t.transaction_type = :transactionType)
+          AND (:search IS NULL OR LOWER(i.name) LIKE LOWER(CONCAT('%', :search, '%')))
+          AND (:branchId IS NULL OR t.branch_id = CAST(:branchId AS UUID))
+        ORDER BY t.transaction_date DESC
+        """,
+        countQuery = """
+        SELECT COUNT(*) FROM inventory_transactions t
+        JOIN inventory_items i ON i.id = t.item_id
+        WHERE (:fromDate IS NULL OR t.transaction_date >= CAST(:fromDate AS TIMESTAMP))
+          AND (:toDate IS NULL OR t.transaction_date <= CAST(:toDate AS TIMESTAMP))
+          AND (:transactionType IS NULL OR t.transaction_type = :transactionType)
+          AND (:search IS NULL OR LOWER(i.name) LIKE LOWER(CONCAT('%', :search, '%')))
+          AND (:branchId IS NULL OR t.branch_id = CAST(:branchId AS UUID))
+        """,
+        nativeQuery = true)
+    Page<InventoryTransaction> findByFilters(@Param("fromDate") LocalDateTime fromDate,
+                                             @Param("toDate") LocalDateTime toDate,
+                                             @Param("transactionType") String transactionType,
+                                             @Param("search") String search,
+                                             @Param("branchId") String branchId,
+                                             Pageable pageable);
 }

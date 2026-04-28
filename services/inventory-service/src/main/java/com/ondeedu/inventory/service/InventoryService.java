@@ -34,7 +34,10 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Service
@@ -245,6 +248,51 @@ public class InventoryService {
         PageRequest pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "transactionDate"));
         Page<InventoryTransaction> pageResult = transactionRepository.findByDateRange(fromDate, toDate, branchId, pageable);
         return PageResponse.from(pageResult, transactionMapper::toDto);
+    }
+
+    @Transactional(readOnly = true)
+    public PageResponse<InventoryTransactionDto> getTransactionHistory(
+            LocalDate fromDate, LocalDate toDate, String transactionType, String search, int page, int size) {
+        String branchId = TenantContext.getBranchId();
+        if (StringUtils.hasText(branchId)) {
+            try { UUID.fromString(branchId.trim()); } catch (IllegalArgumentException e) { branchId = null; }
+        } else {
+            branchId = null;
+        }
+
+        LocalDateTime fromDt = fromDate != null ? fromDate.atStartOfDay() : null;
+        LocalDateTime toDt = toDate != null ? toDate.atTime(23, 59, 59) : null;
+        String typeParam = StringUtils.hasText(transactionType) ? transactionType.toUpperCase() : null;
+        String searchParam = StringUtils.hasText(search) ? search.trim() : null;
+
+        PageRequest pageable = PageRequest.of(page, size);
+        Page<InventoryTransaction> pageResult = transactionRepository.findByFilters(
+                fromDt, toDt, typeParam, searchParam, branchId, pageable);
+
+        Set<UUID> itemIds = pageResult.getContent().stream()
+                .map(InventoryTransaction::getItemId)
+                .collect(Collectors.toSet());
+        Map<UUID, String> itemNames = itemRepository.findAllById(itemIds).stream()
+                .collect(Collectors.toMap(InventoryItem::getId, InventoryItem::getName));
+
+        List<InventoryTransactionDto> dtos = pageResult.getContent().stream()
+                .map(t -> {
+                    InventoryTransactionDto dto = transactionMapper.toDto(t);
+                    dto.setItemName(itemNames.get(t.getItemId()));
+                    return dto;
+                }).toList();
+
+        return PageResponse.<InventoryTransactionDto>builder()
+                .content(dtos)
+                .page(pageResult.getNumber())
+                .size(pageResult.getSize())
+                .totalElements(pageResult.getTotalElements())
+                .totalPages(pageResult.getTotalPages())
+                .first(pageResult.isFirst())
+                .last(pageResult.isLast())
+                .hasNext(pageResult.hasNext())
+                .hasPrevious(pageResult.hasPrevious())
+                .build();
     }
 
     // ==================== Categories ====================
