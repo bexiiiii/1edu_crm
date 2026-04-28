@@ -3445,10 +3445,11 @@ interface StudentAttendanceRow {
   // Ячейки строки — по одной на каждое занятие из lessonDays (порядок совпадает)
   attendance: AttendanceCellDto[];
 
-  attendedCount: number;    // посетил (ATTENDED + AUTO_ATTENDED)
-  markedCount: number;      // отмечено хоть как (не NOT_MARKED)
-  totalLessons: number;     // всего занятий в месяце
-  rhythmPercent: number;    // attendedCount / totalLessons * 100
+  attendedCount: number;        // посетил (ATTENDED + AUTO_ATTENDED)
+  markedCount: number;          // отмечено хоть как (не NOT_MARKED)
+  totalLessons: number;         // всего занятий в месяце
+  rhythmPercent: number;        // attendedCount / totalLessons * 100
+  attendanceCategory: string;   // GOOD (>=80%) | AVERAGE (60-79%) | LOW (<60%) | NO_DATA
 }
 
 interface AttendanceCellDto {
@@ -5580,6 +5581,31 @@ interface InventoryTransactionDto {
 **Response:** `ApiResponse<PageResponse<InventoryTransactionDto>>`
 
 > Диапазон включительный (`transactionDate BETWEEN fromDate AND toDate`), сортировка `transactionDate DESC`
+
+---
+
+#### `GET /api/v1/inventory/transactions/history` — История движения товаров
+**Доступ:** `TENANT_ADMIN` или `INVENTORY_VIEW`
+
+Объединённый фильтр по дате, типу транзакции и названию товара. Все параметры опциональны. В ответе поле `itemName` всегда заполнено.
+
+**Query Params:**
+- `fromDate` *(optional)*: ISO date (`YYYY-MM-DD`) — начало периода (включительно, от начала дня)
+- `toDate` *(optional)*: ISO date (`YYYY-MM-DD`) — конец периода (включительно, до конца дня 23:59:59)
+- `transactionType` *(optional)*: `RECEIVED` | `ISSUED` | `RETURNED` | `ADJUSTMENT` | `WRITE_OFF` | `TRANSFER`
+- `search` *(optional)*: поиск по подстроке в названии товара (case-insensitive)
+- `page` (default `0`), `size` (default `20`)
+
+**Response:** `ApiResponse<PageResponse<InventoryTransactionDto>>`
+
+> Сортировка: `transactionDate DESC`. `itemName` заполнен через batch lookup по `itemId`.
+
+**Примеры:**
+```
+GET /api/v1/inventory/transactions/history?fromDate=2026-04-01&toDate=2026-04-30
+GET /api/v1/inventory/transactions/history?transactionType=ISSUED&search=бумага
+GET /api/v1/inventory/transactions/history?search=маркер&page=0&size=50
+```
 
 ---
 
