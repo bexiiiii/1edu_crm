@@ -231,6 +231,17 @@ public class InventoryController {
         return ApiResponse.success("Unit deleted successfully");
     }
 
+    // ==================== Revision ====================
+
+    @PostMapping("/revision")
+    @ResponseStatus(HttpStatus.OK)
+    @PreAuthorize("hasRole('TENANT_ADMIN') or hasAuthority('INVENTORY_EDIT')")
+    @Operation(summary = "Провести ревизию", description = "Сверка фактических остатков с учётными. Для каждого расхождения создаёт транзакцию ADJUSTMENT.")
+    public ApiResponse<InventoryRevisionResultDto> conductRevision(
+        @Valid @RequestBody InventoryRevisionRequest request) {
+        return ApiResponse.success(inventoryService.conductRevision(request), "Ревизия проведена успешно");
+    }
+
     // ==================== Dashboard ====================
 
     @GetMapping("/stats")

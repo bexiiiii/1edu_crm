@@ -33,6 +33,7 @@ import org.springframework.util.StringUtils;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -520,6 +521,55 @@ public class InventoryService {
             .totalInventoryValue(totalValue)
             .items(items)
             .build();
+    }
+
+    // ==================== Revision ====================
+
+    @Transactional
+    @CacheEvict(value = "inventory", allEntries = true)
+    public InventoryRevisionResultDto conductRevision(InventoryRevisionRequest request) {
+        UUID branchId = resolveCurrentBranchId();
+        List<InventoryRevisionResultDto.RevisionLineDto> lines = new ArrayList<>();
+        int adjusted = 0;
+
+        for (InventoryRevisionRequest.RevisionItem ri : request.getItems()) {
+            InventoryItem item = findItemByIdInScope(ri.getItemId(), branchId);
+            BigDecimal system = item.getQuantity();
+            BigDecimal actual = ri.getActualQuantity();
+            BigDecimal diff = actual.subtract(system);
+
+            UUID txId = null;
+            if (diff.compareTo(BigDecimal.ZERO) != 0) {
+                String notes = ri.getNotes() != null ? ri.getNotes()
+                        : (request.getNotes() != null ? request.getNotes() : "Ревизия");
+                InventoryTransaction tx = createTransaction(
+                        item.getId(), branchId, TransactionType.ADJUSTMENT,
+                        actual, system, actual, "REVISION", null, notes, null);
+                item.setQuantity(actual);
+                item.updateStatus();
+                itemRepository.save(item);
+                txId = tx.getId();
+                adjusted++;
+            }
+
+            lines.add(InventoryRevisionResultDto.RevisionLineDto.builder()
+                    .itemId(item.getId())
+                    .itemName(item.getName())
+                    .systemQuantity(system)
+                    .actualQuantity(actual)
+                    .difference(diff)
+                    .adjusted(diff.compareTo(BigDecimal.ZERO) != 0)
+                    .transactionId(txId)
+                    .build());
+        }
+
+        log.info("Revision completed: {} items checked, {} adjusted in branch: {}", lines.size(), adjusted, branchId);
+        return InventoryRevisionResultDto.builder()
+                .totalItems(lines.size())
+                .adjustedItems(adjusted)
+                .unchangedItems(lines.size() - adjusted)
+                .lines(lines)
+                .build();
     }
 
     // ==================== Helpers ====================
