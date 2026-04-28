@@ -8,6 +8,8 @@ import com.ondeedu.common.tenant.TenantContext;
 import com.ondeedu.inventory.dto.*;
 import com.ondeedu.inventory.entity.InventoryCategory;
 import com.ondeedu.inventory.entity.InventoryItem;
+import com.ondeedu.inventory.entity.InventoryRevision;
+import com.ondeedu.inventory.entity.InventoryRevisionItem;
 import com.ondeedu.inventory.entity.InventoryTransaction;
 import com.ondeedu.inventory.entity.InventoryTransaction.TransactionType;
 import com.ondeedu.inventory.entity.InventoryUnit;
@@ -17,6 +19,7 @@ import com.ondeedu.inventory.mapper.InventoryTransactionMapper;
 import com.ondeedu.inventory.mapper.InventoryUnitMapper;
 import com.ondeedu.inventory.repository.InventoryCategoryRepository;
 import com.ondeedu.inventory.repository.InventoryItemRepository;
+import com.ondeedu.inventory.repository.InventoryRevisionRepository;
 import com.ondeedu.inventory.repository.InventoryTransactionRepository;
 import com.ondeedu.inventory.repository.InventoryUnitRepository;
 import lombok.RequiredArgsConstructor;
@@ -54,6 +57,7 @@ public class InventoryService {
     private final InventoryTransactionMapper transactionMapper;
     private final InventoryCategoryMapper categoryMapper;
     private final InventoryUnitMapper unitMapper;
+    private final InventoryRevisionRepository revisionRepository;
 
     // ==================== Inventory Items ====================
 
@@ -529,8 +533,19 @@ public class InventoryService {
     @CacheEvict(value = "inventory", allEntries = true)
     public InventoryRevisionResultDto conductRevision(InventoryRevisionRequest request) {
         UUID branchId = resolveCurrentBranchId();
+
+        // Строим заголовок ревизии
+        InventoryRevision revision = InventoryRevision.builder()
+                .branchId(branchId)
+                .revisionDate(request.getRevisionDate())
+                .periodFrom(request.getPeriodFrom())
+                .periodTo(request.getPeriodTo())
+                .notes(request.getNotes())
+                .status("COMPLETED")
+                .build();
+
         List<InventoryRevisionResultDto.RevisionLineDto> lines = new ArrayList<>();
-        int adjusted = 0;
+        int surplus = 0, shortage = 0, ok = 0;
 
         for (InventoryRevisionRequest.RevisionItem ri : request.getItems()) {
             InventoryItem item = findItemByIdInScope(ri.getItemId(), branchId);
@@ -538,19 +553,46 @@ public class InventoryService {
             BigDecimal actual = ri.getActualQuantity();
             BigDecimal diff = actual.subtract(system);
 
+            String discrepancy;
             UUID txId = null;
-            if (diff.compareTo(BigDecimal.ZERO) != 0) {
-                String notes = ri.getNotes() != null ? ri.getNotes()
-                        : (request.getNotes() != null ? request.getNotes() : "Ревизия");
+
+            if (diff.compareTo(BigDecimal.ZERO) > 0) {
+                discrepancy = "SURPLUS";
+                surplus++;
+            } else if (diff.compareTo(BigDecimal.ZERO) < 0) {
+                discrepancy = "SHORTAGE";
+                shortage++;
+            } else {
+                discrepancy = "OK";
+                ok++;
+            }
+
+            // Корректировка остатков при расхождении
+            if (!discrepancy.equals("OK")) {
+                String lineNote = ri.getNotes() != null ? ri.getNotes()
+                        : (request.getNotes() != null ? "Ревизия: " + request.getNotes() : "Ревизия");
                 InventoryTransaction tx = createTransaction(
                         item.getId(), branchId, TransactionType.ADJUSTMENT,
-                        actual, system, actual, "REVISION", null, notes, null);
+                        actual, system, actual, "REVISION", null, lineNote, null);
                 item.setQuantity(actual);
                 item.updateStatus();
                 itemRepository.save(item);
                 txId = tx.getId();
-                adjusted++;
             }
+
+            // Строка ревизии для сохранения в БД
+            InventoryRevisionItem revItem = InventoryRevisionItem.builder()
+                    .revision(revision)
+                    .itemId(item.getId())
+                    .itemName(item.getName())
+                    .systemQuantity(system)
+                    .actualQuantity(actual)
+                    .difference(diff)
+                    .discrepancyType(discrepancy)
+                    .transactionId(txId)
+                    .notes(ri.getNotes())
+                    .build();
+            revision.getItems().add(revItem);
 
             lines.add(InventoryRevisionResultDto.RevisionLineDto.builder()
                     .itemId(item.getId())
@@ -558,16 +600,87 @@ public class InventoryService {
                     .systemQuantity(system)
                     .actualQuantity(actual)
                     .difference(diff)
-                    .adjusted(diff.compareTo(BigDecimal.ZERO) != 0)
+                    .discrepancyType(discrepancy)
                     .transactionId(txId)
+                    .notes(ri.getNotes())
                     .build());
         }
 
-        log.info("Revision completed: {} items checked, {} adjusted in branch: {}", lines.size(), adjusted, branchId);
+        revision.setTotalItems(lines.size());
+        revision.setSurplusItems(surplus);
+        revision.setShortageItems(shortage);
+        revision.setOkItems(ok);
+        revision = revisionRepository.save(revision);
+
+        log.info("Revision {} completed: {} items, {} surplus, {} shortage, {} ok, branch: {}",
+                revision.getId(), lines.size(), surplus, shortage, ok, branchId);
+
         return InventoryRevisionResultDto.builder()
+                .revisionId(revision.getId())
+                .revisionDate(request.getRevisionDate())
+                .periodFrom(request.getPeriodFrom())
+                .periodTo(request.getPeriodTo())
+                .notes(request.getNotes())
                 .totalItems(lines.size())
-                .adjustedItems(adjusted)
-                .unchangedItems(lines.size() - adjusted)
+                .surplusItems(surplus)
+                .shortageItems(shortage)
+                .okItems(ok)
+                .lines(lines)
+                .build();
+    }
+
+    @Transactional(readOnly = true)
+    public PageResponse<InventoryRevisionDto> getRevisions(int page, int size) {
+        UUID branchId = resolveCurrentBranchId();
+        Page<InventoryRevision> pageResult = revisionRepository.findAllByBranch(
+                branchId, PageRequest.of(page, size));
+        return PageResponse.from(pageResult, r -> InventoryRevisionDto.builder()
+                .id(r.getId())
+                .branchId(r.getBranchId())
+                .revisionDate(r.getRevisionDate())
+                .periodFrom(r.getPeriodFrom())
+                .periodTo(r.getPeriodTo())
+                .status(r.getStatus())
+                .notes(r.getNotes())
+                .performedBy(r.getPerformedBy())
+                .totalItems(r.getTotalItems())
+                .surplusItems(r.getSurplusItems())
+                .shortageItems(r.getShortageItems())
+                .okItems(r.getOkItems())
+                .createdAt(r.getCreatedAt())
+                .build());
+    }
+
+    @Transactional(readOnly = true)
+    public InventoryRevisionResultDto getRevisionDetails(UUID revisionId) {
+        UUID branchId = resolveCurrentBranchId();
+        InventoryRevision revision = revisionRepository.findById(revisionId)
+                .filter(r -> branchId == null || branchId.equals(r.getBranchId()))
+                .orElseThrow(() -> new ResourceNotFoundException("InventoryRevision", "id", revisionId));
+
+        List<InventoryRevisionResultDto.RevisionLineDto> lines = revision.getItems().stream()
+                .map(ri -> InventoryRevisionResultDto.RevisionLineDto.builder()
+                        .itemId(ri.getItemId())
+                        .itemName(ri.getItemName())
+                        .systemQuantity(ri.getSystemQuantity())
+                        .actualQuantity(ri.getActualQuantity())
+                        .difference(ri.getDifference())
+                        .discrepancyType(ri.getDiscrepancyType())
+                        .transactionId(ri.getTransactionId())
+                        .notes(ri.getNotes())
+                        .build())
+                .toList();
+
+        return InventoryRevisionResultDto.builder()
+                .revisionId(revision.getId())
+                .revisionDate(revision.getRevisionDate())
+                .periodFrom(revision.getPeriodFrom())
+                .periodTo(revision.getPeriodTo())
+                .notes(revision.getNotes())
+                .totalItems(revision.getTotalItems())
+                .surplusItems(revision.getSurplusItems())
+                .shortageItems(revision.getShortageItems())
+                .okItems(revision.getOkItems())
                 .lines(lines)
                 .build();
     }

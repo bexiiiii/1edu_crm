@@ -234,12 +234,29 @@ public class InventoryController {
     // ==================== Revision ====================
 
     @PostMapping("/revision")
-    @ResponseStatus(HttpStatus.OK)
     @PreAuthorize("hasRole('TENANT_ADMIN') or hasAuthority('INVENTORY_EDIT')")
-    @Operation(summary = "Провести ревизию", description = "Сверка фактических остатков с учётными. Для каждого расхождения создаёт транзакцию ADJUSTMENT.")
+    @Operation(summary = "Провести ревизию",
+        description = "Сверка фактических остатков с учётными. " +
+            "Для каждого расхождения создаёт транзакцию ADJUSTMENT и сохраняет ревизию в историю.")
     public ApiResponse<InventoryRevisionResultDto> conductRevision(
         @Valid @RequestBody InventoryRevisionRequest request) {
         return ApiResponse.success(inventoryService.conductRevision(request), "Ревизия проведена успешно");
+    }
+
+    @GetMapping("/revisions")
+    @PreAuthorize("hasRole('TENANT_ADMIN') or hasAuthority('INVENTORY_VIEW')")
+    @Operation(summary = "История ревизий", description = "Список всех проведённых ревизий")
+    public ApiResponse<PageResponse<InventoryRevisionDto>> getRevisions(
+        @RequestParam(defaultValue = "0") int page,
+        @RequestParam(defaultValue = "20") int size) {
+        return ApiResponse.success(inventoryService.getRevisions(page, size));
+    }
+
+    @GetMapping("/revisions/{id}")
+    @PreAuthorize("hasRole('TENANT_ADMIN') or hasAuthority('INVENTORY_VIEW')")
+    @Operation(summary = "Детали ревизии", description = "Полный результат ревизии с разбивкой по позициям")
+    public ApiResponse<InventoryRevisionResultDto> getRevisionDetails(@PathVariable UUID id) {
+        return ApiResponse.success(inventoryService.getRevisionDetails(id));
     }
 
     // ==================== Dashboard ====================
