@@ -145,6 +145,12 @@ public class TeacherCourseAttendanceService {
                     .count();
             int rhythm = totalLessons > 0 ? (int) Math.round(100.0 * attended / totalLessons) : 0;
 
+            String category;
+            if (totalLessons == 0) category = "NO_DATA";
+            else if (rhythm >= 80)  category = "GOOD";
+            else if (rhythm >= 60)  category = "AVERAGE";
+            else                    category = "LOW";
+
             studentRows.add(StudentAttendanceRow.builder()
                     .studentId(studentId)
                     .studentName(studentNames.get(studentId))
@@ -154,6 +160,7 @@ public class TeacherCourseAttendanceService {
                     .markedCount(marked)
                     .totalLessons(totalLessons)
                     .rhythmPercent(rhythm)
+                    .attendanceCategory(category)
                     .build());
 
             if (totalLessons > 0) {

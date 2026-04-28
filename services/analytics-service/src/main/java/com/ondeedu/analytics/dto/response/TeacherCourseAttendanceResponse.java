@@ -49,6 +49,12 @@ public class TeacherCourseAttendanceResponse {
         private int markedCount;     // отмечено хоть как (не NOT_MARKED)
         private int totalLessons;    // всего занятий в месяце
         private int rhythmPercent;   // attendedCount / totalLessons * 100
+
+        /**
+         * Категория посещаемости по ритму:
+         * GOOD (>=80%), AVERAGE (60-79%), LOW (<60%), NO_DATA (нет занятий)
+         */
+        private String attendanceCategory;
     }
 
     /** Одна ячейка таблицы */
