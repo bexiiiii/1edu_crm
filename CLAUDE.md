@@ -581,6 +581,15 @@ Spring Boot 3.4.2, Spring Cloud 2024.0.0, gRPC 1.68.2, Protobuf 4.29.3, PostgreS
 | `GET /api/v1/analytics/group-load` | Загрузка групп (текущий снимок) |
 | `GET /api/v1/analytics/room-load` | Загрузка аудиторий + таймлайн на дату |
 | `GET /api/v1/analytics/group-attendance/{groupId}` | Посещаемость группы по месяцам |
+| `GET /api/v1/analytics/teacher-course-attendance/courses?teacherId=` | Курсы преподавателя для дропдауна |
+| `GET /api/v1/analytics/teacher-course-attendance?teacherId=&courseId=&month=YYYY-MM` | Pivot-таблица посещаемости преподавателя по курсу |
+
+### Teacher Course Attendance — особенности реализации
+- **Колонки** — занятия месяца: UNION ALL из реальных `lessons` (priority=1) и ожидаемых дат из `schedule_days` + `generate_series` (priority=2); `DISTINCT ON (lesson_date) ORDER BY lesson_date, src_priority` выбирает реальный урок если он есть.
+- **Синтетические lesson_id** — для дат без реального урока генерируется `gen_random_uuid()`. Они никогда не попадут в attendance map → `getOrDefault(lid, "NOT_MARKED")` автоматически вернёт статус.
+- **Фоллбэк студентов** — если `getTeacherCourseAttendancePivot()` вернул 0 строк (нет занятий в месяце), `getTeacherCourseEnrolledStudents()` подтягивает студентов напрямую из `student_groups`, чтобы курс не выглядел пустым.
+- **NULL lesson_id** в pivot строках — ожидаемые даты без реального урока; фильтруются перед `Collectors.toMap` чтобы избежать NPE.
+- **generate_series** в native SQL — использовать `CAST(:param AS date)` вместо `:param::date` во избежание конфликта парсинга.
 
 ### Таблицы (добавлены Flyway V1)
 - `lessons` — занятия (group_id, teacher_id, room_id, lesson_type: GROUP/INDIVIDUAL/TRIAL)
@@ -1436,6 +1445,7 @@ page = repository.findAllByBranch(resolveCurrentBranchId(), pageable);
 | `GET /api/v1/inventory/items/{itemId}/transactions` | TENANT_ADMIN / `INVENTORY_VIEW` | История транзакций единицы |
 | `GET /api/v1/inventory/transactions?transactionType=&page=&size=` | TENANT_ADMIN / `INVENTORY_VIEW` | Фильтр транзакций по типу |
 | `GET /api/v1/inventory/transactions/date-range?fromDate=&toDate=` | TENANT_ADMIN / `INVENTORY_VIEW` | Транзакции за период |
+| `GET /api/v1/inventory/transactions/history?fromDate=&toDate=&transactionType=&search=&page=&size=` | TENANT_ADMIN / `INVENTORY_VIEW` | История движения: объединённый фильтр по дате + типу + названию товара (поиск по подстроке) |
 | `GET/POST /api/v1/inventory/categories` | TENANT_ADMIN / `INVENTORY_VIEW` / `INVENTORY_EDIT` | Категории инвентаря |
 | `GET/POST/PUT/DELETE /api/v1/inventory/categories/{id}` | TENANT_ADMIN / `INVENTORY_VIEW` / `INVENTORY_EDIT` | CRUD категории |
 | `GET/POST /api/v1/inventory/units` | TENANT_ADMIN / `INVENTORY_VIEW` / `INVENTORY_EDIT` | Единицы измерения |
@@ -1468,6 +1478,20 @@ page = repository.findAllByBranch(resolveCurrentBranchId(), pageable);
 - `inventory` — единицы инвентаря (TTL по умолчанию)
 - `inventory-categories` — категории
 - `inventory-units` — единицы измерения
+
+### История движения товаров
+`GET /api/v1/inventory/transactions/history` — объединённый фильтр:
+- `fromDate` / `toDate` (ISO date) — диапазон дат (оба опциональны)
+- `transactionType` — тип (RECEIVED/ISSUED/RETURNED/ADJUSTMENT/WRITE_OFF/TRANSFER), опционально
+- `search` — поиск по подстроке в названии товара (JOIN с `inventory_items`), опционально
+
+Ответ обогащён полем `itemName` (batch lookup по ID товаров после пагинации).
+
+### Системные категории/единицы и branch-фильтр
+Записи с `is_system=true` имеют `branch_id = NULL`. Repository-запросы должны включать `OR c.isSystem = true` (или `OR u.isSystem = true`) чтобы системные справочники всегда отображались независимо от активного филиала:
+```java
+WHERE (:branchId IS NULL OR c.branchId = :branchId OR c.isSystem = true)
+```
 
 ### TenantService integration
 При создании нового тенанта вызывается `system.ensure_inventory_schema(:schemaName)` — создаёт таблицы + seed-данные (17 системных единиц измерения + 11 категорий).
