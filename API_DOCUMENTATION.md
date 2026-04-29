@@ -192,7 +192,7 @@
 | `/api/v1/analytics/**` | analytics-service |
 | `/api/v1/reports/**` | report-service |
 | `/api/v1/auth/**` | auth-service |
-| `/api/v1/tenants/**`, `/api/v1/admin/**` | tenant-service |
+| `/api/v1/tenants/**`, `/api/v1/admin/**`, `/api/v1/subscription/**`, `/api/v1/register` | tenant-service |
 | `/api/v1/notifications/**` | notification-service |
 | `/api/v1/files/**` | file-service |
 | `/internal/aisar/**`, `/internal/ftelecom/**`, `/internal/zadarma/**` | lead-service (public webhook ingress) |
@@ -916,6 +916,86 @@ interface ChurnAnalyticsResponse {
   recentlyChurned: TenantStatsDto[];
 }
 ```
+
+---
+
+### 6.7 Telegram-уведомления SUPER_ADMIN (внутренние события)
+
+`TelegramNotificationService` (tenant-service) отправляет сообщения в Telegram-бот при ключевых событиях платформы. API эндпоинтов нет — запуск автоматический.
+
+| Событие | Триггер |
+|---|---|
+| Новый тенант зарегистрировался | `RegistrationService.registerTenant()` |
+| Тенант сменил план | `AdminDashboardService.changePlan()` или `SubscriptionService.activate()` |
+
+Конфигурация (env):
+```
+TELEGRAM_BOT_TOKEN=<bot_token>
+TELEGRAM_CHAT_ID=<super_admin_chat_id>
+```
+
+---
+
+### 6.8 SaaS Подписка (`/api/v1/subscription`)
+
+#### `GET /api/v1/subscription/plans` — Список тарифных планов
+**Доступ:** Публичный (без авторизации)
+
+Возвращает все доступные тарифы с ценами на разные периоды.
+
+**Response:** `ApiResponse<List<SubscriptionPlanDto>>`
+```typescript
+interface SubscriptionPlanDto {
+  plan: 'BASIC' | 'EXTENDED' | 'EXTENDED_PLUS';
+  monthlyPrice: number;       // цена за 1 месяц
+  sixMonthPrice: number;      // цена за 6 месяцев (в месяц)
+  annualPrice: number;        // цена за год (в месяц)
+  currency: string;           // KZT
+}
+```
+
+| План | Месяц | 6 мес (мес) | Год (мес) |
+|---|---|---|---|
+| BASIC | 20 000 тг | 18 000 тг (-10%) | 16 600 тг (-17%) |
+| EXTENDED | 30 000 тг | 27 000 тг (-10%) | 24 900 тг (-17%) |
+| EXTENDED_PLUS | 50 000 тг | 45 000 тг (-10%) | 41 500 тг (-17%) |
+
+---
+
+#### `GET /api/v1/subscription/status` — Статус подписки текущего тенанта
+**Доступ:** Аутентифицированный пользователь
+
+**Response:** `ApiResponse<SubscriptionStatusDto>`
+```typescript
+interface SubscriptionStatusDto {
+  tenantId: string;
+  plan: 'BASIC' | 'EXTENDED' | 'EXTENDED_PLUS';
+  billingPeriod: 'MONTHLY' | 'SIX_MONTHS' | 'ANNUAL';
+  accessState: 'TRIAL_ACTIVE' | 'TRIAL_EXPIRED' | 'SUBSCRIPTION_ACTIVE' | 'SUBSCRIPTION_EXPIRED' | 'SUSPENDED' | 'BANNED' | 'INACTIVE';
+  trialEndsAt: string | null;           // ISO date
+  subscriptionStartAt: string | null;
+  subscriptionEndAt: string | null;
+  subscriptionPrice: number | null;
+}
+```
+
+---
+
+#### `POST /api/v1/admin/tenants/{id}/subscription/activate` — Активировать подписку
+**Доступ:** `SUPER_ADMIN`
+
+**Request Body:**
+```json
+{
+  "plan": "EXTENDED",
+  "billingPeriod": "ANNUAL",
+  "price": 24900
+}
+```
+
+**Response:** `ApiResponse<SubscriptionStatusDto>`
+
+> После активации шлюз сбрасывает Redis кэш `sub-status:{tenantId}` — следующий запрос проходит без блокировки 402.
 
 ---
 
