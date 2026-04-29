@@ -34,6 +34,7 @@ public class SubscriptionService {
     private final TenantRepository tenantRepository;
     private final NamedParameterJdbcTemplate jdbcTemplate;
     private final StringRedisTemplate redisTemplate;
+    private final TelegramNotificationService telegramNotificationService;
 
     // ── Public plans listing ────────────────────────────────────────────────
 
@@ -96,6 +97,7 @@ public class SubscriptionService {
     public SubscriptionStatusDto activate(UUID tenantId, ActivateSubscriptionRequest request) {
         Tenant tenant = tenantRepository.findById(tenantId)
             .orElseThrow(() -> new ResourceNotFoundException("Tenant", "id", tenantId));
+        String previousPlan = tenant.getPlan() != null ? tenant.getPlan().name() : null;
 
         Instant now = Instant.now();
         Instant endAt = calculateEndDate(now, request.getBillingPeriod());
@@ -115,6 +117,11 @@ public class SubscriptionService {
 
         log.info("Activated subscription for tenant {}: plan={} billing={}",
             tenantId, request.getPlan(), request.getBillingPeriod());
+
+        telegramNotificationService.notifyPlanChanged(
+            tenantId.toString(), tenant.getName(),
+            previousPlan, request.getPlan().name()
+        );
 
         return buildStatus(tenant);
     }

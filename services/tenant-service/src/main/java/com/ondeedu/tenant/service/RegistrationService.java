@@ -30,6 +30,7 @@ public class RegistrationService {
     private final TenantService tenantService;
     private final AuthServiceClient authServiceClient;
     private final RabbitTemplate rabbitTemplate;
+    private final TelegramNotificationService telegramNotificationService;
 
     @Value("${tenant.registration.welcome-email.base-domain:${BASE_DOMAIN:${DOMAIN:1edu.kz}}}")
     private String baseDomain;
@@ -71,6 +72,10 @@ public class RegistrationService {
         }
 
         publishWelcomeEmail(request, tenant);
+        telegramNotificationService.notifyNewTenant(
+            tenantId.toString(), tenant.getName(),
+            tenant.getPlan() != null ? tenant.getPlan().name() : "BASIC"
+        );
 
         return RegisterResponse.builder()
                 .tenantId(tenantId)

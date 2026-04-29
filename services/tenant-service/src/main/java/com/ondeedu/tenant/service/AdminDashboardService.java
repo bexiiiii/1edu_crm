@@ -34,6 +34,7 @@ public class AdminDashboardService {
     private final TenantRepository tenantRepository;
     private final NamedParameterJdbcTemplate jdbc;
     private final AuditLogPublisher auditPublisher;
+    private final TelegramNotificationService telegramNotificationService;
 
     // ---- Dashboard ----
 
@@ -148,6 +149,7 @@ public class AdminDashboardService {
     public TenantStatsDto changePlan(UUID tenantId, ChangeTenantPlanRequest request) {
         Tenant tenant = tenantRepository.findById(tenantId)
                 .orElseThrow(() -> new ResourceNotFoundException("Tenant", "id", tenantId));
+        TenantPlan previousPlan = tenant.getPlan();
         tenant.setPlan(request.getPlan());
         if (request.getMaxStudents() != null) {
             tenant.setMaxStudents(request.getMaxStudents());
@@ -161,6 +163,14 @@ public class AdminDashboardService {
                 Map.of("plan", request.getPlan(),
                        "maxStudents", nullSafe(request.getMaxStudents()),
                        "maxStaff", nullSafe(request.getMaxStaff()))));
+        if (previousPlan != request.getPlan()) {
+            telegramNotificationService.notifyPlanChanged(
+                tenantId.toString(),
+                tenant.getName(),
+                previousPlan != null ? previousPlan.name() : null,
+                request.getPlan() != null ? request.getPlan().name() : null
+            );
+        }
         return buildStats(tenant);
     }
 

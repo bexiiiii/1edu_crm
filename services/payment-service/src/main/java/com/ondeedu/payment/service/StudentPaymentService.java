@@ -21,6 +21,7 @@ import java.time.YearMonth;
 import java.time.temporal.ChronoUnit;
 import java.util.*;
 import java.util.stream.Collectors;
+import java.util.HashMap;
 
 @Slf4j
 @Service
@@ -457,6 +458,49 @@ public class StudentPaymentService {
                     "amountChangeReasonOther is allowed only when amountChangeReasonCode is OTHER"
             );
         }
+    }
+
+    // ── Partial month pro-rated calculation ──────────────────────────────
+
+    @Transactional(readOnly = true)
+    public PartialMonthCalculationDto calculatePartialAmount(UUID subscriptionId, String month, LocalDate leftDate) {
+        Subscription sub = subscriptionRepository.findById(subscriptionId)
+                .orElseThrow(() -> new ResourceNotFoundException("Subscription", "id", subscriptionId));
+
+        YearMonth ym = YearMonth.parse(month);
+        if (!YearMonth.from(leftDate).equals(ym)) {
+            throw new BusinessException("PAYMENT_LEFT_DATE_MONTH_MISMATCH",
+                    "leftDate " + leftDate + " must be within month " + month);
+        }
+
+        Map<UUID, PriceList> plMap = new HashMap<>();
+        if (sub.getPriceListId() != null) {
+            priceListRepository.findById(sub.getPriceListId())
+                    .ifPresent(pl -> plMap.put(pl.getId(), pl));
+        }
+
+        BigDecimal fullMonthly = calcMonthlyExpected(sub, plMap);
+        int totalDays = ym.lengthOfMonth();
+        int activeDays = leftDate.getDayOfMonth();
+
+        BigDecimal proRated = fullMonthly
+                .multiply(BigDecimal.valueOf(activeDays))
+                .divide(BigDecimal.valueOf(totalDays), 2, RoundingMode.HALF_UP);
+
+        BigDecimal pct = BigDecimal.valueOf(activeDays)
+                .multiply(BigDecimal.valueOf(100))
+                .divide(BigDecimal.valueOf(totalDays), 0, RoundingMode.HALF_UP);
+        String description = "Активен " + activeDays + " дней из " + totalDays + " (" + pct + "%)";
+
+        return PartialMonthCalculationDto.builder()
+                .subscriptionId(subscriptionId)
+                .month(month)
+                .fullMonthlyAmount(fullMonthly)
+                .totalDaysInMonth(totalDays)
+                .activeDays(activeDays)
+                .proRatedAmount(proRated)
+                .description(description)
+                .build();
     }
 
     @Transactional(readOnly = true)

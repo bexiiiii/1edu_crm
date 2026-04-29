@@ -43,8 +43,12 @@ public abstract class BaseEntity {
 
     @PrePersist
     protected void onCreate() {
+        Instant now = Instant.now();
         if (createdAt == null) {
-            createdAt = Instant.now();
+            createdAt = now;
+        }
+        if (updatedAt == null) {
+            updatedAt = now;
         }
         if (version == null) {
             version = 0L;

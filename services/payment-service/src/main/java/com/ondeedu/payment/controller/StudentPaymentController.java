@@ -3,6 +3,7 @@ package com.ondeedu.payment.controller;
 import com.ondeedu.common.dto.ApiResponse;
 import com.ondeedu.payment.dto.*;
 import com.ondeedu.payment.service.StudentPaymentService;
+import org.springframework.format.annotation.DateTimeFormat;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -76,6 +77,20 @@ public class StudentPaymentController {
             @RequestParam(required = false) LocalDate fromDate,
             @RequestParam(required = false) LocalDate toDate) {
         return ApiResponse.success(studentPaymentService.getDebtors(month, fromDate, toDate));
+    }
+
+    // ── Partial month calculation ────────────────────────────────────────
+
+    @GetMapping("/calculate-partial")
+    @PreAuthorize("hasRole('TENANT_ADMIN') or hasAuthority('FINANCE_VIEW')")
+    @Operation(summary = "Рассчитать платёж за неполный месяц",
+               description = "Возвращает пропорциональную сумму если студент был активен не весь месяц. " +
+                             "leftDate — последний день активности студента в данном месяце.")
+    public ApiResponse<PartialMonthCalculationDto> calculatePartialAmount(
+            @RequestParam UUID subscriptionId,
+            @RequestParam String month,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate leftDate) {
+        return ApiResponse.success(studentPaymentService.calculatePartialAmount(subscriptionId, month, leftDate));
     }
 
     // ── Delete payment record ────────────────────────────────────────────

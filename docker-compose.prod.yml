@@ -1263,6 +1263,46 @@ services:
       test: ["CMD-SHELL", "wget -qO- http://localhost:8132/actuator/health | grep -q UP"]
       <<: *healthcheck-spring
 
+  telegram-bot:
+    build:
+      context: ./services/telegram-bot
+      dockerfile: Dockerfile
+    container_name: 1edu-telegram-bot
+    env_file: .env
+    environment:
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN}
+      API_BASE_URL: http://api-gateway:8090
+      KEYCLOAK_INTERNAL_URL: ${KEYCLOAK_INTERNAL_URL}
+      KEYCLOAK_REALM: ${KEYCLOAK_REALM}
+      KEYCLOAK_CLIENT_ID: ${KEYCLOAK_FRONTEND_CLIENT_ID:-1edu-web-app}
+      KEYCLOAK_CLIENT_SECRET: ""
+      SUPER_ADMIN_USERNAME: ${SUPER_ADMIN_USERNAME:-}
+      SUPER_ADMIN_PASSWORD: ${SUPER_ADMIN_PASSWORD:-}
+      CHAT_IDS_FILE: /data/admin_chat_ids.txt
+      PYTHONUNBUFFERED: "1"
+    volumes:
+      - telegram_bot_data:/data
+    networks: [1edu-network]
+    restart: unless-stopped
+    depends_on:
+      api-gateway:
+        condition: service_healthy
+      keycloak:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: "0.50"
+        reservations:
+          memory: 96M
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; import sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8140/health').getcode() == 200 else 1)\""]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
   # ══════════════════════════════════════════════════════════
   # NGINX REVERSE PROXY (routes external traffic → api-gateway)
   # ══════════════════════════════════════════════════════════
@@ -1345,6 +1385,8 @@ volumes:
   prometheus_data:
     driver: local
   grafana_data:
+    driver: local
+  telegram_bot_data:
     driver: local
 
 # ─── Network ─────────────────────────────────────────────────

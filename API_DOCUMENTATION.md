@@ -2296,6 +2296,36 @@ interface StudentDebtDto {
 
 ---
 
+#### `GET /api/v1/payments/student-payments/calculate-partial` — Расчёт платежа за неполный месяц
+**Доступ:** `TENANT_ADMIN` или permission `FINANCE_VIEW`
+
+Возвращает пропорциональную сумму платежа если студент был активен не весь месяц.
+`leftDate` — последний день активности студента в данном месяце.
+
+**Query Params:**
+| Param | Тип | Обязательный | Описание |
+|---|---|---|---|
+| `subscriptionId` | UUID | да | ID подписки |
+| `month` | string | да | Месяц в формате `YYYY-MM` |
+| `leftDate` | string | да | Последний активный день (`YYYY-MM-DD`), должен быть в указанном месяце |
+
+**Response:** `ApiResponse<PartialMonthCalculationDto>`
+```json
+{
+  "subscriptionId": "uuid",
+  "month": "2026-04",
+  "fullMonthlyAmount": 15000.00,
+  "totalDaysInMonth": 30,
+  "activeDays": 15,
+  "proRatedAmount": 7500.00,
+  "description": "Активен 15 дней из 30 (50%)"
+}
+```
+
+**Ошибки:** `400 SUBSCRIPTION_LEFT_DATE_MONTH_MISMATCH` если `leftDate` не в указанном месяце.
+
+---
+
 ### 12.4 KPAY инвойсы (`/api/v1/payments/kpay`)
 
 ```typescript
@@ -2809,6 +2839,38 @@ interface SalaryPaymentDto {
 ```
 
 **Response:** `ApiResponse<SalaryPaymentDto>`
+
+---
+
+#### `GET /api/v1/finance/salary/calculate-partial` — Расчёт зарплаты за неполный месяц
+**Доступ:** `TENANT_ADMIN` | `FINANCE_VIEW`
+
+Возвращает пропорциональную сумму зарплаты если сотрудник работал не весь месяц.
+`leftDate` — последний рабочий день сотрудника в данном месяце.
+
+**Query Params:**
+| Param | Тип | Обязательный | Описание |
+|---|---|---|---|
+| `staffId` | UUID | да | ID сотрудника |
+| `month` | string | да | Месяц в формате `YYYY-MM` |
+| `leftDate` | string | да | Последний рабочий день (`YYYY-MM-DD`), должен быть в указанном месяце |
+
+**Response:** `ApiResponse<PartialSalaryCalculationDto>`
+```json
+{
+  "staffId": "uuid",
+  "fullName": "Имя Фамилия",
+  "month": "2026-04",
+  "salaryType": "FIXED",
+  "fullSalaryAmount": 300000.00,
+  "totalDaysInMonth": 30,
+  "activeDays": 20,
+  "proRatedAmount": 200000.00,
+  "description": "Активен 20 дней из 30 (67%)"
+}
+```
+
+**Ошибки:** `400 SALARY_LEFT_DATE_MONTH_MISMATCH` если `leftDate` не в указанном месяце.
 
 ---
 

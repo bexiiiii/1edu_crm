@@ -118,4 +118,16 @@ public class FinanceController {
     public ApiResponse<SalaryPaymentDto> recordSalaryPayment(@Valid @RequestBody CreateSalaryPaymentRequest request) {
         return ApiResponse.success(salaryService.recordSalaryPayment(request), "Salary payment recorded successfully");
     }
+
+    @GetMapping("/salary/calculate-partial")
+    @PreAuthorize("hasRole('TENANT_ADMIN') or hasAuthority('FINANCE_VIEW')")
+    @Operation(summary = "Рассчитать зарплату за неполный месяц",
+               description = "Возвращает пропорциональную сумму зарплаты если сотрудник работал не весь месяц. " +
+                             "leftDate — последний рабочий день сотрудника в данном месяце.")
+    public ApiResponse<PartialSalaryCalculationDto> calculatePartialSalary(
+            @RequestParam UUID staffId,
+            @RequestParam String month,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate leftDate) {
+        return ApiResponse.success(salaryService.calculatePartialSalary(staffId, month, leftDate));
+    }
 }

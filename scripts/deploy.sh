@@ -253,9 +253,10 @@ deploy_services() {
     wait_healthy settings-service 240
 
     log "Starting dependent services"
-    compose up -d --build report-service audit-service
+    compose up -d --build report-service audit-service telegram-bot
     wait_healthy report-service 180
     wait_healthy audit-service 180
+    wait_healthy telegram-bot 120
 
     log "Starting edge services"
     compose up -d --build nginx cert-issuer
@@ -292,7 +293,9 @@ restart_service() {
     local service="${1:-}"
     [[ -n "$service" ]] || fail "Usage: ./deploy.sh restart <service-name>"
 
-    build_service_jar "$service"
+    if [[ "$service" != "telegram-bot" ]]; then
+        build_service_jar "$service"
+    fi
     log "Rebuilding and restarting $service"
     compose up -d --build --no-deps "$service"
     wait_healthy "$service" 180 || true

@@ -90,6 +90,7 @@ ONDEEDU_GOOGLE_DRIVE_OAUTH_CLIENT_ID=<google-client-id>
 ONDEEDU_GOOGLE_DRIVE_OAUTH_CLIENT_SECRET=<google-client-secret>
 ONDEEDU_YANDEX_DISK_OAUTH_CLIENT_ID=<yandex-client-id>
 ONDEEDU_YANDEX_DISK_OAUTH_CLIENT_SECRET=<yandex-client-secret>
+TELEGRAM_BOT_TOKEN=<telegram-bot-token>
 ```
 
 Then deploy:
@@ -133,6 +134,14 @@ Restart one service:
 ```bash
 ./deploy.sh restart notification-service
 ```
+
+Telegram bot:
+
+```bash
+./deploy.sh restart telegram-bot
+```
+
+После запуска откройте своего Telegram-бота и отправьте `/start`, чтобы зарегистрировать `chat_id` для in-app уведомлений супер-админа.
 
 Tail logs:
 

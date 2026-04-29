@@ -5,6 +5,7 @@ import com.ondeedu.common.exception.ResourceNotFoundException;
 import com.ondeedu.common.payroll.SalaryType;
 import com.ondeedu.common.tenant.TenantContext;
 import com.ondeedu.finance.dto.CreateSalaryPaymentRequest;
+import com.ondeedu.finance.dto.PartialSalaryCalculationDto;
 import com.ondeedu.finance.dto.SalaryMonthBreakdownDto;
 import com.ondeedu.finance.dto.SalaryOverviewDto;
 import com.ondeedu.finance.dto.SalaryPaymentDto;
@@ -150,6 +151,45 @@ public class SalaryService {
                 .totalOutstanding(totalDue.subtract(totalPaid))
                 .months(months)
                 .payments(payments.stream().map(this::toSalaryPaymentDto).toList())
+                .build();
+    }
+
+    @Transactional(readOnly = true)
+    public PartialSalaryCalculationDto calculatePartialSalary(UUID staffId, String month, LocalDate leftDate) {
+        YearMonth ym = resolveYearMonth(month, null);
+
+        if (!YearMonth.from(leftDate).equals(ym)) {
+            throw new BusinessException("SALARY_LEFT_DATE_MONTH_MISMATCH",
+                    "leftDate " + leftDate + " must be within month " + month);
+        }
+
+        SalaryComputationRow row = salaryQueryRepository
+                .findSalaryRow(staffId, ym.atDay(1), ym.atEndOfMonth())
+                .orElseThrow(() -> new ResourceNotFoundException("Staff salary profile", "staffId", staffId));
+
+        BigDecimal fullSalary = calculateDueAmount(row);
+        int totalDays = ym.lengthOfMonth();
+        int activeDays = leftDate.getDayOfMonth();
+
+        BigDecimal proRated = fullSalary
+                .multiply(BigDecimal.valueOf(activeDays))
+                .divide(BigDecimal.valueOf(totalDays), 2, RoundingMode.HALF_UP);
+
+        BigDecimal pct = BigDecimal.valueOf(activeDays)
+                .multiply(BigDecimal.valueOf(100))
+                .divide(BigDecimal.valueOf(totalDays), 0, RoundingMode.HALF_UP);
+        String description = "Активен " + activeDays + " дней из " + totalDays + " (" + pct + "%)";
+
+        return PartialSalaryCalculationDto.builder()
+                .staffId(staffId)
+                .fullName(fullName(row))
+                .month(ym.format(MONTH_FORMATTER))
+                .salaryType(row.salaryType())
+                .fullSalaryAmount(fullSalary)
+                .totalDaysInMonth(totalDays)
+                .activeDays(activeDays)
+                .proRatedAmount(proRated)
+                .description(description)
                 .build();
     }
 

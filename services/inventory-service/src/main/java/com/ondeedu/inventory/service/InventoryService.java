@@ -203,8 +203,8 @@ public class InventoryService {
 
         // Calculate new quantity based on transaction type
         switch (request.getTransactionType()) {
-            case RECEIVED, RETURNED -> quantityAfter = quantityBefore.add(quantityChange);
-            case ISSUED, WRITE_OFF -> {
+            case RECEIVED -> quantityAfter = quantityBefore.add(quantityChange);
+            case RETURNED, ISSUED, WRITE_OFF -> {
                 if (quantityBefore.compareTo(quantityChange) < 0) {
                     throw new BusinessException("INVENTORY_INSUFFICIENT_STOCK", "Insufficient stock for item: " + item.getName());
                 }
