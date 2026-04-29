@@ -1424,6 +1424,11 @@ interface StudentCallLogDto {
 
 > Все endpoints `call-logs` branch-scoped по активному branch context (`X-Branch-ID` / JWT `branch_id`).
 
+### Планировщик follow-up обзвонов
+`CallLogFollowUpScheduler` — ежедневный cron в **08:00 UTC** (настраивается `CALL_LOG_FOLLOWUP_CRON`).
+
+Логика: находит все записи с `follow_up_required = true` и `follow_up_date = сегодня`, публикует событие уведомления (`notification.exchange` / `notification.assignment`) для менеджера (`caller_staff_id`). Ошибки публикации не блокируют цикл — fire-and-forget.
+
 ---
 
 ## 9. Lead Service (8104)
@@ -5599,8 +5604,8 @@ interface InventoryTransactionDto {
 ```
 
 **Бизнес-логика:**
-- `RECEIVED`, `RETURNED` — увеличивают остаток;
-- `ISSUED`, `WRITE_OFF` — уменьшают остаток, если хватает количества;
+- `RECEIVED` — увеличивает остаток (приход);
+- `RETURNED`, `ISSUED`, `WRITE_OFF` — уменьшают остаток, если хватает количества. `RETURNED` = возврат товара со склада (расход), а не возврат на склад;
 - `ADJUSTMENT` — устанавливает абсолютное значение остатка;
 - enum содержит `TRANSFER`, но текущая сервисная логика не обрабатывает его и возвращает ошибку.
 
@@ -5928,6 +5933,8 @@ interface RevisionItemRequest {
 
 **Ошибки:**
 - `RESOURCE_NOT_FOUND` — позиция не найдена или не в текущем филиале
+
+> **Примечание:** миграция `V41` добавляет `DEFAULT NOW()` на колонку `updated_at` таблицы `inventory_revisions` — устраняет 500-ошибку при первой ревизии в новых тенантах.
 
 ---
 
