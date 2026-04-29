@@ -110,6 +110,17 @@ spring:
                 name: tenantService
                 fallbackUri: forward:/fallback/tenant
 
+        # Subscription plans & status (tenant-service)
+        - id: subscription-service
+          uri: lb://tenant-service
+          predicates:
+            - Path=/api/v1/subscription/**
+          filters:
+            - name: CircuitBreaker
+              args:
+                name: tenantService
+                fallbackUri: forward:/fallback/tenant
+
         # Student Service
         - id: student-service
           uri: lb://student-service
