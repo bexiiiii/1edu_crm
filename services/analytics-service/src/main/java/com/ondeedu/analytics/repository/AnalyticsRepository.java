@@ -1328,9 +1328,9 @@ public class AnalyticsRepository {
     // ─────────────────────────────────────────────────────────────────────────
 
     /**
-     * Студенты с отрицательным балансом.
-     * balance = SUM(payments) − SUM(subscriptions).
-     * Если balance < 0 → студент должен.
+     * Студенты с отрицательным балансом с учётом скидки.
+     * effective_amount = amount * (1 - discount_percent/100).
+     * Если balance < 0 → студент должен. При discount_percent=100 долгов нет.
      */
     public List<Map<String, Object>> getDebtors(String schema) {
         String branchId = resolveCurrentBranchId();
@@ -1338,8 +1338,18 @@ public class AnalyticsRepository {
                 SELECT
                     s.id AS student_id,
                     CONCAT(s.first_name, ' ', s.last_name) AS full_name,
-                    COALESCE(paid.total, 0) - COALESCE(subs.total, 0) AS balance
+                    COALESCE(sub_agg.max_discount, 0) AS discount_percent,
+                    COALESCE(paid.total, 0) - COALESCE(sub_agg.total_effective, 0) AS balance
                 FROM :schema.students s
+                LEFT JOIN (
+                    SELECT student_id,
+                           SUM(amount * (1.0 - COALESCE(discount_percent, 0) / 100.0)) AS total_effective,
+                           MAX(COALESCE(discount_percent, 0)) AS max_discount
+                    FROM :schema.subscriptions
+                    WHERE status IN ('ACTIVE', 'EXPIRED', 'COMPLETED', 'FROZEN')
+                      AND (CAST(:branchId AS UUID) IS NULL OR branch_id = CAST(:branchId AS UUID))
+                    GROUP BY student_id
+                ) sub_agg ON sub_agg.student_id = s.id
                 LEFT JOIN (
                     SELECT student_id, SUM(amount) AS total
                     FROM (
@@ -1351,15 +1361,8 @@ public class AnalyticsRepository {
                         WHERE (CAST(:branchId AS UUID) IS NULL OR branch_id = CAST(:branchId AS UUID))
                     ) all_income GROUP BY student_id
                 ) paid ON paid.student_id = s.id
-                LEFT JOIN (
-                    SELECT student_id, SUM(amount) AS total
-                    FROM :schema.subscriptions
-                    WHERE status IN ('ACTIVE', 'EXPIRED', 'COMPLETED', 'FROZEN')
-                      AND (CAST(:branchId AS UUID) IS NULL OR branch_id = CAST(:branchId AS UUID))
-                    GROUP BY student_id
-                ) subs ON subs.student_id = s.id
                 WHERE s.status = 'ACTIVE'
-                  AND COALESCE(paid.total, 0) - COALESCE(subs.total, 0) < 0
+                  AND COALESCE(paid.total, 0) - COALESCE(sub_agg.total_effective, 0) < 0
                   AND (CAST(:branchId AS UUID) IS NULL OR s.branch_id = CAST(:branchId AS UUID))
                 ORDER BY balance ASC
                 """.replace(":schema", schema);

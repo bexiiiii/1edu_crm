@@ -121,6 +121,9 @@ public class TenantService {
             entityManager.createNativeQuery("SELECT system.ensure_lead_activities(:schemaName)")
                 .setParameter("schemaName", schemaName)
                 .getSingleResult();
+            entityManager.createNativeQuery("SELECT system.ensure_discount_percent_schema(:schemaName)")
+                .setParameter("schemaName", schemaName)
+                .getSingleResult();
             log.info("Schema created successfully: {}", schemaName);
         } catch (Exception e) {
             log.error("Failed to create schema for tenant {}: {}", tenant.getId(), e.getMessage());

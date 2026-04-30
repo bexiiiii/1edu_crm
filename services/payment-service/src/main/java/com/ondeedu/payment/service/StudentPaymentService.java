@@ -206,6 +206,7 @@ public class StudentPaymentService {
                     .paid(paid)
                     .debt(debt)
                     .status(status)
+                    .discountPercent(sub.getDiscountPercent() != null ? sub.getDiscountPercent() : 0)
                     .build());
         }
 
@@ -319,6 +320,7 @@ public class StudentPaymentService {
                         .totalDebt(totalDebt)
                         .debtMonths(debtMonthCount)
                         .monthlyExpected(monthly)
+                        .discountPercent(sub.getDiscountPercent() != null ? sub.getDiscountPercent() : 0)
                         .build());
             }
         }
@@ -388,11 +390,20 @@ public class StudentPaymentService {
                 .build();
     }
 
-    /** Рассчитывает ежемесячный взнос. */
+    /** Рассчитывает ежемесячный взнос с учётом скидки студента. */
     private BigDecimal calcMonthlyExpected(Subscription sub, Map<UUID, PriceList> plMap) {
         int months = calcMonthsDuration(sub, plMap);
-        if (months <= 0) return sub.getAmount();
-        return sub.getAmount().divide(BigDecimal.valueOf(months), 2, RoundingMode.HALF_UP);
+        BigDecimal base = months <= 0
+                ? sub.getAmount()
+                : sub.getAmount().divide(BigDecimal.valueOf(months), 2, RoundingMode.HALF_UP);
+
+        int discount = sub.getDiscountPercent() != null ? sub.getDiscountPercent() : 0;
+        if (discount <= 0) return base;
+        if (discount >= 100) return BigDecimal.ZERO;
+
+        BigDecimal factor = BigDecimal.ONE.subtract(
+                BigDecimal.valueOf(discount).divide(BigDecimal.valueOf(100), 4, RoundingMode.HALF_UP));
+        return base.multiply(factor).setScale(2, RoundingMode.HALF_UP);
     }
 
     /** Количество месяцев в подписке. HIGH-2: принимает preloaded map вместо DB-запроса. */

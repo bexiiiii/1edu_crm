@@ -28,6 +28,19 @@ public class StudentGrpcClient {
     ) {
     }
 
+    public int getStudentDiscountPercent(UUID studentId) {
+        try {
+            StudentResponse response = studentStub.getStudent(
+                    GetStudentRequest.newBuilder().setStudentId(studentId.toString()).build()
+            );
+            if (!response.getSuccess() || !response.hasStudent()) return 0;
+            return response.getStudent().getDiscountPercent();
+        } catch (Exception e) {
+            log.warn("Could not fetch discount for student {}: {}", studentId, e.getMessage());
+            return 0;
+        }
+    }
+
     public Optional<StudentContactData> getStudentContact(UUID studentId) {
         try {
             StudentResponse response = studentStub.getStudent(

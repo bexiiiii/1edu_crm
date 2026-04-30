@@ -40,6 +40,7 @@ public class StudentDto {
     private String additionalInfo;
     private String contract;
     private String discount;
+    private Integer discountPercent;
     private String comment;
     private Boolean stateOrderParticipant;
     private String loyalty;

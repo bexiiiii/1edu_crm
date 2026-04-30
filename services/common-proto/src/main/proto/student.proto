@@ -49,6 +49,7 @@ message Student {
   map<string, string> metadata = 15;
   google.protobuf.StringValue student_phone = 16;
   repeated string additional_phones = 17;
+  int32 discount_percent = 18;
 }
 
 message CreateStudentRequest {

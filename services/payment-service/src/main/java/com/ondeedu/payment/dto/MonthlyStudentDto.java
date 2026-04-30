@@ -24,4 +24,7 @@ public class MonthlyStudentDto {
 
     /** PAID / PARTIAL / UNPAID */
     private String status;
+
+    /** Скидка студента в процентах (0–100) */
+    private Integer discountPercent;
 }

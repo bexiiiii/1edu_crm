@@ -38,4 +38,6 @@ public class CreateSubscriptionRequest {
     private String currency;
 
     private String notes;
+
+    private Integer discountPercent;
 }

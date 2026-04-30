@@ -72,6 +72,8 @@ public class TodayStatsService {
                         .studentId(toUuid(r.get("student_id")))
                         .fullName((String) r.get("full_name"))
                         .balance(toBigDecimal(r.get("balance")))
+                        .discountPercent(r.get("discount_percent") != null
+                                ? ((Number) r.get("discount_percent")).intValue() : 0)
                         .build())
                 .collect(Collectors.toList());
 

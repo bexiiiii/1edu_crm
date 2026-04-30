@@ -21,4 +21,7 @@ public class StudentDebtDto {
 
     /** Ежемесячный взнос (для справки) */
     private BigDecimal monthlyExpected;
+
+    /** Скидка студента в процентах (0–100) */
+    private Integer discountPercent;
 }

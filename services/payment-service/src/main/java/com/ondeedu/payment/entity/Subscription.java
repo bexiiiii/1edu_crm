@@ -61,4 +61,8 @@ public class Subscription extends BaseEntity {
 
     @Column(columnDefinition = "TEXT")
     private String notes;
+
+    @Builder.Default
+    @Column(name = "discount_percent")
+    private Integer discountPercent = 0;
 }

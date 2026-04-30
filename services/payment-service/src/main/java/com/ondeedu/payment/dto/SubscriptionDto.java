@@ -41,6 +41,8 @@ public class SubscriptionDto {
 
     private String notes;
 
+    private Integer discountPercent;
+
     private Instant createdAt;
 
     private Instant updatedAt;

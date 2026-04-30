@@ -88,6 +88,9 @@ public class Student extends BaseEntity {
     @Column(name = "discount")
     private String discount;
 
+    @Column(name = "discount_percent")
+    private Integer discountPercent;
+
     @Column(name= "comment")
     private String comment;
 

@@ -77,6 +77,8 @@ public class UpdateStudentRequest {
     @Size(max = 255, message = "Discount must be less than 255 characters")
     private String discount;
 
+    private Integer discountPercent;
+
     private String comment;
 
     private Boolean stateOrderParticipant;

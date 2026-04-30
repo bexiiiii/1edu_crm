@@ -14,6 +14,7 @@ import com.ondeedu.payment.entity.PriceList;
 import com.ondeedu.payment.entity.Subscription;
 import com.ondeedu.payment.entity.SubscriptionStatus;
 import com.ondeedu.payment.mapper.SubscriptionMapper;
+import com.ondeedu.payment.client.StudentGrpcClient;
 import com.ondeedu.payment.repository.PriceListRepository;
 import com.ondeedu.payment.repository.SubscriptionRepository;
 import lombok.RequiredArgsConstructor;
@@ -43,6 +44,7 @@ public class SubscriptionService {
     private final PriceListRepository priceListRepository;
     private final SubscriptionMapper subscriptionMapper;
     private final AuditLogPublisher auditLogPublisher;
+    private final StudentGrpcClient studentGrpcClient;
 
     @Transactional
     @CacheEvict(value = "subscriptions", allEntries = true)
@@ -61,6 +63,12 @@ public class SubscriptionService {
                 subscription.setEndDate(request.getStartDate().plusDays(priceList.getValidityDays()));
             }
         }
+
+        // Применяем скидку студента: из запроса или берём из student-service
+        int discount = request.getDiscountPercent() != null
+                ? request.getDiscountPercent()
+                : studentGrpcClient.getStudentDiscountPercent(request.getStudentId());
+        subscription.setDiscountPercent(Math.min(100, Math.max(0, discount)));
 
         subscription = subscriptionRepository.save(subscription);
         log.info("Created subscription {} for student {}", subscription.getId(), subscription.getStudentId());
@@ -125,6 +133,8 @@ public class SubscriptionService {
             return subscriptionMapper.toDto(existingSubscription);
         }
 
+        int studentDiscount = studentGrpcClient.getStudentDiscountPercent(studentId);
+
         Subscription subscription = Subscription.builder()
                 .studentId(studentId)
                 .courseId(courseId)
@@ -136,6 +146,7 @@ public class SubscriptionService {
                 .currency(normalizeCurrency(currency))
                 .notes(buildAutoCourseSubscriptionNote(courseName))
                 .status(SubscriptionStatus.ACTIVE)
+                .discountPercent(Math.min(100, Math.max(0, studentDiscount)))
                 .build();
 
         subscription = subscriptionRepository.save(subscription);

@@ -24,4 +24,6 @@ public class DebtorDto {
     private String     fullName;
     /** Баланс: отрицательный = долг студента (сумма < 0). */
     private BigDecimal balance;
+    /** Скидка студента в процентах (0–100). При 100% долгов нет. */
+    private Integer    discountPercent;
 }
