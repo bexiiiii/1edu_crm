@@ -1228,6 +1228,7 @@ interface StudentDto {
   additionalInfo: string | null;
   contract: string | null;
   discount: string | null;
+  discountPercent: number | null;  // 0–100, числовой процент скидки (рабочий)
   comment: string | null;
   stateOrderParticipant: boolean | null;
   loyalty: string | null;
@@ -1265,7 +1266,8 @@ interface StudentDto {
   "school": "Школа №12",
   "grade": "9",
   "contract": "DOG-2026-001",
-  "discount": "10",
+  "discount": "10%",
+  "discountPercent": 10,
   "comment": "Занимается английским",
   "stateOrderParticipant": true,
   "loyalty": "GOLD",
@@ -1326,7 +1328,8 @@ interface StudentDto {
   "status": "INACTIVE",
   "phone": "+998901111111",
   "studentPhone": "+998901111112",
-  "discount": "15",
+  "discount": "15%",
+  "discountPercent": 15,
   "loyalty": "PLATINUM"
 }
 ```
@@ -2331,10 +2334,11 @@ interface MonthlyOverviewResponse {
 interface MonthlyStudentDto {
   studentId: string;
   subscriptionId: string;
-  expected: number;
+  expected: number;       // monthly expected after discount: base × (1 − discountPercent/100)
   paid: number;
   debt: number;
-  status: string;    // PAID | PARTIAL | UNPAID
+  status: string;         // PAID | PARTIAL | UNPAID
+  discountPercent: number; // 0–100; student with 100% never appears as debtor (expected=0)
 }
 ```
 
@@ -2363,9 +2367,12 @@ interface StudentDebtDto {
   subscriptionId: string;
   totalDebt: number;
   debtMonths: number;
-  monthlyExpected: number;
+  monthlyExpected: number;  // уже с учётом скидки
+  discountPercent: number;  // 0–100, скидка студента
 }
 ```
+
+> **Скидки**: `monthlyExpected = base × (1 - discountPercent/100)`. При `discountPercent=100` студент не попадает в должники.
 
 **Ошибки валидации:** `400 BUSINESS_ERROR`
 - если передан только один из параметров `fromDate` / `toDate`;

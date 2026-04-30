@@ -724,12 +724,33 @@ spring.servlet.multipart.max-request-size: 15MB
 ### Учёт фактических платежей студентов
 Модуль `StudentPayment` добавлен в payment-service (V2 Flyway). Хранит каждый фактический взнос студента в разрезе месяца и подписки.
 
-### Расчёт ежемесячного взноса
+### Расчёт ежемесячного взноса со скидкой
 ```
-months_duration = CEIL(priceList.validityDays / 30.0)   # из PriceList
-monthly_expected = subscription.amount / months_duration
+months_duration    = CEIL(priceList.validityDays / 30.0)   # из PriceList
+monthly_base       = subscription.amount / months_duration
+monthly_expected   = monthly_base * (1 - subscription.discount_percent / 100.0)
 ```
-Если PriceList не привязан — по разнице `start_date` → `end_date`.
+При `discount_percent = 100` → `monthly_expected = 0` → студент никогда не попадает в должники.
+
+Если PriceList не привязан — длительность из `start_date` → `end_date`.
+
+### Система скидок (discount_percent)
+- **Поле студента**: `discount_percent INTEGER (0–100)` — числовой процент скидки на обучение.
+  - Устанавливается в профиле студента (`PUT /api/v1/students/{id}`, поле `discountPercent`)
+  - Хранится в таблице `students.discount_percent`
+- **Поле подписки**: `discount_percent INTEGER (0–100)` — снимок скидки на момент создания подписки.
+  - При создании подписки (`POST /api/v1/payments/subscriptions`) берётся из запроса (`discountPercent`), либо автоматически через gRPC из student-service
+  - При авто-подписке (course enrollment) скидка тоже применяется автоматически
+- **Влияние на расчёты**:
+  - `calcMonthlyExpected` применяет скидку: `base × (1 - discount/100)`
+  - `GET /api/v1/payments/student-payments/debtors` — долг считается от effective суммы; при 100% скидке = 0
+  - `GET /api/v1/payments/student-payments/overview` — expected/debt/status с учётом скидки
+  - Analytics `/api/v1/analytics/today` debtors SQL использует `SUM(amount × (1 - discount_percent/100))`
+- **Ответы API** включают `discountPercent` в `StudentDebtDto`, `MonthlyStudentDto`, `DebtorDto`
+
+### Миграции
+- **V42** (tenant-service) — `ensure_discount_percent_schema`: добавляет `discount_percent` в `students` и `subscriptions` всех tenant-схем
+- **V6** (payment-service) — прямое добавление `discount_percent` в `subscriptions`
 
 ### Таблица `student_payments` (V2)
 | Поле | Тип | Описание |
