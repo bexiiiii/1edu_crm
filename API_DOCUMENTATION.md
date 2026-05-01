@@ -1044,7 +1044,22 @@ interface UserDto {
 }
 ```
 
+| Поле | Обязательность | Комментарий |
+|---|---|---|
+| `username` | да | логин для входа |
+| `email` | да | используется для отправки писем с доступом |
+| `firstName`, `lastName` | да | |
+| `password` | **нет** | если не передан — backend генерирует случайный 12-символьный пароль (`SecureRandom`) и отправляет логин + пароль на `email` |
+| `role` | да | |
+| `staffId`, `branchIds`, `tenantId`, `permissions` | нет | |
+
 **Response:** `ApiResponse<UserDto>`
+
+> **Автоотправка credentials на email**
+> После успешного создания пользователя backend всегда публикует событие `auth.user.credentials` в `notification.exchange` / `notification.email`, и notification-service отправляет на `email` письмо с темой *«Доступ в 1edu CRM»* и телом, содержащим логин, пароль и URL для входа (`ondeedu.frontend.login-url`, default `https://app.1edu.kz`).
+> - Доставка fire-and-forget: если RabbitMQ недоступен или email пуст, письмо не отправляется, но сам пользователь создаётся успешно.
+> - Если `password` передан явно — отправляется именно он; если не передан — отправляется автосгенерированный.
+> - Сотруднику рекомендуется сменить пароль после первого входа.
 
 > Tenant scope берётся из JWT claim `tenant_id`.
 > Если запрос идёт от обычного `TENANT_ADMIN`, backend привязывает нового пользователя к текущему tenant context и не позволяет создать пользователя в другом tenant через произвольный `tenantId` в body.
@@ -1061,8 +1076,9 @@ interface UserDto {
 
 > Текущий backend-flow для выдачи доступа сотруднику такой:
 > 1. создаёшь или выбираешь сотрудника через `/api/v1/staff`
-> 2. создаёшь ему логин/пароль через `/api/v1/auth/users` и передаёшь `staffId`
+> 2. создаёшь ему логин через `/api/v1/auth/users` (можно без `password` — сгенерируется автоматически) и передаёшь `staffId`
 > 3. роль и granular permissions назначаются здесь же
+> 4. сотрудник получает email с логином и паролем — заходит и при необходимости меняет пароль
 >
 > Отдельного endpoint вида `POST /api/v1/auth/users/from-staff` сейчас нет.
 
