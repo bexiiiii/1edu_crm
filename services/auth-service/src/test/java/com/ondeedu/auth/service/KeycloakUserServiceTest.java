@@ -1,5 +1,6 @@
 package com.ondeedu.auth.service;
 
+import com.ondeedu.common.audit.AuditLogPublisher;
 import com.ondeedu.common.exception.ResourceNotFoundException;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -39,6 +40,8 @@ class KeycloakUserServiceTest {
     @Mock
     private KeycloakRoleService keycloakRoleService;
     @Mock
+    private AuditLogPublisher auditLogPublisher;
+    @Mock
     private RealmResource realmResource;
     @Mock
     private UsersResource usersResource;
@@ -59,7 +62,7 @@ class KeycloakUserServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new KeycloakUserService(keycloak, keycloakRoleService, "ondeedu", "1edu-web-app");
+        service = new KeycloakUserService(keycloak, keycloakRoleService, auditLogPublisher, "ondeedu", "1edu-web-app");
 
         when(keycloak.realm("ondeedu")).thenReturn(realmResource);
         when(realmResource.users()).thenReturn(usersResource);

@@ -9,6 +9,8 @@ import com.ondeedu.auth.dto.UserDto;
 import com.ondeedu.common.audit.AuditAction;
 import com.ondeedu.common.audit.AuditLogPublisher;
 import com.ondeedu.common.audit.TenantAuditEvent;
+import com.ondeedu.common.config.RabbitMQConfig;
+import com.ondeedu.common.event.EmailNotificationEvent;
 import com.ondeedu.common.exception.BusinessException;
 import com.ondeedu.common.exception.ResourceNotFoundException;
 import com.ondeedu.common.security.DefaultRolePermissions;
@@ -23,6 +25,8 @@ import org.keycloak.admin.client.resource.UserResource;
 import org.keycloak.representations.idm.CredentialRepresentation;
 import org.keycloak.representations.idm.RoleRepresentation;
 import org.keycloak.representations.idm.UserRepresentation;
+import org.springframework.amqp.rabbit.core.RabbitTemplate;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.stereotype.Service;
@@ -33,6 +37,7 @@ import org.springframework.web.context.request.RequestAttributes;
 import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
 
+import java.security.SecureRandom;
 import java.util.Arrays;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -53,11 +58,22 @@ public class KeycloakUserService {
     static final String BRANCH_IDS_ATTRIBUTE = "branch_ids";
     private static final String USER_PERMISSIONS_SOURCE = "USER";
 
+    private static final String GENERATED_PASSWORD_ALPHABET =
+            "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789";
+    private static final int GENERATED_PASSWORD_LENGTH = 12;
+    private static final SecureRandom SECURE_RANDOM = new SecureRandom();
+
     private final Keycloak keycloak;
     private final KeycloakRoleService keycloakRoleService;
     private final AuditLogPublisher auditLogPublisher;
     private final String realm;
     private final String frontendClientId;
+
+    @Autowired(required = false)
+    private RabbitTemplate rabbitTemplate;
+
+    @Value("${ondeedu.frontend.login-url:https://app.1edu.kz}")
+    private String loginUrl;
 
     @Value("${keycloak.server-url}")
     private String serverUrl;
@@ -78,6 +94,11 @@ public class KeycloakUserService {
         String tenantId = resolveTenantId(request.getTenantId());
         List<String> branchIds = resolveAndValidateRequestedBranchIds(request.getBranchIds());
         String keycloakRoleName = resolveKeycloakRoleName(tenantId, request.getRole());
+
+        String effectivePassword = StringUtils.hasText(request.getPassword())
+                ? request.getPassword()
+                : generateRandomPassword();
+
         UserRepresentation user = new UserRepresentation();
         user.setUsername(request.getUsername());
         user.setEmail(request.getEmail());
@@ -88,7 +109,7 @@ public class KeycloakUserService {
 
         CredentialRepresentation credential = new CredentialRepresentation();
         credential.setType(CredentialRepresentation.PASSWORD);
-        credential.setValue(request.getPassword());
+        credential.setValue(effectivePassword);
         credential.setTemporary(false);
         user.setCredentials(Collections.singletonList(credential));
         user.setAttributes(buildUserAttributes(tenantId, request.getStaffId(), branchIds));
@@ -133,6 +154,8 @@ public class KeycloakUserService {
                     .targetId(userId)
                     .targetName(request.getFirstName() + " " + request.getLastName())
                     .build());
+
+            publishCredentialsEmail(tenantId, userId, request, effectivePassword);
 
             return getUser(userId);
         } catch (BusinessException e) {
@@ -804,6 +827,66 @@ public class KeycloakUserService {
 
     static String rolePermissionsSource(String keycloakRoleName) {
         return RoleNameUtils.rolePermissionsSource(keycloakRoleName);
+    }
+
+    private String generateRandomPassword() {
+        StringBuilder sb = new StringBuilder(GENERATED_PASSWORD_LENGTH);
+        for (int i = 0; i < GENERATED_PASSWORD_LENGTH; i++) {
+            sb.append(GENERATED_PASSWORD_ALPHABET.charAt(SECURE_RANDOM.nextInt(GENERATED_PASSWORD_ALPHABET.length())));
+        }
+        return sb.toString();
+    }
+
+    private void publishCredentialsEmail(String tenantId, String userId, CreateUserRequest request, String password) {
+        if (rabbitTemplate == null) {
+            log.warn("RabbitTemplate is unavailable; skipping credentials email for user {}", userId);
+            return;
+        }
+        if (!StringUtils.hasText(request.getEmail())) {
+            log.warn("User {} has no email; skipping credentials email", userId);
+            return;
+        }
+
+        try {
+            rabbitTemplate.convertAndSend(
+                    RabbitMQConfig.NOTIFICATION_EXCHANGE,
+                    RabbitMQConfig.NOTIFICATION_EMAIL_KEY,
+                    new EmailNotificationEvent(
+                            "auth.user.credentials",
+                            tenantId,
+                            userId,
+                            request.getEmail().trim(),
+                            "Доступ в 1edu CRM",
+                            buildCredentialsBody(request, password)
+                    )
+            );
+            log.info("Published credentials email for user {} to {}", userId, request.getEmail());
+        } catch (Exception e) {
+            log.warn("User {} created but credentials email was not published: {}", userId, e.getMessage());
+        }
+    }
+
+    private String buildCredentialsBody(CreateUserRequest request, String password) {
+        String fullName = (request.getFirstName() != null ? request.getFirstName() : "")
+                + " "
+                + (request.getLastName() != null ? request.getLastName() : "");
+        return """
+                Здравствуйте, %s!
+
+                Для вас создан доступ в 1edu CRM.
+
+                Данные для входа:
+                - Логин: %s
+                - Пароль: %s
+                - Адрес для входа: %s
+
+                Рекомендуем сменить пароль после первого входа в разделе профиля.
+                """.formatted(
+                fullName.trim(),
+                request.getUsername(),
+                password,
+                loginUrl
+        );
     }
 
     private void assertCurrentTenantAccess(String userId, UserRepresentation user) {

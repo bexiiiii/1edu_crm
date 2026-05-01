@@ -26,7 +26,10 @@ public class CreateUserRequest {
     @NotBlank(message = "Last name is required")
     private String lastName;
 
-    @NotBlank(message = "Password is required")
+    /**
+     * Optional password. If omitted, the system generates a random password
+     * and emails it to the user along with the username.
+     */
     @Size(min = 8, message = "Password must be at least 8 characters")
     private String password;
 

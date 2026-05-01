@@ -234,6 +234,7 @@ Manages Keycloak users (staff members) via Keycloak Admin Client. No database, n
 - **Internal endpoints** — `PUT /internal/auth/roles/{name}` and `DELETE /internal/auth/roles/{name}` (called by settings-service, no JWT required — internal network only).
 - **Secret** — `keycloak.client-secret` bound to env var `KEYCLOAK_CLIENT_SECRET` (default `change-me`).
 - **Endpoints**: `POST/GET/PUT/DELETE /api/v1/auth/users`, `POST /api/v1/auth/users/{id}/reset-password`
+- **Auto-generated password + credentials email** — `POST /api/v1/auth/users` принимает `password` как **опциональное** поле. Если не передан, генерируется случайный 12-символьный пароль (`SecureRandom`, алфавит без визуально похожих символов 0/O/1/l/I). После успешного создания пользователя в Keycloak публикуется `EmailNotificationEvent` (eventType `auth.user.credentials`) в `notification.exchange` / `notification.email` с логином, паролем и `loginUrl` (default `https://app.1edu.kz`, настраивается через `ondeedu.frontend.login-url`). Доставка fire-and-forget — ошибки RabbitMQ логируются, но не блокируют создание пользователя. Auth-service подключён к RabbitMQ (`RabbitAutoConfiguration` больше не исключается в `application.yml`).
 
 ### Known Issues & Solutions
 
