@@ -1648,9 +1648,25 @@ interface CourseDto {
   status: CourseStatus;       // ACTIVE | INACTIVE | ARCHIVED
   teacherId: string | null;
   roomId: string | null;
-  studentIds: string[];       // UUID[] студентов, привязанных к курсу
+  studentIds: string[];       // UUID[] активных студентов курса (removedAt IS NULL)
   createdAt: string;
   updatedAt: string;
+}
+```
+
+### CourseEnrollmentDto
+
+```typescript
+interface CourseEnrollmentDto {
+  courseId: string;
+  courseName: string | null;
+  courseType: CourseType | null;    // GROUP | INDIVIDUAL
+  courseStatus: CourseStatus | null;
+  color: string | null;
+  basePrice: number | null;
+  enrolledAt: string;               // ISO timestamp — когда студент был зачислен
+  removedAt: string | null;         // ISO timestamp — когда студент был удалён; null если активен
+  enrollmentStatus: string;         // "ACTIVE" | "REMOVED"
 }
 ```
 
@@ -1765,6 +1781,77 @@ interface CourseDto {
 **Query Params:** `page`, `size`, `sort`
 
 **Response:** `ApiResponse<PageResponse<CourseDto>>`
+
+---
+
+### 10.2 Управление записью студентов на курс
+
+#### `POST /api/v1/courses/{courseId}/students/{studentId}` — Зачислить студента на курс
+**Доступ:** `TENANT_ADMIN` | `GROUPS_EDIT`
+
+Добавляет одного студента на курс. Если студент уже активно записан — возвращает `400 STUDENT_ALREADY_ENROLLED`.
+
+Применяются те же ограничения, что и при создании/обновлении курса:
+- студент должен быть `ACTIVE`;
+- количество активных студентов не превысит `enrollmentLimit` (если задан);
+- backend автоматически создаёт/обновляет подписку через payment-service.
+
+**Response:** `ApiResponse<CourseDto>` — курс с обновлённым списком `studentIds`
+
+---
+
+#### `DELETE /api/v1/courses/{courseId}/students/{studentId}` — Удалить студента с курса
+**Доступ:** `TENANT_ADMIN` | `GROUPS_EDIT`
+
+Удаляет студента с курса (soft-delete: запись в `course_students` сохраняется с `removedAt = now()`).
+- История зачисления и период обучения остаются доступны через `GET /api/v1/courses/student/{studentId}/enrollments`.
+- Backend отменяет auto-created course subscription через payment-service.
+- Если студент не активно записан на курс — `404 Enrollment not found`.
+
+**Response:** `ApiResponse<CourseDto>` — курс с обновлённым `studentIds` (без удалённого студента)
+
+---
+
+#### `GET /api/v1/courses/student/{studentId}/enrollments` — История записей студента на курсы
+**Доступ:** `TENANT_ADMIN` | `MANAGER` | `TEACHER` | `RECEPTIONIST` | `GROUPS_VIEW`
+
+Возвращает полную историю зачислений студента на все курсы, включая удалённые.
+Используется для отображения раздела "Курсы" в карточке студента.
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "courseId": "uuid",
+      "courseName": "Английский язык A1",
+      "courseType": "GROUP",
+      "courseStatus": "ACTIVE",
+      "color": "#2196F3",
+      "basePrice": 500000,
+      "enrolledAt": "2026-01-15T09:00:00Z",
+      "removedAt": null,
+      "enrollmentStatus": "ACTIVE"
+    },
+    {
+      "courseId": "uuid",
+      "courseName": "Математика базовый",
+      "courseType": "GROUP",
+      "courseStatus": "INACTIVE",
+      "color": "#FF5722",
+      "basePrice": 400000,
+      "enrolledAt": "2025-09-01T09:00:00Z",
+      "removedAt": "2026-01-10T14:30:00Z",
+      "enrollmentStatus": "REMOVED"
+    }
+  ]
+}
+```
+
+> **Сортировка:** по `enrolledAt DESC` (самые свежие первыми).
+>
+> **Использование в карточке студента:** вызов `GET /api/v1/courses/student/{studentId}/enrollments` из course-service отдаёт всю историю зачислений с периодами — `enrolledAt` (дата начала) и `removedAt` (дата окончания/удаления).
 
 ---
 

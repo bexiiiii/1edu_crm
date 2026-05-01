@@ -5,22 +5,22 @@ import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Index;
 import jakarta.persistence.Table;
-import jakarta.persistence.UniqueConstraint;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
+import java.time.Instant;
 import java.util.UUID;
 
 @Entity
 @Table(
         name = "course_students",
-        uniqueConstraints = @UniqueConstraint(name = "uk_course_students_course_student", columnNames = {"course_id", "student_id"}),
         indexes = {
                 @Index(name = "idx_course_students_course", columnList = "course_id"),
-                @Index(name = "idx_course_students_student", columnList = "student_id")
+                @Index(name = "idx_course_students_student", columnList = "student_id"),
+                @Index(name = "idx_course_students_student_enrolled", columnList = "student_id, enrolled_at")
         }
 )
 @Getter
@@ -35,4 +35,11 @@ public class CourseStudent extends BaseEntity {
 
     @Column(name = "student_id", nullable = false)
     private UUID studentId;
+
+    @Column(name = "enrolled_at", nullable = false)
+    @Builder.Default
+    private Instant enrolledAt = Instant.now();
+
+    @Column(name = "removed_at")
+    private Instant removedAt;
 }

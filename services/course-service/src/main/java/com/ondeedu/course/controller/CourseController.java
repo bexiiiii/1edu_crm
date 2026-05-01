@@ -3,6 +3,7 @@ package com.ondeedu.course.controller;
 import com.ondeedu.common.dto.ApiResponse;
 import com.ondeedu.common.dto.PageResponse;
 import com.ondeedu.course.dto.CourseDto;
+import com.ondeedu.course.dto.CourseEnrollmentDto;
 import com.ondeedu.course.dto.CreateCourseRequest;
 import com.ondeedu.course.dto.UpdateCourseRequest;
 import com.ondeedu.course.entity.CourseStatus;
@@ -19,6 +20,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
 import java.util.UUID;
 
 @RestController
@@ -59,6 +61,31 @@ public class CourseController {
     public ApiResponse<Void> deleteCourse(@PathVariable UUID id) {
         courseService.deleteCourse(id);
         return ApiResponse.success("Course deleted successfully");
+    }
+
+    @PostMapping("/{courseId}/students/{studentId}")
+    @PreAuthorize("hasRole('TENANT_ADMIN') or hasAuthority('GROUPS_EDIT')")
+    @Operation(summary = "Add a student to a course")
+    public ApiResponse<CourseDto> addStudentToCourse(
+            @PathVariable UUID courseId,
+            @PathVariable UUID studentId) {
+        return ApiResponse.success(courseService.addStudentToCourse(courseId, studentId), "Student added to course");
+    }
+
+    @DeleteMapping("/{courseId}/students/{studentId}")
+    @PreAuthorize("hasRole('TENANT_ADMIN') or hasAuthority('GROUPS_EDIT')")
+    @Operation(summary = "Remove a student from a course")
+    public ApiResponse<CourseDto> removeStudentFromCourse(
+            @PathVariable UUID courseId,
+            @PathVariable UUID studentId) {
+        return ApiResponse.success(courseService.removeStudentFromCourse(courseId, studentId), "Student removed from course");
+    }
+
+    @GetMapping("/student/{studentId}/enrollments")
+    @PreAuthorize("hasRole('TENANT_ADMIN') or hasRole('MANAGER') or hasRole('TEACHER') or hasRole('RECEPTIONIST') or hasAuthority('GROUPS_VIEW')")
+    @Operation(summary = "Get course enrollment history for a student")
+    public ApiResponse<List<CourseEnrollmentDto>> getStudentEnrollments(@PathVariable UUID studentId) {
+        return ApiResponse.success(courseService.getStudentEnrollments(studentId));
     }
 
     @GetMapping

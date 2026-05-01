@@ -6,6 +6,7 @@ import com.ondeedu.common.exception.ResourceNotFoundException;
 import com.ondeedu.common.tenant.TenantContext;
 import com.ondeedu.course.client.PaymentGrpcClient;
 import com.ondeedu.course.dto.CourseDto;
+import com.ondeedu.course.dto.CourseEnrollmentDto;
 import com.ondeedu.course.dto.CreateCourseRequest;
 import com.ondeedu.course.dto.UpdateCourseRequest;
 import com.ondeedu.course.entity.Course;
@@ -25,6 +26,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
+import java.time.Instant;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.LinkedHashSet;
@@ -76,7 +78,7 @@ public class CourseService {
     public CourseDto updateCourse(UUID id, UpdateCourseRequest request) {
         Course course = courseRepository.findById(id)
             .orElseThrow(() -> new ResourceNotFoundException("Course", "id", id));
-        List<UUID> existingStudentIds = getStudentIds(course.getId());
+        List<UUID> existingStudentIds = getActiveStudentIds(course.getId());
         courseMapper.updateEntity(course, request);
 
         courseConstraintsService.validateTeacherIsActive(course.getTeacherId());
@@ -98,10 +100,95 @@ public class CourseService {
     public void deleteCourse(UUID id) {
         Course course = courseRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Course", "id", id));
-        cancelCourseSubscriptions(course, getStudentIds(id));
+        cancelCourseSubscriptions(course, getActiveStudentIds(id));
         courseStudentRepository.deleteByCourseId(id);
         courseRepository.deleteById(id);
         log.info("Deleted course: {}", id);
+    }
+
+    @Transactional
+    @CacheEvict(value = "courses", allEntries = true)
+    public CourseDto addStudentToCourse(UUID courseId, UUID studentId) {
+        Course course = courseRepository.findById(courseId)
+                .orElseThrow(() -> new ResourceNotFoundException("Course", "id", courseId));
+
+        boolean alreadyEnrolled = courseStudentRepository
+                .findByCourseIdAndStudentIdAndRemovedAtIsNull(courseId, studentId)
+                .isPresent();
+        if (alreadyEnrolled) {
+            throw new BusinessException("STUDENT_ALREADY_ENROLLED", "Student is already enrolled in this course");
+        }
+
+        List<UUID> existingStudentIds = getActiveStudentIds(courseId);
+        List<UUID> targetStudentIds = new java.util.ArrayList<>(existingStudentIds);
+        targetStudentIds.add(studentId);
+
+        validateEnrollmentLimit(course, targetStudentIds);
+        courseConstraintsService.validateStudentsAreActive(List.of(studentId));
+
+        CourseStudent enrollment = CourseStudent.builder()
+                .courseId(courseId)
+                .studentId(studentId)
+                .enrolledAt(Instant.now())
+                .build();
+        courseStudentRepository.save(enrollment);
+
+        paymentGrpcClient.ensureCourseSubscription(studentId, courseId, course.getName(), course.getBasePrice());
+        log.info("Added student {} to course {}", studentId, courseId);
+        return toDto(course, targetStudentIds);
+    }
+
+    @Transactional
+    @CacheEvict(value = "courses", allEntries = true)
+    public CourseDto removeStudentFromCourse(UUID courseId, UUID studentId) {
+        Course course = courseRepository.findById(courseId)
+                .orElseThrow(() -> new ResourceNotFoundException("Course", "id", courseId));
+
+        CourseStudent enrollment = courseStudentRepository
+                .findByCourseIdAndStudentIdAndRemovedAtIsNull(courseId, studentId)
+                .orElseThrow(() -> new ResourceNotFoundException("Enrollment", "studentId", studentId));
+
+        enrollment.setRemovedAt(Instant.now());
+        courseStudentRepository.save(enrollment);
+
+        paymentGrpcClient.cancelCourseSubscription(studentId, courseId);
+        log.info("Removed student {} from course {}", studentId, courseId);
+
+        List<UUID> remaining = getActiveStudentIds(courseId);
+        return toDto(course, remaining);
+    }
+
+    @Transactional(readOnly = true)
+    public List<CourseEnrollmentDto> getStudentEnrollments(UUID studentId) {
+        List<CourseStudent> enrollments = courseStudentRepository.findByStudentIdOrderByEnrolledAtDesc(studentId);
+        if (enrollments.isEmpty()) {
+            return List.of();
+        }
+
+        List<UUID> courseIds = enrollments.stream()
+                .map(CourseStudent::getCourseId)
+                .distinct()
+                .toList();
+
+        Map<UUID, Course> courseById = courseRepository.findAllById(courseIds).stream()
+                .collect(Collectors.toMap(Course::getId, c -> c));
+
+        return enrollments.stream()
+                .map(cs -> {
+                    Course course = courseById.get(cs.getCourseId());
+                    return CourseEnrollmentDto.builder()
+                            .courseId(cs.getCourseId())
+                            .courseName(course != null ? course.getName() : null)
+                            .courseType(course != null ? course.getType() : null)
+                            .courseStatus(course != null ? course.getStatus() : null)
+                            .color(course != null ? course.getColor() : null)
+                            .basePrice(course != null ? course.getBasePrice() : null)
+                            .enrolledAt(cs.getEnrolledAt())
+                            .removedAt(cs.getRemovedAt())
+                            .enrollmentStatus(cs.getRemovedAt() == null ? "ACTIVE" : "REMOVED")
+                            .build();
+                })
+                .toList();
     }
 
     @Transactional(readOnly = true)
@@ -135,13 +222,13 @@ public class CourseService {
     }
 
     private PageResponse<CourseDto> mapPage(Page<Course> page) {
-        Map<UUID, List<UUID>> studentIdsByCourseId = loadStudentIds(page.getContent());
+        Map<UUID, List<UUID>> studentIdsByCourseId = loadActiveStudentIds(page.getContent());
         return PageResponse.from(page,
                 course -> toDto(course, studentIdsByCourseId.getOrDefault(course.getId(), List.of())));
     }
 
     private CourseDto toDto(Course course) {
-        Map<UUID, List<UUID>> studentIdsByCourseId = loadStudentIds(List.of(course));
+        Map<UUID, List<UUID>> studentIdsByCourseId = loadActiveStudentIds(List.of(course));
         return toDto(course, studentIdsByCourseId.getOrDefault(course.getId(), List.of()));
     }
 
@@ -163,21 +250,23 @@ public class CourseService {
                 .toList();
 
         courseConstraintsService.validateStudentsAreActive(addedStudentIds);
-
         syncCourseSubscriptions(course, targetStudentIds, removedStudentIds);
 
         if (!removedStudentIds.isEmpty()) {
-            courseStudentRepository.deleteByCourseIdAndStudentIdIn(course.getId(), removedStudentIds);
+            courseStudentRepository.softDeleteByCourseIdAndStudentIdIn(
+                    course.getId(), removedStudentIds, Instant.now());
         }
 
         if (addedStudentIds.isEmpty()) {
             return;
         }
 
+        Instant now = Instant.now();
         List<CourseStudent> courseStudents = addedStudentIds.stream()
                 .map(studentId -> CourseStudent.builder()
                         .courseId(course.getId())
                         .studentId(studentId)
+                        .enrolledAt(now)
                         .build())
                 .toList();
         courseStudentRepository.saveAll(courseStudents);
@@ -187,7 +276,6 @@ public class CourseService {
         targetStudentIds.forEach(studentId ->
                 paymentGrpcClient.ensureCourseSubscription(studentId, course.getId(), course.getName(), course.getBasePrice())
         );
-
         removedStudentIds.forEach(studentId ->
                 paymentGrpcClient.cancelCourseSubscription(studentId, course.getId())
         );
@@ -197,13 +285,13 @@ public class CourseService {
         studentIds.forEach(studentId -> paymentGrpcClient.cancelCourseSubscription(studentId, course.getId()));
     }
 
-    private List<UUID> getStudentIds(UUID courseId) {
-        return courseStudentRepository.findByCourseIdOrderByCreatedAtAsc(courseId).stream()
+    private List<UUID> getActiveStudentIds(UUID courseId) {
+        return courseStudentRepository.findByCourseIdAndRemovedAtIsNullOrderByEnrolledAtAsc(courseId).stream()
                 .map(CourseStudent::getStudentId)
                 .toList();
     }
 
-    private Map<UUID, List<UUID>> loadStudentIds(Collection<Course> courses) {
+    private Map<UUID, List<UUID>> loadActiveStudentIds(Collection<Course> courses) {
         if (courses == null || courses.isEmpty()) {
             return Collections.emptyMap();
         }
@@ -212,7 +300,8 @@ public class CourseService {
                 .map(Course::getId)
                 .toList();
 
-        return courseStudentRepository.findByCourseIdInOrderByCourseIdAscCreatedAtAsc(courseIds).stream()
+        return courseStudentRepository.findByCourseIdInAndRemovedAtIsNullOrderByCourseIdAscEnrolledAtAsc(courseIds)
+                .stream()
                 .collect(Collectors.groupingBy(
                         CourseStudent::getCourseId,
                         Collectors.mapping(CourseStudent::getStudentId, Collectors.toList())
