@@ -8,7 +8,6 @@ import org.springframework.stereotype.Component;
 
 import java.sql.Time;
 import java.time.DayOfWeek;
-import java.time.Duration;
 import java.time.LocalTime;
 import java.util.Arrays;
 import java.util.EnumSet;
@@ -70,17 +69,6 @@ public class ScheduleSettingsConstraintsService {
                     "Schedule time must be inside tenant working hours: "
                             + settings.workingHoursStart() + " - " + settings.workingHoursEnd()
             );
-        }
-
-        int slotDuration = settings.slotDurationMin();
-        if (slotDuration > 0) {
-            long minutes = Duration.between(start, end).toMinutes();
-            if (minutes % slotDuration != 0) {
-                throw new BusinessException(
-                        "SCHEDULE_SLOT_DURATION_VIOLATION",
-                        "Lesson duration must be a multiple of slot_duration_min=" + slotDuration
-                );
-            }
         }
     }
 

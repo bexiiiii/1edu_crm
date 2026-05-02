@@ -18,4 +18,4 @@ ALTER TABLE tenant_settings ADD COLUMN IF NOT EXISTS bik              VARCHAR(20
 ALTER TABLE tenant_settings ADD COLUMN IF NOT EXISTS requisites       TEXT;
 
 -- Work schedule slot duration
-ALTER TABLE tenant_settings ADD COLUMN IF NOT EXISTS slot_duration_min INTEGER DEFAULT 30;
+ALTER TABLE tenant_settings ADD COLUMN IF NOT EXISTS slot_duration_min INTEGER DEFAULT 15;

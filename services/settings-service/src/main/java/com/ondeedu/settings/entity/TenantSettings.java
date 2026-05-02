@@ -97,7 +97,7 @@ public class TenantSettings extends BaseEntity {
 
     @Column(name = "slot_duration_min")
     @Builder.Default
-    private Integer slotDurationMin = 30;
+    private Integer slotDurationMin = 15;
 
     // Рабочие дни (JSON строка)
     @Column(name = "working_days", columnDefinition = "TEXT")

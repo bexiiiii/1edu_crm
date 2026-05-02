@@ -649,7 +649,7 @@ Spring Boot 3.4.2, Spring Cloud 2024.0.0, gRPC 1.68.2, Protobuf 4.29.3, PostgreS
 - **Общие**: `timezone` (Asia/Tashkent), `currency` (UZS), `language` (ru)
 - **Рабочие часы**: `working_hours_start` (09:00), `working_hours_end` (21:00)
 - **Рабочие дни**: `working_days` (JSON строка, дефолт: Пн–Сб)
-- **Занятия**: `default_lesson_duration_min` (60), `trial_lesson_duration_min` (45), `max_group_size` (20), `slot_duration_min`
+- **Занятия**: `default_lesson_duration_min` (60), `trial_lesson_duration_min` (45), `max_group_size` (20), `slot_duration_min` (15 — только для UI grid)
 - **Посещаемость**: `auto_mark_attendance` (false), `attendance_window_days` (7)
 - **Уведомления**: `sms_enabled` (false), `email_enabled` (true), `sms_sender_name`
 - **Финансы**: `late_payment_reminder_days` (3), `subscription_expiry_reminder_days` (3)
@@ -1314,9 +1314,9 @@ MAIL_REPLY_TO=support@1edu.kz  # опционально
 - `ScheduleService` на `create/update` теперь применяет ограничения из `tenant_settings`:
   - рабочие часы (`working_hours_start`, `working_hours_end`) → `SCHEDULE_OUTSIDE_WORKING_HOURS`
   - валидный диапазон времени (`end > start`) → `INVALID_SCHEDULE_TIME_RANGE`
-  - кратность длительности слоту (`slot_duration_min`) → `SCHEDULE_SLOT_DURATION_VIOLATION`
   - допустимые дни недели (`working_days`) → `SCHEDULE_OUTSIDE_WORKING_DAYS`
   - лимит размера группы (`max_group_size`) → `SCHEDULE_MAX_GROUP_SIZE_EXCEEDED`
+- `slot_duration_min` (default `15`) — оставлен в `tenant_settings` только для отрисовки сетки расписания на frontend. Backend больше **не валидирует** длительность урока на кратность слоту (`SCHEDULE_SLOT_DURATION_VIOLATION` удалена) — длительность может быть любой, чтобы не блокировать кейсы вроде 47-минутных индивидуальных занятий.
 - Добавлена валидация активности преподавателя при создании/изменении расписания:
   - `staff.status` должен быть `ACTIVE`
   - ошибка: `SCHEDULE_TEACHER_NOT_ACTIVE`

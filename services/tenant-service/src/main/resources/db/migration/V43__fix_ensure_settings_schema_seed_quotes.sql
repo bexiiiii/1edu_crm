@@ -55,7 +55,7 @@ BEGIN
             ADD COLUMN IF NOT EXISTS bin VARCHAR(20),
             ADD COLUMN IF NOT EXISTS bik VARCHAR(20),
             ADD COLUMN IF NOT EXISTS requisites TEXT,
-            ADD COLUMN IF NOT EXISTS slot_duration_min INTEGER DEFAULT 30',
+            ADD COLUMN IF NOT EXISTS slot_duration_min INTEGER DEFAULT 15',
         t_schema
     );
 

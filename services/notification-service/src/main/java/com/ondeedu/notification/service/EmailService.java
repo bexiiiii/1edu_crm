@@ -42,9 +42,9 @@ public class EmailService {
 
         try {
             mailSender.send(message);
-            log.debug("Email sent successfully to: {}", to);
+            log.info("Email submitted to SMTP relay: to={}, subject='{}', from={}", to, subject, sender);
         } catch (MailException e) {
-            log.error("Failed to send email to {}: {}", to, e.getMessage());
+            log.error("Failed to send email to {}: {}", to, e.getMessage(), e);
             throw e;
         }
     }

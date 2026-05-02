@@ -96,7 +96,7 @@ BEGIN
             bin VARCHAR(20),
             bik VARCHAR(20),
             requisites TEXT,
-            slot_duration_min INTEGER DEFAULT 30,
+            slot_duration_min INTEGER DEFAULT 15,
             created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
             updated_at TIMESTAMPTZ,
             created_by VARCHAR(255),
@@ -123,7 +123,7 @@ BEGIN
             ADD COLUMN IF NOT EXISTS bin VARCHAR(20),
             ADD COLUMN IF NOT EXISTS bik VARCHAR(20),
             ADD COLUMN IF NOT EXISTS requisites TEXT,
-            ADD COLUMN IF NOT EXISTS slot_duration_min INTEGER DEFAULT 30',
+            ADD COLUMN IF NOT EXISTS slot_duration_min INTEGER DEFAULT 15',
         t_schema
     );
 
