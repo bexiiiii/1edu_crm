@@ -1,62 +1,10 @@
--- Restores critical tenant schema helper functions that may be missing on
--- environments where Flyway baseline skipped earlier migrations (V9/V12/V13).
-
-CREATE OR REPLACE FUNCTION system.ensure_course_students_schema(t_schema TEXT)
-RETURNS void AS $$
-BEGIN
-    EXECUTE format('
-        CREATE TABLE IF NOT EXISTS %I.course_students (
-            id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-            course_id UUID NOT NULL REFERENCES %I.courses(id) ON DELETE CASCADE,
-            student_id UUID NOT NULL,
-            created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-            updated_at TIMESTAMP WITH TIME ZONE,
-            created_by VARCHAR(255),
-            updated_by VARCHAR(255),
-            version BIGINT DEFAULT 0,
-            CONSTRAINT uk_course_students_course_student UNIQUE (course_id, student_id)
-        )', t_schema, t_schema);
-
-    EXECUTE format('CREATE INDEX IF NOT EXISTS idx_course_students_course ON %I.course_students (course_id)', t_schema);
-    EXECUTE format('CREATE INDEX IF NOT EXISTS idx_course_students_student ON %I.course_students (student_id)', t_schema);
-END;
-$$ LANGUAGE plpgsql;
-
-CREATE OR REPLACE FUNCTION system.ensure_payroll_schema(t_schema TEXT)
-RETURNS void AS $$
-BEGIN
-    EXECUTE format(
-        'ALTER TABLE %I.staff ADD COLUMN IF NOT EXISTS salary_type VARCHAR(30) DEFAULT ''FIXED''',
-        t_schema
-    );
-    EXECUTE format(
-        'ALTER TABLE %I.staff ADD COLUMN IF NOT EXISTS salary_percentage DECIMAL(5,2)',
-        t_schema
-    );
-    EXECUTE format(
-        'UPDATE %I.staff SET salary_type = ''FIXED'' WHERE salary_type IS NULL',
-        t_schema
-    );
-
-    EXECUTE format(
-        'ALTER TABLE %I.transactions ADD COLUMN IF NOT EXISTS staff_id UUID',
-        t_schema
-    );
-    EXECUTE format(
-        'ALTER TABLE %I.transactions ADD COLUMN IF NOT EXISTS salary_month VARCHAR(7)',
-        t_schema
-    );
-
-    EXECUTE format(
-        'CREATE INDEX IF NOT EXISTS idx_transactions_staff ON %I.transactions (staff_id)',
-        t_schema
-    );
-    EXECUTE format(
-        'CREATE INDEX IF NOT EXISTS idx_transactions_salary_month ON %I.transactions (salary_month)',
-        t_schema
-    );
-END;
-$$ LANGUAGE plpgsql;
+-- V36 redefined system.ensure_settings_schema with seed-data values wrapped in
+-- doubled single quotes inside a $sql$...$sql$ dollar-quoted block. Inside dollar
+-- quoting, single quotes are NOT escaped — so '' became literal '' (empty string),
+-- producing SQL like (''Посетил(а)'', TRUE, ...) which fails with
+-- "syntax error at or near 'Посетил'". This migration restores the correct
+-- single-quote literals in the seed-data block so create_tenant_schema() works
+-- for newly created tenants.
 
 CREATE OR REPLACE FUNCTION system.ensure_settings_schema(t_schema TEXT)
 RETURNS void AS $$
@@ -81,22 +29,6 @@ BEGIN
             late_payment_reminder_days INTEGER DEFAULT 3,
             subscription_expiry_reminder_days INTEGER DEFAULT 3,
             brand_color VARCHAR(50) DEFAULT ''#4CAF50'',
-            center_name VARCHAR(255),
-            main_direction VARCHAR(255),
-            director_name VARCHAR(255),
-            corporate_email VARCHAR(255),
-            branch_count INTEGER,
-            logo_url VARCHAR(500),
-            city VARCHAR(100),
-            work_phone VARCHAR(50),
-            address VARCHAR(500),
-            director_basis VARCHAR(255),
-            bank_account VARCHAR(50),
-            bank VARCHAR(255),
-            bin VARCHAR(20),
-            bik VARCHAR(20),
-            requisites TEXT,
-            slot_duration_min INTEGER DEFAULT 30,
             created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
             updated_at TIMESTAMPTZ,
             created_by VARCHAR(255),
@@ -221,6 +153,7 @@ BEGIN
         t_schema, t_schema
     );
 
+    -- Seed: attendance status configs (single quotes, NOT doubled — we are inside $sql$...$sql$)
     EXECUTE format($sql$
         INSERT INTO %1$I.attendance_status_configs
             (name, deduct_lesson, require_payment, count_as_attended, color, sort_order, system_status)
@@ -240,6 +173,7 @@ BEGIN
         )
     $sql$, t_schema);
 
+    -- Seed: payment sources
     EXECUTE format($sql$
         INSERT INTO %1$I.payment_sources (name, sort_order, active)
         SELECT v.name, v.sort_order, TRUE
