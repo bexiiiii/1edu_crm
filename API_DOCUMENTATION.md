@@ -2,6 +2,7 @@
 
 ## Содержание
 
+0. [Release Notes (2026-05-04)](#03-release-notes-2026-05-04)
 0. [Release Notes (2026-04-27)](#02-release-notes-2026-04-27)
 0. [Release Notes (2026-04-23)](#01-release-notes-2026-04-23)
 0. [Release Notes (2026-04-18)](#0-release-notes-2026-04-18)
@@ -29,6 +30,22 @@
 22. [Audit Service (8130)](#22-audit-service-8130)
 23. [Inventory Service (8132)](#23-inventory-service-8132)
 24. [Справочник Enum-ов](#24-справочник-enum-ов)
+
+---
+
+## 0.3 Release Notes (2026-05-04)
+
+- **Attendance RBAC widened**:
+  - attendance marking endpoints now explicitly allow `MANAGER`;
+  - attendance-related endpoints also allow tenant role name `ADMIN` in addition to permission-based access;
+  - attendance status config endpoints allow tenant role `ADMIN` for create/update/delete.
+- **Attendance autosave contract**:
+  - `POST /api/v1/lessons/{lessonId}/attendance` is now documented as the primary per-row autosave endpoint;
+  - the same endpoint works as upsert for both first mark and subsequent status changes;
+  - frontend can save one changed row immediately without full-page refresh.
+- **Attendance status catalog deletion**:
+  - seed/system attendance statuses in `/api/v1/settings/attendance-statuses` can now also be deleted;
+  - `systemStatus=true` should now be treated as "seeded by system", not "undeletable".
 
 ---
 
@@ -3071,7 +3088,7 @@ interface SalaryPaymentDto {
 
 ## 14. Analytics Service (8114)
 
-Все эндпоинты аналитики доступны для `TENANT_ADMIN`, `MANAGER` или любой роли с permission `ANALYTICS_VIEW`.
+Все эндпоинты аналитики доступны для `TENANT_ADMIN`, `MANAGER`, tenant role `ADMIN` или любой роли с permission `ANALYTICS_VIEW`.
 
 Исключение: `group-attendance` и `teacher-course-attendance` также доступны `TEACHER` и ролям с `LESSONS_VIEW`.
 
@@ -3583,7 +3600,7 @@ interface RoomLoadResponse {
 
 #### `GET /api/v1/analytics/group-attendance`
 
-**Доступ:** `TENANT_ADMIN`, `MANAGER`, `TEACHER` или permission `ANALYTICS_VIEW` / `LESSONS_VIEW`
+**Доступ:** `TENANT_ADMIN`, `MANAGER`, tenant role `ADMIN`, `TEACHER` или permission `ANALYTICS_VIEW` / `LESSONS_VIEW`
 
 **Query Params:**
 - `groupId`: UUID группы (обязательно)
@@ -3645,6 +3662,8 @@ interface GroupAttendanceResponse {
 
 #### `GET /api/v1/analytics/teacher-course-attendance/courses` — Курсы преподавателя (дропдаун)
 
+**Доступ:** `TENANT_ADMIN`, `MANAGER`, tenant role `ADMIN`, `TEACHER` или permission `ANALYTICS_VIEW` / `LESSONS_VIEW`
+
 **Query Params:**
 - `teacherId` *(required)*: UUID преподавателя
 
@@ -3661,6 +3680,8 @@ interface TeacherCourseDto {
 ---
 
 #### `GET /api/v1/analytics/teacher-course-attendance` — Pivot-таблица посещаемости
+
+**Доступ:** `TENANT_ADMIN`, `MANAGER`, tenant role `ADMIN`, `TEACHER` или permission `ANALYTICS_VIEW` / `LESSONS_VIEW`
 
 Возвращает сводную pivot-таблицу посещаемости: строки = студенты, колонки = дни занятий в выбранном месяце.
 
@@ -3719,6 +3740,8 @@ interface AttendanceCellDto {
 ---
 
 #### `GET /api/v1/analytics/teacher-course-attendance/export` — Скачать Excel
+
+**Доступ:** `TENANT_ADMIN`, `MANAGER`, tenant role `ADMIN`, `TEACHER` или permission `ANALYTICS_VIEW` / `LESSONS_VIEW`
 
 **Query Params:** те же (`teacherId`, `courseId`, `month`)
 
@@ -4464,7 +4487,7 @@ interface AttendanceDto {
 > - такие tenant-level уведомления доступны ролям `MANAGER` и `RECEPTIONIST` (а также `SUPER_ADMIN`), но не выдаются как общий поток для `TENANT_ADMIN`.
 
 #### `POST /api/v1/lessons/{lessonId}/attendance` — Отметить посещение
-**Доступ:** `TENANT_ADMIN` | `LESSONS_MARK_ATTENDANCE`
+**Доступ:** `TENANT_ADMIN` | `MANAGER` | tenant role `ADMIN` | `LESSONS_MARK_ATTENDANCE`
 
 **Request Body:**
 ```json
@@ -4484,12 +4507,14 @@ interface AttendanceDto {
 - `AUTO_ATTENDED` — автоматически посетил
 - `ONE_TIME_VISIT` — разовое посещение
 
-**Response:** `ApiResponse<AttendanceDto>`
+**Response:** `200 OK` + `ApiResponse<AttendanceDto>`
+
+> Этот endpoint используй для автосохранения без refresh: пользователь сменил статус одной строки -> фронт сразу отправил один `POST` и обновил локальное состояние по ответу.
 
 ---
 
 #### `POST /api/v1/lessons/{lessonId}/attendance/bulk` — Массовая отметка
-**Доступ:** `TENANT_ADMIN` | `LESSONS_MARK_ATTENDANCE`
+**Доступ:** `TENANT_ADMIN` | `MANAGER` | tenant role `ADMIN` | `LESSONS_MARK_ATTENDANCE`
 
 **Request Body:**
 ```json
@@ -4506,7 +4531,7 @@ interface AttendanceDto {
 ---
 
 #### `POST /api/v1/lessons/{lessonId}/attendance/mark-all` — Отметить всех как ATTENDED
-**Доступ:** `TENANT_ADMIN` | `LESSONS_MARK_ATTENDANCE`
+**Доступ:** `TENANT_ADMIN` | `MANAGER` | tenant role `ADMIN` | `LESSONS_MARK_ATTENDANCE`
 
 **Request Body:** `["student-uuid-1", "student-uuid-2"]`
 
@@ -4515,7 +4540,7 @@ interface AttendanceDto {
 ---
 
 #### `GET /api/v1/lessons/{lessonId}/attendance` — Список посещаемости занятия
-**Доступ:** `TENANT_ADMIN` | `LESSONS_VIEW`
+**Доступ:** `TENANT_ADMIN` | `MANAGER` | tenant role `ADMIN` | `LESSONS_VIEW`
 
 **Response:** `ApiResponse<List<AttendanceDto>>`
 
@@ -4533,7 +4558,7 @@ interface AttendanceDto {
 ---
 
 #### `GET /api/v1/attendance/student/{studentId}` — История посещений студента
-**Доступ:** `TENANT_ADMIN`, `MANAGER`, `RECEPTIONIST`, `TEACHER`
+**Доступ:** `TENANT_ADMIN`, `MANAGER`, tenant role `ADMIN`, `RECEPTIONIST`, `TEACHER`, или permission `LESSONS_VIEW`
 
 **Query Params:** `page`, `size`
 
@@ -5230,7 +5255,7 @@ interface PaymentSourceDto {
 ### 21.4 Настройка статусов посещаемости (`/api/v1/settings/attendance-statuses`)
 
 #### `GET /api/v1/settings/attendance-statuses` — Список статусов
-**Доступ:** `TENANT_ADMIN`, `MANAGER`, `RECEPTIONIST`, `TEACHER` или permission `SETTINGS_VIEW` / `LESSONS_VIEW` / `LESSONS_MARK_ATTENDANCE`
+**Доступ:** `TENANT_ADMIN`, `MANAGER`, tenant role `ADMIN`, `RECEPTIONIST`, `TEACHER` или permission `SETTINGS_VIEW` / `LESSONS_VIEW` / `LESSONS_MARK_ATTENDANCE`
 
 **Response:** `ApiResponse<List<AttendanceStatusConfigDto>>`
 
@@ -5243,14 +5268,14 @@ interface AttendanceStatusConfigDto {
   countAsAttended: boolean; // Считать ли посещением
   color: string;            // hex цвет для UI
   sortOrder: number;
-  systemStatus: boolean;    // true = системный, нельзя удалить
+  systemStatus: boolean;    // true = системный seed-статус
 }
 ```
 
 ---
 
 #### `POST /api/v1/settings/attendance-statuses` — Создать статус
-**Доступ:** `TENANT_ADMIN` или permission `SETTINGS_EDIT`
+**Доступ:** `TENANT_ADMIN`, tenant role `ADMIN` или permission `SETTINGS_EDIT`
 
 **Request Body:**
 ```json
@@ -5269,16 +5294,18 @@ interface AttendanceStatusConfigDto {
 ---
 
 #### `PUT /api/v1/settings/attendance-statuses/{id}` — Обновить статус
-**Доступ:** `TENANT_ADMIN` или permission `SETTINGS_EDIT`
+**Доступ:** `TENANT_ADMIN`, tenant role `ADMIN` или permission `SETTINGS_EDIT`
 
 **Response:** `ApiResponse<AttendanceStatusConfigDto>`
 
 ---
 
 #### `DELETE /api/v1/settings/attendance-statuses/{id}` — Удалить статус
-**Доступ:** `TENANT_ADMIN` или permission `SETTINGS_EDIT`
+**Доступ:** `TENANT_ADMIN`, tenant role `ADMIN` или permission `SETTINGS_EDIT`
 
 **Response:** `ApiResponse<Void>`
+
+> `systemStatus=true` больше не блокирует удаление. Если статус больше не нужен UI, его можно удалить этим endpoint.
 
 ---
 
@@ -6384,14 +6411,16 @@ link.download = 'report.pdf';
 link.click();
 ```
 
-### Отметка посещаемости (bulk)
+### Отметка посещаемости (autosave на клик)
 
 ```typescript
-await api.post(`/api/v1/lessons/${lessonId}/attendance/bulk`, {
-  attendances: students.map(s => ({
-    studentId: s.id,
-    status: 'ATTENDED',
-    notes: ''
-  }))
-});
+async function saveAttendance(studentId: string, status: AttendanceStatus, notes = '') {
+  const { data } = await api.post(`/api/v1/lessons/${lessonId}/attendance`, {
+    studentId,
+    status,
+    notes
+  });
+
+  return data.data; // AttendanceDto
+}
 ```

@@ -31,7 +31,7 @@ public class GroupAttendanceController {
     private final AnalyticsExcelExportService excelExportService;
 
     @GetMapping
-    @PreAuthorize("hasAnyRole('TENANT_ADMIN', 'MANAGER', 'TEACHER') or hasAuthority('ANALYTICS_VIEW') or hasAuthority('LESSONS_VIEW')")
+    @PreAuthorize("hasAnyRole('TENANT_ADMIN', 'MANAGER', 'ADMIN', 'TEACHER') or hasAuthority('ANALYTICS_VIEW') or hasAuthority('LESSONS_VIEW')")
     @Operation(summary = "Посещаемость группы (query API)")
     public ApiResponse<GroupAttendanceResponse> getAttendanceByQuery(
             @RequestParam UUID groupId,
@@ -43,7 +43,7 @@ public class GroupAttendanceController {
     }
 
     @GetMapping("/{groupId}")
-    @PreAuthorize("hasAnyRole('TENANT_ADMIN', 'MANAGER', 'TEACHER') or hasAuthority('ANALYTICS_VIEW') or hasAuthority('LESSONS_VIEW')")
+    @PreAuthorize("hasAnyRole('TENANT_ADMIN', 'MANAGER', 'ADMIN', 'TEACHER') or hasAuthority('ANALYTICS_VIEW') or hasAuthority('LESSONS_VIEW')")
     @Operation(summary = "Посещаемость группы по месяцам")
     public ApiResponse<GroupAttendanceResponse> getAttendance(
             @PathVariable UUID groupId,
@@ -53,7 +53,7 @@ public class GroupAttendanceController {
     }
 
     @GetMapping("/export")
-    @PreAuthorize("hasAnyRole('TENANT_ADMIN', 'MANAGER', 'TEACHER') or hasAuthority('ANALYTICS_VIEW') or hasAuthority('LESSONS_VIEW')")
+    @PreAuthorize("hasAnyRole('TENANT_ADMIN', 'MANAGER', 'ADMIN', 'TEACHER') or hasAuthority('ANALYTICS_VIEW') or hasAuthority('LESSONS_VIEW')")
     @Operation(summary = "Скачать посещаемость группы в Excel")
     public ResponseEntity<byte[]> exportAttendance(
             @RequestParam UUID groupId,

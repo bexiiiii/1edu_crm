@@ -1,6 +1,5 @@
 package com.ondeedu.settings.service;
 
-import com.ondeedu.common.exception.BusinessException;
 import com.ondeedu.common.exception.ResourceNotFoundException;
 import com.ondeedu.common.tenant.TenantContext;
 import com.ondeedu.settings.dto.AttendanceStatusConfigDto;
@@ -60,11 +59,8 @@ public class AttendanceStatusConfigService {
     @Transactional
     @CacheEvict(value = "attendance-statuses", allEntries = true)
     public void delete(UUID id) {
-        AttendanceStatusConfig entity = repository.findById(id)
+        repository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("AttendanceStatusConfig", "id", id));
-        if (Boolean.TRUE.equals(entity.getSystemStatus())) {
-            throw new BusinessException("SYSTEM_STATUS", "Cannot delete a system attendance status");
-        }
         repository.deleteById(id);
         log.info("Deleted attendance status config: {}", id);
     }

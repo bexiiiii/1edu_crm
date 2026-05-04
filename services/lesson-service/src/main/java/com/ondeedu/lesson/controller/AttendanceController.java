@@ -9,7 +9,6 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
-import org.springframework.http.HttpStatus;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
@@ -25,28 +24,27 @@ public class AttendanceController {
     private final AttendanceService attendanceService;
 
     @PostMapping
-    @ResponseStatus(HttpStatus.CREATED)
-    @PreAuthorize("hasRole('TENANT_ADMIN') or hasAuthority('LESSONS_MARK_ATTENDANCE')")
-    @Operation(summary = "Mark attendance for a single student")
+    @PreAuthorize("hasAnyRole('TENANT_ADMIN', 'MANAGER', 'ADMIN') or hasAuthority('LESSONS_MARK_ATTENDANCE')")
+    @Operation(summary = "Save attendance for a single student without page reload")
     public ApiResponse<AttendanceDto> markAttendance(
             @PathVariable UUID lessonId,
             @Valid @RequestBody MarkAttendanceRequest request) {
         AttendanceDto dto = attendanceService.markAttendance(lessonId, request);
-        return ApiResponse.success(dto, "Attendance marked successfully");
+        return ApiResponse.success(dto, "Attendance saved successfully");
     }
 
     @PostMapping("/bulk")
-    @PreAuthorize("hasRole('TENANT_ADMIN') or hasAuthority('LESSONS_MARK_ATTENDANCE')")
+    @PreAuthorize("hasAnyRole('TENANT_ADMIN', 'MANAGER', 'ADMIN') or hasAuthority('LESSONS_MARK_ATTENDANCE')")
     @Operation(summary = "Bulk mark attendance for multiple students")
     public ApiResponse<List<AttendanceDto>> bulkMarkAttendance(
             @PathVariable UUID lessonId,
             @Valid @RequestBody BulkMarkAttendanceRequest request) {
         List<AttendanceDto> dtos = attendanceService.bulkMarkAttendance(lessonId, request);
-        return ApiResponse.success(dtos, "Bulk attendance marked successfully");
+        return ApiResponse.success(dtos, "Bulk attendance saved successfully");
     }
 
     @GetMapping
-    @PreAuthorize("hasRole('TENANT_ADMIN') or hasAuthority('LESSONS_VIEW')")
+    @PreAuthorize("hasAnyRole('TENANT_ADMIN', 'MANAGER', 'ADMIN') or hasAuthority('LESSONS_VIEW')")
     @Operation(summary = "Get all attendance records for a lesson")
     public ApiResponse<List<AttendanceDto>> getLessonAttendance(@PathVariable UUID lessonId) {
         List<AttendanceDto> dtos = attendanceService.getLessonAttendance(lessonId);
@@ -54,7 +52,7 @@ public class AttendanceController {
     }
 
     @PostMapping("/mark-all")
-    @PreAuthorize("hasRole('TENANT_ADMIN') or hasAuthority('LESSONS_MARK_ATTENDANCE')")
+    @PreAuthorize("hasAnyRole('TENANT_ADMIN', 'MANAGER', 'ADMIN') or hasAuthority('LESSONS_MARK_ATTENDANCE')")
     @Operation(summary = "Mark all given students as attended (Отметить всех)")
     public ApiResponse<List<AttendanceDto>> markAllPresent(
             @PathVariable UUID lessonId,

@@ -28,14 +28,14 @@ public class TeacherCourseAttendanceController {
     private final AnalyticsExcelExportService excelExportService;
 
     @GetMapping("/courses")
-    @PreAuthorize("hasAnyRole('TENANT_ADMIN', 'MANAGER', 'TEACHER') or hasAuthority('ANALYTICS_VIEW') or hasAuthority('LESSONS_VIEW')")
+    @PreAuthorize("hasAnyRole('TENANT_ADMIN', 'MANAGER', 'ADMIN', 'TEACHER') or hasAuthority('ANALYTICS_VIEW') or hasAuthority('LESSONS_VIEW')")
     @Operation(summary = "Курсы преподавателя для дропдауна")
     public ApiResponse<List<TeacherCourseDto>> getTeacherCourses(@RequestParam UUID teacherId) {
         return ApiResponse.success(teacherCourseAttendanceService.getTeacherCourses(teacherId));
     }
 
     @GetMapping
-    @PreAuthorize("hasAnyRole('TENANT_ADMIN', 'MANAGER', 'TEACHER') or hasAuthority('ANALYTICS_VIEW') or hasAuthority('LESSONS_VIEW')")
+    @PreAuthorize("hasAnyRole('TENANT_ADMIN', 'MANAGER', 'ADMIN', 'TEACHER') or hasAuthority('ANALYTICS_VIEW') or hasAuthority('LESSONS_VIEW')")
     @Operation(summary = "Посещаемость курса преподавателя")
     public ApiResponse<TeacherCourseAttendanceResponse> getAttendance(
             @RequestParam UUID teacherId,
@@ -45,7 +45,7 @@ public class TeacherCourseAttendanceController {
     }
 
     @GetMapping("/export")
-    @PreAuthorize("hasAnyRole('TENANT_ADMIN', 'MANAGER', 'TEACHER') or hasAuthority('ANALYTICS_VIEW') or hasAuthority('LESSONS_VIEW')")
+    @PreAuthorize("hasAnyRole('TENANT_ADMIN', 'MANAGER', 'ADMIN', 'TEACHER') or hasAuthority('ANALYTICS_VIEW') or hasAuthority('LESSONS_VIEW')")
     @Operation(summary = "Скачать посещаемость курса преподавателя в Excel")
     public ResponseEntity<byte[]> exportAttendance(
             @RequestParam UUID teacherId,

@@ -62,14 +62,23 @@ public final class RoleNameUtils {
         }
 
         String normalized = normalizeRoleName(keycloakRoleName);
-        if (isSystemRole(normalized) || !StringUtils.hasText(tenantId)) {
+        if (isSystemRole(normalized)) {
             return normalized;
         }
 
-        String prefix = customRolePrefix(tenantId);
-        return normalized.startsWith(prefix)
-                ? normalized.substring(prefix.length())
-                : normalized;
+        if (StringUtils.hasText(tenantId)) {
+            String prefix = customRolePrefix(tenantId);
+            if (normalized.startsWith(prefix)) {
+                return normalized.substring(prefix.length());
+            }
+        }
+
+        int separatorIndex = normalized.indexOf(ROLE_SEPARATOR);
+        if (normalized.startsWith(CUSTOM_ROLE_PREFIX) && separatorIndex > CUSTOM_ROLE_PREFIX.length()) {
+            return normalized.substring(separatorIndex + ROLE_SEPARATOR.length());
+        }
+
+        return normalized;
     }
 
     public static String rolePermissionsSource(String keycloakRoleName) {

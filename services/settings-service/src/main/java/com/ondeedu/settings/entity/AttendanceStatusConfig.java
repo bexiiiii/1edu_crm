@@ -47,7 +47,7 @@ public class AttendanceStatusConfig extends BaseEntity {
     @Builder.Default
     private Integer sortOrder = 0;
 
-    // true = системный (нельзя удалить)
+    // true = системный seed-статус
     @Column(name = "system_status", nullable = false)
     @Builder.Default
     private Boolean systemStatus = false;

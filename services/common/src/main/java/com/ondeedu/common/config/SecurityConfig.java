@@ -1,6 +1,7 @@
 package com.ondeedu.common.config;
 
 import com.ondeedu.common.security.SystemPermission;
+import com.ondeedu.common.security.RoleNameUtils;
 import com.ondeedu.common.tenant.TenantContextFilter;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -21,6 +22,7 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
+import java.util.LinkedHashSet;
 import java.util.stream.Stream;
 
 @Configuration
@@ -87,7 +89,7 @@ public class SecurityConfig {
             }
 
             Stream<String> roleAuthorities = Stream.concat(realmRolesList.stream(), resourceRoles)
-                    .map(role -> "ROLE_" + role.toUpperCase());
+                    .flatMap(this::expandRoleAuthorities);
 
             // SUPER_ADMIN gets ALL system permissions automatically — no need to configure manually
             boolean isSuperAdmin = realmRolesList.stream()
@@ -108,6 +110,19 @@ public class SecurityConfig {
                     .map(SimpleGrantedAuthority::new)
                     .map(GrantedAuthority.class::cast)
                     .toList();
+        }
+
+        private Stream<String> expandRoleAuthorities(String role) {
+            String normalizedRole = RoleNameUtils.normalizeRoleName(role);
+            LinkedHashSet<String> authorities = new LinkedHashSet<>();
+            authorities.add("ROLE_" + normalizedRole);
+
+            String displayRole = RoleNameUtils.toDisplayRoleName(null, normalizedRole);
+            if (!displayRole.equals(normalizedRole)) {
+                authorities.add("ROLE_" + displayRole);
+            }
+
+            return authorities.stream();
         }
     }
 }
